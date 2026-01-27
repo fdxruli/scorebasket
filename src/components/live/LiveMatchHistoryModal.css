@@ -1,0 +1,72 @@
+/* src/components/live/LiveMatchHistoryModal.css */
+
+.history-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  transition: background-color 0.2s;
+}
+
+.history-item:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Decoración lateral izquierda según tipo */
+.history-item.is-score {
+  border-left: 4px solid var(--success);
+}
+
+.history-item.is-foul {
+  border-left: 4px solid var(--danger);
+}
+
+.action-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-title {
+  font-weight: 700;
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.action-detail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.action-time {
+  font-family: var(--font-mono);
+  background-color: rgba(0,0,0,0.3);
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.btn-delete-action {
+  color: var(--text-muted);
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-delete-action:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+}

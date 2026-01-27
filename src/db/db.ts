@@ -28,6 +28,10 @@ export class BasketControlDB extends Dexie {
                 '[matchId+quarter], [matchId+teamId+quarter], [matchId+playerId]'
 
         });
+
+        this.version(3).stores({
+            players: '++id, teamId, name, number'
+        });
     }
 }
 

@@ -1,0 +1,162 @@
+/* src/components/live/PlayerSelectModal.css */
+
+/* --- OVERLAY (FONDO) --- */
+.pm-overlay {
+  position: fixed;
+  inset: 0; /* top:0, right:0, bottom:0, left:0 */
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(5px); /* Efecto vidrio esmerilado */
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end; /* Móvil: abajo */
+  justify-content: center;
+  padding: 1rem;
+  animation: pm-fadeIn 0.2s ease-out forwards;
+}
+
+@media (min-width: 640px) {
+  .pm-overlay {
+    align-items: center; /* Desktop: centro */
+  }
+}
+
+/* --- CONTENEDOR DEL MODAL --- */
+.pm-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transform: translateY(20px);
+  animation: pm-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Variantes por tipo de acción (Bordes de color sutiles) */
+.pm-content.is-score {
+  border-top: 4px solid var(--success);
+}
+
+.pm-content.is-foul {
+  border-top: 4px solid var(--danger);
+  box-shadow: 0 20px 50px rgba(239, 68, 68, 0.15); /* Resplandor rojo sutil */
+}
+
+/* --- TEXTOS --- */
+.pm-header {
+  text-align: center;
+}
+
+.pm-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.pm-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Color específico para título de falta */
+.is-foul .pm-title {
+  color: var(--danger);
+}
+
+/* --- GRID DE JUGADORES --- */
+.pm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 columnas */
+  gap: 0.75rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px; /* Espacio para scrollbar */
+}
+
+/* Scrollbar personalizado sutil */
+.pm-grid::-webkit-scrollbar {
+  width: 4px;
+}
+.pm-grid::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+/* --- BOTONES DE JUGADOR --- */
+.pm-player-btn {
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.85rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pm-player-btn:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.pm-player-btn:active {
+  transform: scale(0.98);
+}
+
+/* Botón especial (Desconocido/Banca) */
+.pm-special-btn {
+  grid-column: 1 / -1; /* Ocupa todo el ancho */
+  background-color: transparent;
+  border: 1px dashed var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 0.75rem;
+}
+
+.pm-special-btn:hover {
+  color: var(--text-main);
+  border-color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* --- BOTÓN CANCELAR --- */
+.pm-cancel-btn {
+  width: 100%;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #27272a; /* Zinc 800 */
+  color: var(--text-muted);
+  transition: background-color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.pm-cancel-btn:hover {
+  background-color: #3f3f46; /* Zinc 700 */
+  color: var(--text-main);
+}
+
+/* --- ANIMACIONES --- */
+@keyframes pm-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pm-slideUp {
+  from { opacity: 0; transform: translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

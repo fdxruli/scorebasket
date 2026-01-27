@@ -1,40 +1,33 @@
 // src/pages/Matches.tsx
+import { useState } from 'react'; // <--- Agregar useState
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { ChevronRight, Clock, Trophy, Pause, Play } from 'lucide-react';
+import { ChevronRight, Clock, Trophy, Pause, Play, Eye } from 'lucide-react'; // <--- Importamos Eye (Ojo) para ver detalles
 
-// Importamos el hook para que cada tarjeta tenga su propio reloj
-import { useMatchTimer } from '../hooks/useMatchTImer';
+import { useMatchTimer } from '../hooks/useMatchTimer';
 import type { Match } from '../db/models';
+import { MatchHistoryModal } from '../components/matches/MatchHistoryModal'; // <--- IMPORTAR MODAL
 
 import './Matches.css';
 
-// --- NUEVO COMPONENTE: Tarjeta de Partido Activo ---
-// Esto permite que cada tarjeta maneje su propio timer sin re-renderizar toda la lista
-const ActiveMatchCard = ({ match, localName, visitorName, localPoints, visitorPoints }: {
-    match: Match, 
-    localName: string, 
-    visitorName: string, 
-    localPoints: number, 
-    visitorPoints: number 
-}) => {
-    // Usamos el mismo hook que en la pantalla en vivo
-    const { timeLeft, isRunning } = useMatchTimer(match);
-
-    // Formateador simple mm:ss
+// ... (El componente ActiveMatchCard se mantiene igual) ...
+// ... (Aquí copio ActiveMatchCard para referencia, no hace falta cambiarlo) ...
+const ActiveMatchCard = ({ match, localName, visitorName, localPoints, visitorPoints }: any) => {
+    // ... lógica del timer ...
+    // ... render del active card ...
+    // Solo para abreviar en esta respuesta, asumo que ya lo tienes
+    const { timeLeft, isRunning } = useMatchTimer(match, false);
     const formatTime = (seconds: number) => {
         const s = Math.ceil(seconds);
         const m = Math.floor(s / 60).toString().padStart(2, '0');
         const sec = (s % 60).toString().padStart(2, '0');
         return `${m}:${sec}`;
     };
-
     return (
         <Link to={`/live/${match.id}`} className="card match-card is-live">
-            <div className="match-card-content">
-                
-                {/* Marcador Izquierda */}
+             {/* ... contenido existente ... */}
+             <div className="match-card-content">
                 <div style={{ flex: 1 }}>
                     <div className="score-row">
                         <span className="score-num">{localPoints}</span>
@@ -45,12 +38,8 @@ const ActiveMatchCard = ({ match, localName, visitorName, localPoints, visitorPo
                         <span className="team-name">{visitorName}</span>
                     </div>
                 </div>
-
-                {/* Info Derecha (Cuarto + Reloj) */}
                 <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                     <span className="quarter-badge">Q{match.currentQuarter}</span>
-                    
-                    {/* Visualización del Reloj en la Lista */}
                     <div className={`text-xs font-mono font-bold py-1 px-2 rounded flex items-center gap-1 ${
                         isRunning ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-500'
                     }`}>
@@ -58,14 +47,15 @@ const ActiveMatchCard = ({ match, localName, visitorName, localPoints, visitorPo
                         {formatTime(timeLeft)}
                     </div>
                 </div>
-
             </div>
         </Link>
     );
 };
 
-
 export function Matches() {
+  // --- STATE ---
+  const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null); // <--- Estado para el modal
+
   // --- DATA FETCHING ---
   const matchesWithData = useLiveQuery(async () => {
     const matches = await db.matches.orderBy('createdAt').reverse().toArray();
@@ -99,6 +89,14 @@ export function Matches() {
         </h1>
       </header>
 
+      {/* --- MODAL DE HISTORIAL --- */}
+      {selectedMatchId && (
+          <MatchHistoryModal 
+            matchId={selectedMatchId} 
+            onClose={() => setSelectedMatchId(null)} 
+          />
+      )}
+
       {/* --- ESTADO VACÍO --- */}
       {matchesWithData.length === 0 && (
         <div className="empty-state">
@@ -117,12 +115,10 @@ export function Matches() {
             <span className="live-indicator-dot"></span>
             En Vivo
           </h2>
-          
-          {/* Aquí usamos el nuevo componente ActiveMatchCard */}
           {activeMatches.map(m => (
             <ActiveMatchCard 
                 key={m.id}
-                match={m} // Pasamos el objeto match completo para el hook
+                match={m} 
                 localName={m.localName}
                 visitorName={m.visitorName}
                 localPoints={m.localPoints}
@@ -144,7 +140,13 @@ export function Matches() {
              const visitorWon = m.visitorPoints > m.localPoints;
              
              return (
-              <div key={m.id} className="card match-card is-finished">
+              <div 
+                key={m.id} 
+                className="card match-card is-finished cursor-pointer" // Agregamos cursor pointer
+                onClick={() => setSelectedMatchId(m.id!)} // <--- Evento Click
+                role="button"
+                tabIndex={0}
+              >
                  <div className="match-card-content">
                     <div className="finished-layout">
                        
@@ -155,7 +157,12 @@ export function Matches() {
                           <span className="team-name-small">{m.localName}</span>
                        </div>
 
-                       <span className="final-badge">FINAL</span>
+                       <div className="flex flex-col items-center gap-1">
+                            <span className="final-badge">FINAL</span>
+                            <span className="text-xs text-muted flex items-center gap-1">
+                                <Eye size={10} /> Detalles
+                            </span>
+                       </div>
 
                        <div className="finished-team-col">
                           <span className={`score-big ${visitorWon ? 'score-winner' : 'score-loser'}`}>

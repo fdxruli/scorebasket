@@ -4,11 +4,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Player } from '../db/models';
-import { History, X, PauseCircle, PlayCircle } from 'lucide-react'; // Íconos nuevos
+import { History, X, PauseCircle, PlayCircle } from 'lucide-react';
+import { LiveMatchHistoryModal } from '../components/live/LiveMatchHistoryModal';
 import { MatchesRepository } from '../db/matches.repository';
+import { ScoresRepository } from '../db/scores.repository';
+import { FoulsRepository } from '../db/fouls.repository';
 
 import './LiveMatch.css';
-import { useMatchTimer } from '../hooks/useMatchTImer';
+import { useMatchTimer } from '../hooks/useMatchTimer';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 
 import { Scoreboard } from '../components/live/Scoreboard';
@@ -49,6 +52,8 @@ export function LiveMatch() {
         teamName: string;
         players: Player[];
     } | null>(null);
+
+    const [showHistory, setShowHistory] = useState(false);
 
     // Estado para el MODAL DE SALIDA
     const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -124,33 +129,30 @@ export function LiveMatch() {
         setCurrentAction({ teamId, teamName, players, action });
     };
 
-    const handleUndo = async () => {
-        try {
-            if (navigator.vibrate) navigator.vibrate(50);
-            await MatchesRepository.undoLastAction(matchId);
-        } catch (err) {
-            handleError(err);
-        }
-    };
-
     const confirmAction = async (playerId: number | null) => {
         if (!currentAction || !data) return;
         try {
-            const commonData = {
+            // Preparamos los datos básicos necesarios para el repositorio
+            const commonInput = {
                 matchId,
                 teamId: currentAction.teamId,
                 playerId: playerId ?? undefined,
                 quarter: data.match.currentQuarter,
-                createdAt: new Date()
             };
 
             if (currentAction.action.type === 'score') {
-                await db.scores.add({ ...commonData, points: currentAction.action.points });
+                // CAMBIO: Usar ScoresRepository en lugar de db.scores
+                await ScoresRepository.add({
+                    ...commonInput,
+                    points: currentAction.action.points
+                });
             } else {
-                await db.fouls.add(commonData);
+                // CAMBIO: Usar FoulsRepository en lugar de db.fouls
+                await FoulsRepository.add(commonInput);
             }
             setCurrentAction(null);
         } catch (err) {
+            // Esto capturará el error "Debes reanudar el reloj..." y lo mostrará en el Toast
             handleError(err, "Error al guardar acción");
         }
     };
@@ -171,7 +173,11 @@ export function LiveMatch() {
                     Q{match.currentQuarter} • {match.status === 'finished' ? 'FINAL' : 'EN VIVO'}
                 </div>
 
-                <button onClick={handleUndo} className="live-back-btn" title="Deshacer última acción">
+                <button
+                    onClick={() => setShowHistory(true)}
+                    className="live-back-btn"
+                    title="Ver Historial y Corregir"
+                >
                     <History size={20} />
                 </button>
             </header>
@@ -218,25 +224,25 @@ export function LiveMatch() {
                         <p className="text-gray-400 mb-6 text-sm">
                             El reloj está corriendo. Puedes pausarlo ahora o dejar que siga contando en segundo plano.
                         </p>
-                        
+
                         <div className="flex flex-col gap-3">
-                            <button 
+                            <button
                                 onClick={handleExitAndPause}
                                 className="w-full py-3 bg-yellow-500/10 text-yellow-500 font-bold rounded-lg border border-yellow-500/20 flex items-center justify-center gap-2"
                             >
                                 <PauseCircle size={20} />
                                 Pausar y Salir
                             </button>
-                            
-                            <button 
+
+                            <button
                                 onClick={handleExitRunning}
                                 className="w-full py-3 bg-green-500/10 text-green-500 font-bold rounded-lg border border-green-500/20 flex items-center justify-center gap-2"
                             >
                                 <PlayCircle size={20} />
                                 Dejar Corriendo y Salir
                             </button>
-                            
-                            <button 
+
+                            <button
                                 onClick={() => setShowExitConfirm(false)}
                                 className="w-full py-3 text-gray-400 font-medium mt-2"
                             >
@@ -245,6 +251,13 @@ export function LiveMatch() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showHistory && (
+                <LiveMatchHistoryModal 
+                    matchId={matchId} 
+                    onClose={() => setShowHistory(false)} 
+                />
             )}
         </div>
     );

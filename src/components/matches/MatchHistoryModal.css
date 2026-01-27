@@ -1,0 +1,145 @@
+/* src/components/matches/MatchHistoryModal.css */
+
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  z-index: 5000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.history-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.history-header {
+  padding: 1.5rem;
+  background-color: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* --- SECCIÓN DE MARCADOR FINAL --- */
+.history-score-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.history-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  text-align: center;
+}
+
+.history-team-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.history-score-big {
+  font-size: 3rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.history-vs {
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: var(--text-muted);
+  background: var(--bg-app);
+  padding: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+}
+
+/* --- TABLA DE CUARTOS --- */
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.history-table th {
+  text-align: center;
+  padding: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.history-table td {
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-table td.team-col {
+  text-align: left;
+  font-weight: 600;
+}
+
+.history-table td.total-col {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+/* --- LISTA DE JUGADORES DESTACADOS --- */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.1);
+}
+
+.stat-row:last-child { border-bottom: none; }
+
+.stat-name { font-size: 0.9rem; }
+.stat-value { font-weight: 700; font-family: var(--font-mono); }
+
+.section-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

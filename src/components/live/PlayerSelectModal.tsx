@@ -1,49 +1,78 @@
+// src/components/live/PlayerSelectModal.tsx
 import type { Player } from '../../db/models';
+import './PlayerSelectModal.css'; // <--- Importamos los nuevos estilos
 
-export type GameAction = 
-  | { type: 'score'; points: 1 | 2 | 3 }
-  | { type: 'foul' };
+export type GameAction =
+    | { type: 'score'; points: 1 | 2 | 3 }
+    | { type: 'foul' };
 
 interface PlayerSelectModalProps {
-  teamName: string;
-  players: Player[];
-  action: GameAction;
-  onSelect: (playerId: number | null) => void;
-  onCancel: () => void;
+    teamName: string;
+    players: Player[];
+    action: GameAction;
+    onSelect: (playerId: number | null) => void;
+    onCancel: () => void;
 }
 
 export function PlayerSelectModal({ teamName, players, action, onSelect, onCancel }: PlayerSelectModalProps) {
-  const isFoul = action.type === 'foul';
-  
-  return (
-    <div className="fixed inset-0 bg-black/80 z-[10000] flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#18181b] w-full max-w-md rounded-2xl p-6 border border-[#27272a]">
-        <h3 className="text-xl font-bold text-white mb-2">
-          {isFoul ? `Falta de ${teamName}` : `Puntos para ${teamName}`}
-        </h3>
-        <p className="text-gray-400 mb-4">Selecciona el jugador:</p>
-        
-        <div className="grid grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto mb-4">
-          {players.map(p => (
-            <button 
-              key={p.id}
-              onClick={() => onSelect(p.id!)}
-              className="p-3 bg-[#27272a] text-gray-200 rounded-lg font-medium hover:bg-[#3f3f46] active:scale-95 transition"
+    const isFoul = action.type === 'foul';
+
+    // Determinamos la clase variante según la acción
+    const variantClass = isFoul ? 'is-foul' : 'is-score';
+
+    return (
+        <div className="pm-overlay" onClick={onCancel}>
+            {/* e.stopPropagation() evita que el click dentro del modal lo cierre 
+         (solo se cierra si clickeas el fondo oscuro)
+      */}
+            <div
+                className={`pm-content ${variantClass}`}
+                onClick={(e) => e.stopPropagation()}
             >
-              {p.name}
-            </button>
-          ))}
-          <button 
-            onClick={() => onSelect(null)} 
-            className="p-3 border border-[#3f3f46] text-gray-400 rounded-lg text-sm hover:text-white"
-          >
-            {isFoul ? 'Banca / Técnica' : 'Equipo / Desconocido'}
-          </button>
+
+                {/* CABECERA */}
+                <div className="pm-header">
+                    <h3 className="pm-title">
+                        {isFoul ? 'Falta Personal' : `¡${action.points} Puntos!`}
+                    </h3>
+                    <p className="pm-subtitle">
+                        Selecciona quién de <strong>{teamName}</strong> realizó la acción
+                    </p>
+                </div>
+
+                {/* GRID DE JUGADORES */}
+                <div className="pm-grid">
+                    {players.map(p => (
+                        <button
+                            key={p.id}
+                            onClick={() => onSelect(p.id!)}
+                            className="pm-player-btn"
+                        >
+                            {/* Mostramos el número si existe */}
+                            {p.number !== undefined && (
+                                <span style={{ opacity: 0.5, marginRight: '8px', fontWeight: 800 }}>
+                                    #{p.number}
+                                </span>
+                            )}
+                            {p.name}
+                        </button>
+                    ))}
+
+                    {/* BOTÓN ESPECIAL (Al final, ancho completo) */}
+                    <button
+                        onClick={() => onSelect(null)}
+                        className="pm-player-btn pm-special-btn"
+                    >
+                        {isFoul ? 'Falta Técnica / Banca' : 'Jugador Desconocido / Otro'}
+                    </button>
+                </div>
+
+                {/* BOTÓN CANCELAR */}
+                <button onClick={onCancel} className="pm-cancel-btn">
+                    Cancelar
+                </button>
+
+            </div>
         </div>
-        <button onClick={onCancel} className="w-full py-3 bg-red-500/10 text-red-500 font-bold rounded-lg">
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
+    );
 }

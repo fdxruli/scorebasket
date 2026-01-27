@@ -31,7 +31,7 @@ export const ScoresRepository = {
 
             // 5. 🛑 NUEVA VALIDACIÓN: Reloj detenido
             // Si timerLastStart es undefined, el reloj está en pausa.
-            if (!match.timerLastStart) {
+            if (!match.timerLastStart || match.timerSecondsRemaining <= 0) {
                 throw new Error('Debes reanudar el reloj para anotar puntos.');
             }
 

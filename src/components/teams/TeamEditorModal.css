@@ -1,0 +1,86 @@
+/* src/components/TeamEditorModal.css */
+
+/* Reutilizamos variables del theme.css */
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 5000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.editor-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh; /* Para que no se salga de la pantalla */
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editor-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.editor-body {
+  padding: 1.5rem;
+  overflow-y: auto; /* Scroll interno si hay muchos jugadores */
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.editor-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Lista de jugadores en edición */
+.player-edit-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.player-edit-input {
+  flex: 1;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.player-edit-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Animaciones */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }

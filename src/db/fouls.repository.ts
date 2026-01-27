@@ -13,12 +13,33 @@ export const FoulsRepository = {
      * Registra una falta
      */
     async add(input: AddFoulInput): Promise<number> {
-        return db.fouls.add({
-            matchId: input.matchId,
-            teamId: input.teamId,
-            playerId: input.playerId,
-            quarter: input.quarter,
-            createdAt: new Date()
+        // Usamos transacción para leer el match con seguridad
+        return db.transaction('rw', db.fouls, db.matches, async () => {
+            const match = await db.matches.get(input.matchId);
+
+            if (!match) throw new Error('El partido no existe');
+
+            if (match.status === 'finished') {
+                throw new Error('El partido ha finalizado');
+            }
+
+            // Validar equipo
+            if (input.teamId !== match.localTeamId && input.teamId !== match.visitorTeamId) {
+                throw new Error('El equipo no corresponde a este partido');
+            }
+
+            // 🛑 NUEVA VALIDACIÓN: Reloj detenido
+            if (!match.timerLastStart) {
+                throw new Error('Debes reanudar el reloj para marcar faltas.');
+            }
+
+            return db.fouls.add({
+                matchId: input.matchId,
+                teamId: input.teamId,
+                playerId: input.playerId,
+                quarter: input.quarter,
+                createdAt: new Date()
+            });
         });
     },
 

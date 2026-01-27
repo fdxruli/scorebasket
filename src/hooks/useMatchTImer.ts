@@ -1,5 +1,5 @@
 // src/hooks/useMatchTimer.ts
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models';
 
@@ -8,6 +8,7 @@ interface UseMatchTimerReturn {
   isRunning: boolean;
   toggleTimer: () => Promise<void>;
   resetTimer: () => Promise<void>;
+  keepTimerRunningOnUnmount: () => void;
 }
 
 /**
@@ -16,6 +17,8 @@ interface UseMatchTimerReturn {
  */
 export function useMatchTimer(match: Match | undefined): UseMatchTimerReturn {
   const [tick, setTick] = useState(0);
+
+  const shouldPauseOnUnmount = useRef(true);
   
   const getEffectiveTimeLeft = useCallback((): number => {
     if (!match) return 0;
@@ -55,7 +58,7 @@ export function useMatchTimer(match: Match | undefined): UseMatchTimerReturn {
   // ✅ Pausar timer al desmontar componente (cleanup)
   useEffect(() => {
     return () => {
-      if (match?.timerLastStart) {
+      if (match?.timerLastStart && shouldPauseOnUnmount.current) {
         pauseTimer(match.id!);
       }
     };
@@ -88,12 +91,17 @@ export function useMatchTimer(match: Match | undefined): UseMatchTimerReturn {
       timerLastStart: undefined
     });
   }, [match]);
+
+  const keepTimerRunningOnUnmount = useCallback(() => {
+    shouldPauseOnUnmount.current = false;
+  }, []);
   
   return {
     timeLeft,
     isRunning,
     toggleTimer,
-    resetTimer
+    resetTimer,
+    keepTimerRunningOnUnmount
   };
 }
 

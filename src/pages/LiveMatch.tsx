@@ -40,7 +40,7 @@ export function LiveMatch() {
     }, [matchId]);
 
     // --- HOOK DEL TIMER ---
-    const { timeLeft, isRunning, toggleTimer } = useMatchTimer(data?.match);
+    const { timeLeft, isRunning, toggleTimer, keepTimerRunningOnUnmount } = useMatchTimer(data?.match);
 
     // Estado para acciones de juego (puntos/faltas)
     const [currentAction, setCurrentAction] = useState<{
@@ -87,6 +87,7 @@ export function LiveMatch() {
     };
 
     const handleExitRunning = () => {
+        keepTimerRunningOnUnmount();
         // Simplemente salimos, el timer sigue basado en la fecha de inicio en la BD
         navigate('/matches');
     };

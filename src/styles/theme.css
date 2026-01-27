@@ -1,0 +1,37 @@
+/* src/styles/theme.css */
+:root {
+  /* --- PALETA DE COLORES --- */
+  /* Fondos */
+  --bg-app: #09090b;       /* Fondo principal (casi negro) */
+  --bg-surface: #18181b;   /* Tarjetas y contenedores */
+  --bg-surface-hover: #27272a;
+  
+  /* Acentos */
+  --primary: #f97316;      /* Naranja Baloncesto */
+  --primary-hover: #ea580c;
+  --secondary: #3b82f6;    /* Azul UI */
+  --danger: #ef4444;       /* Rojo Alerta/Borrar */
+  --success: #22c55e;      /* Verde Éxito */
+
+  /* Textos */
+  --text-main: #f4f4f5;    /* Blanco casi puro */
+  --text-muted: #a1a1aa;   /* Gris medio */
+  --text-on-primary: #ffffff;
+
+  /* Bordes y Líneas */
+  --border-color: #27272a;
+  
+  /* --- ESPACIADO Y FORMA --- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 15px rgba(249, 115, 22, 0.15); /* Brillo naranja sutil */
+
+  /* --- TIPOGRAFÍA --- */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace; /* Para el reloj y marcadores */
+}

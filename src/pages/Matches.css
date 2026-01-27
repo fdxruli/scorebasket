@@ -1,0 +1,179 @@
+/* src/pages/Matches.css */
+
+/* --- SECCIONES --- */
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* --- TARJETA DE PARTIDO (BASE) --- */
+.match-card {
+  display: block; /* Porque es un <Link> */
+  text-decoration: none;
+  margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+.match-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  background-color: var(--bg-surface-hover);
+}
+
+/* Contenedor interno para padding y layout */
+.match-card-content {
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --- ESTILOS "EN VIVO" --- */
+.live-indicator-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--primary);
+  animation: pulse 2s infinite;
+}
+
+/* Barra lateral naranja para partidos en vivo */
+.match-card.is-live::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background-color: var(--primary);
+}
+
+.quarter-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--primary);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+  display: block;
+  text-align: right;
+}
+
+/* --- ESTILOS DE MARCADOR (ROWS) --- */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.score-row:last-child {
+  margin-bottom: 0;
+}
+
+.score-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text-main);
+  width: 2rem; /* Ancho fijo para alineación */
+  text-align: right;
+}
+
+.team-name {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.match-card:hover .team-name {
+  color: var(--text-main);
+}
+
+/* --- ESTILOS "FINALIZADO" (HISTORIAL) --- */
+.match-card.is-finished {
+  opacity: 0.75;
+  border-style: dashed; /* Estilo visual sutil para historial */
+}
+
+.match-card.is-finished:hover {
+  opacity: 1;
+  border-style: solid;
+}
+
+.final-badge {
+  background-color: #27272a; /* zinc-800 */
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Layout específico para tarjeta finalizada (3 columnas) */
+.finished-layout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.finished-team-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 35%;
+}
+
+.score-big {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+}
+
+.score-winner {
+  color: var(--text-main);
+}
+
+.score-loser {
+  color: #52525b; /* zinc-600 */
+}
+
+.team-name-small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* --- ESTADO VACÍO --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 1rem;
+  opacity: 0.6;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}

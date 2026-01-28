@@ -66,7 +66,8 @@ export function LiveMatch() {
     const matchConfig = useMemo(() => {
         if (!data?.match) return null;
         return {
-            totalQuarters: 4, // Por defecto 4 cuartos (esto podría venir de la BD si lo guardaste)
+            // CORREGIDO: Usar el valor de la BD. Si es undefined (legacy), usar 4.
+            totalQuarters: data.match.totalQuarters || 4, 
             quarterDuration: data.match.quarterDuration,
             currentQuarter: data.match.currentQuarter
         };
@@ -273,6 +274,9 @@ export function LiveMatch() {
     if (!data) return <div className="bg-black h-screen flex items-center justify-center text-white">Cargando...</div>;
     const { match, localTeam, visitorTeam, localPlayers, visitorPlayers } = data;
 
+    // Calculamos si es el último cuarto para ajustar la UI del modal
+    const isLastQuarter = matchConfig && match.currentQuarter >= matchConfig.totalQuarters;
+
     return (
         <div className="live-overlay">
             {error && <ErrorToast message={error} onClose={clearError} />}
@@ -338,7 +342,7 @@ export function LiveMatch() {
                         <div className="modal-icon-wrapper">
                             {quarterEndModal === 'overtime' ? (
                                 <AlertTriangle size={40} />
-                            ) : match.currentQuarter >= matchConfig.totalQuarters ? (
+                            ) : isLastQuarter ? (
                                 <Trophy size={40} className="text-yellow-400" />
                             ) : (
                                 <Flag size={40} />
@@ -349,7 +353,7 @@ export function LiveMatch() {
                         <h3 className="text-2xl font-bold text-white mb-1">
                             {quarterEndModal === 'overtime' 
                                 ? '¡Tiempo Reglamentario Terminado!' 
-                                : match.currentQuarter >= matchConfig.totalQuarters
+                                : isLastQuarter
                                     ? 'Partido Finalizado'
                                     : `Fin del Cuarto ${match.currentQuarter}`
                             }
@@ -395,7 +399,7 @@ export function LiveMatch() {
                                 </>
                             ) : (
                                 <>
-                                    {match.currentQuarter < matchConfig.totalQuarters ? (
+                                    {!isLastQuarter ? (
                                         <button onClick={confirmNextQuarter} className="btn-modal-primary btn-next-q">
                                             <PlayCircle size={20} />
                                             Comenzar Cuarto {match.currentQuarter + 1}

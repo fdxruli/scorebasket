@@ -37,7 +37,16 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
         // 2. Desglose por Cuartos
         const quarters = Array.from(new Set(scores.map(s => s.quarter))).sort();
-        const maxQuarter = Math.max(match.currentQuarter, ...quarters, 4); // Al menos mostrar 4 cuartos
+        
+        // 🔧 CORRECCIÓN: Respetar la configuración real del partido
+        // Usamos el mayor entre: cuartos configurados, cuarto actual, o cuartos con datos
+        const maxQuarter = Math.max(
+            match.totalQuarters,           // Cuartos configurados originalmente
+            match.currentQuarter,          // Cuarto en el que terminó
+            ...quarters,                   // Cuartos con anotaciones
+            0                              // Fallback seguro
+        );
+        
         const quarterStats = [];
         
         for (let q = 1; q <= maxQuarter; q++) {

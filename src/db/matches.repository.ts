@@ -1,15 +1,16 @@
 import { db } from './db';
 
 export const MatchesRepository = {
-    async create(localTeamId: number, visitorTeamId: number) {
+    async create(localTeamId: number, visitorTeamId: number, quarterDuration: number = 10, totalQuarters: number = 4) {
         return db.matches.add({
             localTeamId,
             visitorTeamId,
             currentQuarter: 1,
             status: 'created',
             createdAt: new Date(),
-            quarterDuration: 10,
-            timerSecondsRemaining: 10 * 60
+            quarterDuration,
+            totalQuarters, // 🆕 Guardamos la configuración
+            timerSecondsRemaining: quarterDuration * 60
         });
     },
 
@@ -57,14 +58,32 @@ export const MatchesRepository = {
         });
     },
 
-    // 🟢 NUEVO — avanzar de cuarto
+    // 🆕 MEJORADO — avanzar de cuarto con validación
     async nextQuarter(matchId: number) {
+        const match = await db.matches.get(matchId);
+        if (!match) return;
+
+        // Validar que no excedamos el número de cuartos configurados
+        if (match.currentQuarter >= match.totalQuarters) {
+            throw new Error(`Ya se completaron los ${match.totalQuarters} cuartos reglamentarios`);
+        }
+
+        await db.matches.update(matchId, {
+            currentQuarter: match.currentQuarter + 1,
+            timerSecondsRemaining: match.quarterDuration * 60,
+            timerLastStart: undefined
+        });
+    },
+
+    // 🆕 NUEVO — iniciar tiempo extra
+    async startOvertime(matchId: number, overtimeDuration: number = 5) {
         const match = await db.matches.get(matchId);
         if (!match) return;
 
         await db.matches.update(matchId, {
             currentQuarter: match.currentQuarter + 1,
-            timerSecondsRemaining: match.quarterDuration * 60,
+            timerSecondsRemaining: overtimeDuration * 60,
+            quarterDuration: overtimeDuration, // Actualizar duración para overtime
             timerLastStart: undefined
         });
     },

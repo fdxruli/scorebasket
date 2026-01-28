@@ -32,6 +32,18 @@ export class BasketControlDB extends Dexie {
         this.version(3).stores({
             players: '++id, teamId, name, number'
         });
+
+        // 🆕 Version 4: Agregar totalQuarters a matches
+        this.version(4).stores({
+            matches: '++id, status, createdAt, totalQuarters'
+        }).upgrade(tx => {
+            // Migración: establecer totalQuarters=4 para partidos existentes
+            return tx.table('matches').toCollection().modify(match => {
+                if (!match.totalQuarters) {
+                    match.totalQuarters = 4;
+                }
+            });
+        });
     }
 }
 

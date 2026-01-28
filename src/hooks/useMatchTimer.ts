@@ -20,7 +20,7 @@ interface UseMatchTimerReturn {
  *   no en el momento de la creación del efecto
  */
 export function useMatchTimer(match: Match | undefined, enableAutoPause = true): UseMatchTimerReturn {
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
   const shouldPauseOnUnmount = useRef(true);
   const matchIdRef = useRef<number | undefined>(undefined);
 
@@ -78,7 +78,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   const toggleTimer = useCallback(async () => {
     if (!match) return;
     
-    const { id, timerLastStart, timerSecondsRemaining } = match;
+    const { id } = match;
     
     // 🔧 MEJORA: Usar transacción para evitar race conditions
     await db.transaction('rw', db.matches, async () => {

@@ -3,10 +3,9 @@ import { useState } from 'react'; // <--- Agregar useState
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { ChevronRight, Clock, Trophy, Pause, Play, Eye } from 'lucide-react'; // <--- Importamos Eye (Ojo) para ver detalles
+import { Clock, Trophy, Pause, Play, Eye } from 'lucide-react'; // <--- Importamos Eye (Ojo) para ver detalles
 
-import { useMatchTimer } from '../hooks/useMatchTimer';
-import type { Match } from '../db/models';
+import { useMatchTimer } from '../hooks/useMatchTimer';
 import { MatchHistoryModal } from '../components/matches/MatchHistoryModal'; // <--- IMPORTAR MODAL
 
 import './Matches.css';

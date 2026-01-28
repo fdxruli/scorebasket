@@ -329,94 +329,91 @@ export function LiveMatch() {
                 />
             )}
 
-            {/* 🆕 MODAL DE FIN DE CUARTO */}
+            {/* 🆕 MODAL DE FIN DE CUARTO MEJORADO */}
             {quarterEndModal && matchConfig && (
-                <div className="fixed inset-0 bg-black/95 z-[10000] flex items-center justify-center p-4">
-                    <div className="bg-[#18181b] w-full max-w-md rounded-2xl p-6 border border-[#27272a]">
+                <div className="game-modal-overlay">
+                    <div className={`game-modal-card ${quarterEndModal === 'overtime' ? 'is-overtime' : 'is-end'}`}>
                         
-                        {/* Título dinámico */}
-                        <div className="text-center mb-4">
+                        {/* 1. Icono Principal */}
+                        <div className="modal-icon-wrapper">
                             {quarterEndModal === 'overtime' ? (
-                                <>
-                                    <AlertTriangle size={48} className="mx-auto mb-3 text-yellow-500" />
-                                    <h3 className="text-2xl font-bold text-white mb-2">¡Empate!</h3>
-                                    <p className="text-gray-400 text-sm">
-                                        El partido está {stats.localScore} - {stats.visitorScore}
-                                    </p>
-                                </>
+                                <AlertTriangle size={40} />
+                            ) : match.currentQuarter >= matchConfig.totalQuarters ? (
+                                <Trophy size={40} className="text-yellow-400" />
                             ) : (
-                                <>
-                                    <Flag size={48} className="mx-auto mb-3 text-primary" />
-                                    <h3 className="text-2xl font-bold text-white mb-2">
-                                        Fin del Cuarto {match.currentQuarter}
-                                    </h3>
-                                    <div className="flex justify-center items-center gap-4 text-lg font-mono my-3">
-                                        <span className="text-blue-400">{stats.localScore}</span>
-                                        <span className="text-gray-500">-</span>
-                                        <span className="text-orange-400">{stats.visitorScore}</span>
-                                    </div>
-                                </>
+                                <Flag size={40} />
                             )}
                         </div>
 
-                        {/* Opciones */}
-                        <div className="flex flex-col gap-3">
+                        {/* 2. Título y Mensaje */}
+                        <h3 className="text-2xl font-bold text-white mb-1">
+                            {quarterEndModal === 'overtime' 
+                                ? '¡Tiempo Reglamentario Terminado!' 
+                                : match.currentQuarter >= matchConfig.totalQuarters
+                                    ? 'Partido Finalizado'
+                                    : `Fin del Cuarto ${match.currentQuarter}`
+                            }
+                        </h3>
+                        
+                        <p className="text-gray-400 text-sm">
+                            {quarterEndModal === 'overtime' 
+                                ? 'El marcador está empatado. Se requiere tiempo extra.'
+                                : 'Confirma la siguiente acción para continuar.'
+                            }
+                        </p>
+
+                        {/* 3. Tira de Marcador */}
+                        <div className="modal-score-strip">
+                            <div className="text-center">
+                                <div className="text-xs text-gray-500 uppercase font-bold mb-1 tracking-wider">
+                                    {data.localTeam?.name.substring(0, 3)}
+                                </div>
+                                <span className="modal-score-num text-blue-400">{stats.localScore}</span>
+                            </div>
+                            
+                            <div className="text-gray-600 font-mono text-xl">vs</div>
+                            
+                            <div className="text-center">
+                                <div className="text-xs text-gray-500 uppercase font-bold mb-1 tracking-wider">
+                                    {data.visitorTeam?.name.substring(0, 3)}
+                                </div>
+                                <span className="modal-score-num text-orange-400">{stats.visitorScore}</span>
+                            </div>
+                        </div>
+
+                        {/* 4. Botones de Acción */}
+                        <div className="modal-actions">
                             {quarterEndModal === 'overtime' ? (
                                 <>
-                                    {/* Tiempo Extra */}
-                                    <button
-                                        onClick={handleStartOvertime}
-                                        className="w-full py-3 bg-primary/10 text-primary font-bold rounded-lg border border-primary/20 flex items-center justify-center gap-2"
-                                    >
+                                    <button onClick={handleStartOvertime} className="btn-modal-primary btn-overtime">
                                         <PlayCircle size={20} />
-                                        Jugar Tiempo Extra (5 min)
+                                        Iniciar Tiempo Extra (5:00)
                                     </button>
-
-                                    {/* Finalizar en empate */}
-                                    <button
-                                        onClick={handleEndMatch}
-                                        className="w-full py-3 bg-gray-800 text-gray-300 font-medium rounded-lg border border-gray-700"
-                                    >
-                                        Finalizar en Empate
+                                    <button onClick={handleEndMatch} className="btn-modal-secondary">
+                                        Terminar en Empate
                                     </button>
                                 </>
                             ) : (
                                 <>
-                                    {/* Siguiente Cuarto o Finalizar */}
                                     {match.currentQuarter < matchConfig.totalQuarters ? (
-                                        <button
-                                            onClick={confirmNextQuarter}
-                                            className="w-full py-3 bg-green-500/10 text-green-500 font-bold rounded-lg border border-green-500/20 flex items-center justify-center gap-2"
-                                        >
+                                        <button onClick={confirmNextQuarter} className="btn-modal-primary btn-next-q">
                                             <PlayCircle size={20} />
-                                            Iniciar Cuarto {match.currentQuarter + 1}
+                                            Comenzar Cuarto {match.currentQuarter + 1}
                                         </button>
                                     ) : (
-                                        <button
-                                            onClick={handleEndMatch}
-                                            className="w-full py-3 bg-primary/10 text-primary font-bold rounded-lg border border-primary/20 flex items-center justify-center gap-2"
-                                        >
+                                        <button onClick={handleEndMatch} className="btn-modal-primary btn-finish">
                                             <Trophy size={20} />
-                                            Finalizar Partido
+                                            Oficializar Victoria
                                         </button>
                                     )}
-
-                                    {/* Cancelar */}
-                                    <button
-                                        onClick={() => setQuarterEndModal(null)}
-                                        className="w-full py-3 text-gray-400 font-medium"
-                                    >
-                                        Continuar Jugando
+                                    
+                                    <button onClick={() => setQuarterEndModal(null)} className="btn-modal-secondary">
+                                        Corregir / Volver al mapa
                                     </button>
                                 </>
                             )}
                         </div>
 
-                        {/* Info adicional */}
-                        <div className="mt-4 pt-4 border-t border-gray-800 text-center text-xs text-gray-500">
-                            Cuartos: {match.currentQuarter} de {matchConfig.totalQuarters} • 
-                            Duración: {matchConfig.quarterDuration} min
-                        </div>
                     </div>
                 </div>
             )}

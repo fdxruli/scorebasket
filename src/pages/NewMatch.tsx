@@ -1,11 +1,10 @@
 // src/pages/NewMatch.tsx
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom'; // Importamos Link
+import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { Play, Settings, AlertCircle, Trophy } from 'lucide-react';
 
-// Importamos los estilos específicos
 import './NewMatch.css';
 
 export function NewMatch() {
@@ -41,6 +40,17 @@ export function NewMatch() {
       return;
     }
 
+    // 🆕 Validar configuración
+    if (config.totalQuarters < 1 || config.totalQuarters > 8) {
+      setError("El número de cuartos debe estar entre 1 y 8.");
+      return;
+    }
+
+    if (config.minutesPerQuarter < 1 || config.minutesPerQuarter > 30) {
+      setError("La duración del cuarto debe estar entre 1 y 30 minutos.");
+      return;
+    }
+
     setIsCreating(true);
 
     try {
@@ -51,6 +61,7 @@ export function NewMatch() {
         status: 'created',
         createdAt: new Date(),
         quarterDuration: config.minutesPerQuarter,
+        totalQuarters: config.totalQuarters, // 🆕 Guardamos la configuración
         timerSecondsRemaining: config.minutesPerQuarter * 60,
         timerLastStart: undefined
       });
@@ -135,7 +146,7 @@ export function NewMatch() {
             <input 
               type="number" 
               min="1" 
-              max="6"
+              max="8"
               className="input input-number"
               value={config.totalQuarters}
               onChange={(e) => setConfig({...config, totalQuarters: Number(e.target.value)})}
@@ -146,12 +157,25 @@ export function NewMatch() {
             <input 
               type="number" 
               min="1" 
-              max="20"
+              max="30"
               className="input input-number"
               value={config.minutesPerQuarter}
               onChange={(e) => setConfig({...config, minutesPerQuarter: Number(e.target.value)})}
             />
           </div>
+        </div>
+
+        {/* 🆕 Info de configuración */}
+        <div style={{ 
+          marginTop: '1rem', 
+          padding: '0.75rem', 
+          background: 'rgba(249, 115, 22, 0.05)',
+          border: '1px solid rgba(249, 115, 22, 0.2)',
+          borderRadius: '8px',
+          fontSize: '0.85rem',
+          color: 'var(--text-muted)'
+        }}>
+          <strong style={{ color: 'var(--primary)' }}>Duración total:</strong> {config.totalQuarters * config.minutesPerQuarter} minutos
         </div>
       </div>
 

@@ -25,7 +25,11 @@ export interface Match {
   createdAt: Date;
   finishedAt?: Date;
 
-  quarterDuration: number;
+  // 🆕 Configuración del partido
+  totalQuarters: number;         // Número total de cuartos configurados
+  quarterDuration: number;        // Duración de cada cuarto en minutos
+  
+  // Timer
   timerSecondsRemaining: number;
   timerLastStart?: Date;
 }

@@ -4,8 +4,8 @@ export interface Team {
   id?: number;
   name: string;
   createdAt: Date;
-  isArchived?: boolean; // 🆕 Soft delete flag
-  archivedAt?: Date;    // 🆕 Fecha de archivo (opcional)
+  isArchived?: boolean;
+  archivedAt?: Date;
 }
 
 export interface Player {
@@ -27,13 +27,19 @@ export interface Match {
   createdAt: Date;
   finishedAt?: Date;
 
-  // Configuración del partido
+  // Configuración
   totalQuarters: number;
   quarterDuration: number;
   
   // Timer
   timerSecondsRemaining: number;
   timerLastStart?: Date;
+
+  // --- 🟢 NUEVOS CAMPOS DESNORMALIZADOS (OPTIMIZACIÓN) ---
+  localScore?: number;
+  visitorScore?: number;
+  localFouls?: number;   // Faltas Totales Acumuladas
+  visitorFouls?: number; // Faltas Totales Acumuladas
 }
 
 export interface Score {

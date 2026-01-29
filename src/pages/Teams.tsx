@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
-// CAMBIO: Usamos RotateCcw en lugar de ArchiveRestore para evitar errores de versión
-import { Trash2, UserPlus, Save, Users as UsersIcon, Edit2, Archive, RotateCcw, AlertCircle } from 'lucide-react';
+import { Trash2, UserPlus, Save, Users as UsersIcon, Edit2, Archive, RotateCcw, AlertCircle, X } from 'lucide-react';
 import { TeamEditorModal } from '../components/teams/TeamEditorModal';
 
 interface TempPlayer {
@@ -129,8 +128,8 @@ export function Teams() {
             )}
 
             {/* --- CARD: FORMULARIO DE CREACIÓN --- */}
-            <div className="card">
-                <h2 className="label" style={{ fontSize: '1.1rem', color: 'var(--text-main)', marginBottom: '1rem' }}>
+            <div className="card teams-form-card">
+                <h2 className="form-header-text">
                     Registrar Nuevo Equipo
                 </h2>
 
@@ -147,12 +146,13 @@ export function Teams() {
 
                 <div className="form-group">
                     <label className="label">Agregar Jugadores</label>
-                    <div className="flex gap-2 mb-2">
+                    
+                    {/* Fila de inputs alineados usando CSS grid/flex */}
+                    <div className="add-player-row">
                         <input
                             type="number"
-                            className="input"
-                            placeholder="#"
-                            style={{ width: '80px', textAlign: 'center' }}
+                            className="input input-player-number"
+                            placeholder="Numero de jugador"
                             value={playerNumber}
                             onChange={e => setPlayerNumber(e.target.value)}
                         />
@@ -166,7 +166,11 @@ export function Teams() {
                             onKeyDown={e => e.key === 'Enter' && handleAddTempPlayer()}
                         />
 
-                        <button onClick={handleAddTempPlayer} className="btn" style={{ background: 'var(--bg-surface-hover)', border: '1px solid var(--border-color)' }}>
+                        <button 
+                            onClick={handleAddTempPlayer} 
+                            className="btn-add-player"
+                            title="Agregar jugador a la lista temporal"
+                        >
                             <UserPlus size={20} />
                         </button>
                     </div>
@@ -174,16 +178,16 @@ export function Teams() {
 
                 {/* Lista de Pills */}
                 {tempPlayers.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <div className="temp-players-list">
                         {tempPlayers.map((p, idx) => (
                             <span key={idx} className="pill">
                                 {p.number && <span className="mr-1 font-bold text-white/50">#{p.number}</span>}
                                 {p.name}
                                 <button
                                     onClick={() => setTempPlayers(tempPlayers.filter((_, i) => i !== idx))}
-                                    style={{ color: 'inherit', marginLeft: '4px', display: 'flex' }}
+                                    className="pill-remove-btn"
                                 >
-                                    ×
+                                    <X size={14} />
                                 </button>
                             </span>
                         ))}
@@ -200,60 +204,39 @@ export function Teams() {
                 </button>
             </div>
 
-            {/* TOGGLE PARA MOSTRAR ARCHIVADOS */}
-            <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                <h3 className="label" style={{ textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
+            {/* --- CABECERA LISTA Y TOGGLE DE ARCHIVADOS --- */}
+            <div className="teams-list-header">
+                <h3 className="list-title">
                     Equipos Registrados ({teams?.length || 0})
                 </h3>
                 
                 <button
                     onClick={() => setShowArchived(!showArchived)}
-                    className="btn-icon"
-                    style={{ 
-                        color: showArchived ? 'var(--primary)' : 'var(--text-muted)',
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                    }}
+                    className={`btn-archive-toggle ${showArchived ? 'active' : ''}`}
                     title={showArchived ? 'Ocultar archivados' : 'Mostrar archivados'}
                 >
                     <Archive size={16} />
-                    {showArchived ? 'Ver Activos' : 'Ver Archivados'}
+                    <span>{showArchived ? 'Ocultar Archivados' : 'Ver Archivados'}</span>
                 </button>
             </div>
 
             {/* --- LISTA DE EQUIPOS --- */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="teams-grid">
                 {teams?.map(team => {
                     const isArchived = team.isArchived === true;
                     
                     return (
                         <div 
                             key={team.id} 
-                            className="card flex-between" 
-                            style={{ 
-                                padding: '1rem',
-                                opacity: isArchived ? 0.6 : 1,
-                                borderStyle: isArchived ? 'dashed' : 'solid'
-                            }}
+                            className={`card team-card ${isArchived ? 'is-archived' : ''}`}
                         >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                            <div className="team-info">
+                                <span className="team-name">
                                     {team.name}
                                 </span>
                                 
                                 {isArchived && (
-                                    <span style={{
-                                        fontSize: '0.7rem',
-                                        padding: '0.25rem 0.5rem',
-                                        borderRadius: '4px',
-                                        background: 'rgba(161, 161, 170, 0.2)',
-                                        color: 'var(--text-muted)',
-                                        fontWeight: 700,
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.5px'
-                                    }}>
+                                    <span className="archived-badge">
                                         Archivado
                                     </span>
                                 )}
@@ -293,7 +276,7 @@ export function Teams() {
                                     </>
                                 ) : (
                                     <>
-                                        {/* Botón RESTAURAR (USANDO RotateCcw) */}
+                                        {/* Botón RESTAURAR */}
                                         <button
                                             onClick={() => handleUnarchiveTeam(team.id!, team.name)}
                                             className="btn-icon"
@@ -320,22 +303,11 @@ export function Teams() {
             )}
 
             {!showArchived && (
-                <div style={{
-                    marginTop: '2rem',
-                    padding: '1rem',
-                    background: 'rgba(59, 130, 246, 0.05)',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    gap: '0.75rem',
-                    alignItems: 'flex-start'
-                }}>
+                <div className="teams-info-box">
                     <AlertCircle size={16} style={{ color: 'var(--secondary)', flexShrink: 0, marginTop: '2px' }} />
-                    <div>
-                        <strong style={{ color: 'var(--text-main)' }}>Sobre eliminar equipos:</strong>
-                        <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem', lineHeight: '1.6' }}>
+                    <div className="info-content">
+                        <strong>Sobre eliminar equipos:</strong>
+                        <ul>
                             <li><strong>Archivar:</strong> Oculta el equipo pero mantiene su historial completo. Recomendado.</li>
                             <li><strong>Eliminar:</strong> Borra permanentemente. Solo funciona si no tiene partidos ni jugadores.</li>
                         </ul>

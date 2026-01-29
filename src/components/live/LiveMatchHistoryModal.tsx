@@ -18,7 +18,7 @@ type HistoryItem = {
 };
 
 export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModalProps) {
-  
+
   // 1. Obtenemos datos combinados
   const historyData = useLiveQuery(async () => {
     const [scores, fouls, players, teams] = await Promise.all([
@@ -60,20 +60,40 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
 
   // 2. Función para eliminar y cerrar
   const handleDelete = async (item: HistoryItem) => {
-    // Usamos un confirm nativo para velocidad, pero cerramos al instante si acepta.
-    if (!confirm("¿Eliminar esta acción? El marcador se actualizará.")) return;
+    if (!confirm("¿Eliminar esta acción?")) return;
 
     try {
-      if (item.type === 'score') {
-        await db.scores.delete(item.id);
-      } else {
-        await db.fouls.delete(item.id);
-      }
-      
-      // ✅ CIERRE INMEDIATO: 
-      // Esto permite al usuario volver al juego rápido sin dar otro click.
-      onClose(); 
+      await db.transaction('rw', db.scores, db.fouls, db.matches, async () => {
+        // 1. Borrar la acción original
+        if (item.type === 'score') {
+          await db.scores.delete(item.id);
 
+          // 🟢 NUEVO: Actualizar el Match restando los puntos
+          const match = await db.matches.get(matchId);
+          if (match) {
+            const isLocal = item.teamId === match.localTeamId;
+            const update = isLocal
+              ? { localScore: Math.max(0, (match.localScore || 0) - (item.points || 0)) }
+              : { visitorScore: Math.max(0, (match.visitorScore || 0) - (item.points || 0)) };
+            await db.matches.update(matchId, update);
+          }
+
+        } else {
+          await db.fouls.delete(item.id);
+
+          // 🟢 NUEVO: Actualizar el Match restando la falta
+          const match = await db.matches.get(matchId);
+          if (match) {
+            const isLocal = item.teamId === match.localTeamId;
+            const update = isLocal
+              ? { localFouls: Math.max(0, (match.localFouls || 0) - 1) }
+              : { visitorFouls: Math.max(0, (match.visitorFouls || 0) - 1) };
+            await db.matches.update(matchId, update);
+          }
+        }
+      });
+
+      onClose();
     } catch (err) {
       console.error("Error al eliminar", err);
       alert("No se pudo eliminar la acción");
@@ -89,8 +109,8 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div 
-        className="modal-content variant-info" 
+      <div
+        className="modal-content variant-info"
         style={{ height: '75vh', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}
       >
@@ -126,7 +146,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
 
                 return (
                   <div key={`${item.type}-${item.id}`} className={`history-item ${isScore ? 'is-score' : 'is-foul'}`}>
-                    
+
                     <div className="action-info">
                       {/* Título: Qué pasó y para qué equipo */}
                       <span className="action-title">
@@ -141,7 +161,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                         )}
                         <span className="text-muted font-normal">•</span>
                         <span className="text-main font-bold uppercase text-xs tracking-wide">
-                            {team?.name}
+                          {team?.name}
                         </span>
                       </span>
 
@@ -149,17 +169,17 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                       <span className="action-detail">
                         <span className="action-time">Q{item.quarter} • {formatTime(item.createdAt)}</span>
                         <span>
-                            {player ? (
-                                <span className="text-gray-300">#{player.number} {player.name}</span>
-                            ) : (
-                                <span className="italic opacity-50">Desconocido</span>
-                            )}
+                          {player ? (
+                            <span className="text-gray-300">#{player.number} {player.name}</span>
+                          ) : (
+                            <span className="italic opacity-50">Desconocido</span>
+                          )}
                         </span>
                       </span>
                     </div>
 
                     {/* Botón Eliminar */}
-                    <button 
+                    <button
                       onClick={() => handleDelete(item)}
                       className="btn-delete-action"
                       title="Eliminar esta acción"

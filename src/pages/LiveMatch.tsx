@@ -1,10 +1,9 @@
-// src/pages/LiveMatch.tsx
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Player } from '../db/models';
-import { History, ChevronLeft, AlertTriangle, Trophy, Flag, Play, Pause } from 'lucide-react';
+import { History, ChevronLeft, AlertTriangle, Trophy, Flag, Play, Pause, LogOut } from 'lucide-react';
 import { LiveMatchHistoryModal } from '../components/live/LiveMatchHistoryModal';
 import { MatchesRepository } from '../db/matches.repository';
 import { ScoresRepository } from '../db/scores.repository';
@@ -289,14 +288,14 @@ export function LiveMatch() {
                             )}
                         </div>
 
-                        <h3 className="text-2xl font-bold mb-1">
+                        <h3>
                             {quarterEndModal === 'overtime' 
                                 ? '¡Tiempo Terminado!' 
                                 : isLastQuarter ? 'Partido Finalizado' : `Fin del Cuarto ${match.currentQuarter}`
                             }
                         </h3>
                         
-                        <p className="text-muted text-sm mb-4">
+                        <p>
                             {quarterEndModal === 'overtime' 
                                 ? 'El marcador está empatado. ¿Tiempo extra?'
                                 : 'Confirma la siguiente acción.'
@@ -356,19 +355,23 @@ export function LiveMatch() {
                 </div>
             )}
 
-            {/* MODAL SALIDA (Simplificado con estilos inline para cosas rápidas o puedes crear clase si prefieres) */}
+            {/* MODAL SALIDA (MEJORADO) */}
             {showExitConfirm && (
                 <div className="game-modal-overlay">
-                    <div className="game-modal-card">
-                        <h3 className="text-xl font-bold mb-2">¿Cómo deseas salir?</h3>
-                        <p className="text-muted mb-6 text-sm">
-                            El reloj está corriendo.
+                    <div className="game-modal-card is-exit">
+                        <div className="modal-icon-wrapper">
+                            <LogOut size={40} className="text-blue-400" />
+                        </div>
+
+                        <h3>¿Deseas salir?</h3>
+                        <p>
+                            El reloj sigue corriendo. Puedes pausarlo ahora o dejarlo activo en segundo plano.
                         </p>
 
                         <div className="modal-actions">
                             <button
                                 onClick={handleExitAndPause}
-                                className="btn-modal-primary btn-overtime"
+                                className="btn-modal-primary btn-exit-pause"
                             >
                                 <Pause size={20} />
                                 Pausar y Salir
@@ -376,10 +379,10 @@ export function LiveMatch() {
 
                             <button
                                 onClick={handleExitRunning}
-                                className="btn-modal-primary btn-next-q"
+                                className="btn-modal-primary btn-exit-run"
                             >
                                 <Play size={20} />
-                                Dejar Corriendo
+                                Salir sin Pausar
                             </button>
 
                             <button onClick={() => setShowExitConfirm(false)} className="btn-modal-secondary">

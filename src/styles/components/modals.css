@@ -349,20 +349,21 @@
    (Para: MatchHistoryModal - Resumen Final)
    ========================================= */
 .modal-content.variant-report {
-  max-width: 550px;
-  background-color: #18181b;
+  max-width: 650px; /* Un poco más ancho para las tablas */
+  background-color: #09090b; /* Fondo oscuro sólido */
+  border: 1px solid #27272a;
 }
 
-/* Panel del Marcador (Header del reporte) */
+/* --- Panel del Marcador (Header) --- */
 .report-score-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  /* Gradiente sutil para darle volumen */
+  background: linear-gradient(180deg, rgba(39, 39, 42, 0.4) 0%, rgba(9, 9, 11, 0) 100%);
+  border-bottom: 1px solid var(--border-color);
+  padding: 2rem 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .report-team {
@@ -374,80 +375,117 @@
 }
 
 .report-team-name {
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 800;
   text-transform: uppercase;
   color: var(--text-muted);
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   text-align: center;
 }
 
+/* Indicador de Ganador */
+.report-team.is-winner .report-team-name { color: var(--text-main); text-shadow: 0 0 15px rgba(255,255,255,0.2); }
+.report-team.is-winner .report-score-big { color: var(--success); text-shadow: 0 0 30px rgba(34, 197, 94, 0.2); }
+
 .report-score-big {
   font-family: var(--font-mono);
-  font-size: 3rem;
+  font-size: 3.5rem;
   font-weight: 700;
   line-height: 1;
-  color: var(--text-main);
+  color: var(--text-muted);
+  transition: all 0.3s ease;
 }
-.report-score-big.winner { color: var(--success); text-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
-.report-score-big.loser { color: var(--text-muted); opacity: 0.6; }
 
 .report-vs {
   font-size: 0.75rem;
   font-weight: 900;
   color: var(--text-muted);
-  background-color: var(--bg-surface-hover);
-  padding: 0.5rem;
-  border-radius: 50%;
-  margin: 0 1rem;
+  background-color: var(--bg-surface);
+  padding: 0.5rem 0.8rem;
+  border-radius: 99px;
+  border: 1px solid var(--border-color);
+  margin: 0 1.5rem;
 }
 
-/* Tabla de Cuartos */
-.report-table-container {
+/* --- Secciones de Estadísticas --- */
+.report-section {
+  padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.report-subtitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 1.5rem 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.report-subtitle svg { opacity: 0.7; }
+
+/* Tabla de Cuartos Minimalista */
+.report-quarters-grid {
+  display: grid;
+  /* Auto columnas según cantidad de cuartos + columna total */
+  grid-template-columns: 100px repeat(auto-fit, minmax(30px, 1fr));
+  gap: 1px;
+  background-color: var(--border-color); /* Color de las líneas del grid */
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
-.report-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
+.q-cell {
+  background-color: var(--bg-surface);
+  padding: 0.75rem 0.5rem;
   text-align: center;
-}
-
-.report-table th {
-  background-color: rgba(255, 255, 255, 0.05);
-  padding: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-}
-
-.report-table td {
-  padding: 0.75rem;
-  border-top: 1px solid var(--border-color);
+  font-size: 0.85rem;
   color: var(--text-main);
 }
 
-.report-table .team-col { text-align: left; padding-left: 1rem; font-weight: 700; }
-.report-table .total-col { font-weight: 700; background-color: rgba(255, 255, 255, 0.02); }
+.q-cell.head { background-color: rgba(255,255,255,0.03); color: var(--text-muted); font-weight: 600; font-size: 0.75rem; }
+.q-cell.team-name { text-align: left; padding-left: 1rem; font-weight: 600; }
+.q-cell.total { font-weight: 800; font-family: var(--font-mono); background-color: rgba(255,255,255,0.02); }
 
-/* Lista de Estadísticas (Top Scorers) */
-.stat-row {
+/* --- Lista de Jugadores (Box Score) --- */
+.stats-group {
+  margin-bottom: 2rem;
+}
+
+.stats-header-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.stat-player-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-size: 0.9rem;
   transition: background 0.2s;
 }
-.stat-row:last-child { border-bottom: none; }
-.stat-row:hover { background-color: rgba(255, 255, 255, 0.02); }
+.stat-player-row:hover { background-color: rgba(255, 255, 255, 0.02); }
+.stat-player-row:last-child { border-bottom: none; }
 
-.stat-val { font-family: var(--font-mono); font-weight: 700; }
+.player-info { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
+.player-num { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.8rem; width: 20px; text-align: center;}
+.player-name { font-weight: 500; color: var(--text-main); }
+
+.stat-numbers { display: flex; gap: 1.5rem; }
+.stat-col { width: 40px; text-align: center; font-family: var(--font-mono); }
+.stat-col.pts { font-weight: 700; color: var(--text-main); }
+.stat-col.fls { color: var(--danger); opacity: 0.8; font-weight: 600;}
 
 /* =========================================
    5. VARIANTE: INFO / LOGS 

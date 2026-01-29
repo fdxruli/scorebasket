@@ -1,0 +1,207 @@
+/* src/styles/pages/teams.css */
+
+/* --- 1. SECCIÓN DE FORMULARIO --- */
+.teams-form-card {
+  margin-bottom: 2rem;
+  /* Hereda propiedades de .card automáticamente */
+}
+
+.form-header-text {
+  font-size: 1.1rem;
+  color: var(--text-main);
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+/* Fila de agregar jugador (Inputs alineados) */
+.add-player-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.input-player-number {
+  width: 70px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.btn-add-player {
+  aspect-ratio: 1;
+  padding: 0;
+  width: 100px;
+  background-color: var(--bg-surface-hover);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-add-player:hover {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Lista de jugadores temporales (Pills) */
+.temp-players-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  min-height: 1rem;
+}
+
+.pill-remove-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  margin-left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.pill-remove-btn:hover { opacity: 1; }
+
+
+/* --- 2. CABECERA DE LA LISTA Y BOTÓN DE ARCHIVADOS --- */
+.teams-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid transparent;
+}
+
+.list-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0;
+}
+
+/* CORRECCIÓN: Botón "Ver Archivados" optimizado */
+.btn-archive-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full); /* Más redondeado y moderno */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: auto; /* Evita que herede alturas forzadas */
+}
+
+.btn-archive-toggle:hover {
+  color: var(--text-main);
+  background-color: var(--bg-surface-hover);
+}
+
+.btn-archive-toggle.active {
+  color: var(--primary);
+  background-color: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+
+/* --- 3. LISTA DE EQUIPOS (CARDS) --- */
+.teams-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.team-card {
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent; /* Indicador visual al hover */
+}
+
+/* Efecto hover suave */
+.team-card:hover {
+  transform: translateX(4px);
+  border-left-color: var(--primary);
+  border-color: var(--border-light);
+}
+
+.team-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.team-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* Estilos específicos para equipos archivados */
+.team-card.is-archived {
+  opacity: 0.6;
+  border: 1px dashed var(--border-color);
+  background-image: none;
+  background-color: transparent;
+}
+
+.team-card.is-archived:hover {
+  opacity: 1;
+  border-color: var(--text-muted);
+  transform: none; /* No mover si está archivado */
+}
+
+.archived-badge {
+  font-size: 0.65rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* --- 4. INFO BOX (Ayuda al final) --- */
+.teams-info-box {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  background-color: rgba(59, 130, 246, 0.05); /* Azul muy sutil */
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.info-content strong {
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.info-content ul {
+  padding-left: 1rem;
+  margin-top: 0.5rem;
+  line-height: 1.6;
+  list-style-type: disc;
+}

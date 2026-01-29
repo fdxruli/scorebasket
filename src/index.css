@@ -20,6 +20,7 @@
 @import './styles/pages/matches.css';
 @import './styles/pages/new-match.css';
 @import './styles/pages/live.css';
+@import './styles/pages/teams.css';
 
 /* 6. Utilidades Extra */
 .text-center { text-align: center; }

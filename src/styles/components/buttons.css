@@ -1,0 +1,69 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Variante Primaria (Naranja) */
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-glow);
+}
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Variante Secundaria (Outline / Fantasma) */
+.btn-secondary {
+  background-color: transparent;
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+.btn-secondary:hover {
+  border-color: var(--text-muted);
+  color: var(--text-main);
+  background-color: var(--bg-surface-hover);
+}
+
+/* Variante Peligro (Rojo) */
+.btn-danger {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Botones Icono (Cuadrados o circulares pequeños) */
+.btn-icon {
+  padding: 0.5rem;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  aspect-ratio: 1;
+}
+.btn-icon:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-main);
+}

@@ -1,0 +1,82 @@
+/* src/styles/pages/matches.css */
+
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 1.5rem 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Tarjeta de Partido */
+.match-card {
+  display: block; /* Link */
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.match-card-content {
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Estado: EN VIVO */
+.match-card.is-live {
+  border-color: var(--primary);
+  background-color: rgba(249, 115, 22, 0.03);
+}
+.match-card.is-live::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 4px;
+  background-color: var(--primary);
+}
+
+/* Estado: FINALIZADO */
+.match-card.is-finished {
+  opacity: 0.8;
+  border-style: dashed;
+}
+.match-card.is-finished:hover {
+  opacity: 1;
+  border-style: solid;
+  border-color: var(--text-muted);
+}
+
+/* Rows de marcador */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+.score-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text-main);
+  width: 2rem;
+  text-align: right;
+}
+
+/* Estado Vacío */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: var(--text-muted);
+  gap: 1rem;
+  opacity: 0.6;
+}

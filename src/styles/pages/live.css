@@ -1,0 +1,157 @@
+/* src/styles/pages/live.css */
+
+/* --- OVERLAY MAESTRO (Modo Inmersivo) --- */
+.live-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #000;
+  z-index: var(--z-overlay, 100);
+  display: flex;
+  flex-direction: column;
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+/* --- CABECERA --- */
+.live-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+.live-btn-icon {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+}
+
+.live-status-badge {
+  font-family: var(--font-mono);
+  background-color: var(--bg-surface);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* --- SCOREBOARD (Marcador) --- */
+.scoreboard-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 1rem;
+}
+
+.team-score-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 40%;
+}
+
+.team-name-display {
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.score-giant {
+  font-family: var(--font-mono);
+  font-size: 4.5rem;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+/* Reloj Central */
+.timer-display {
+  font-family: var(--font-mono);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.timer-display.active {
+  color: var(--text-main);
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+/* --- CONTROLES INFERIORES --- */
+.controls-section {
+  background-color: var(--bg-surface);
+  border-top-left-radius: 2rem;
+  border-top-right-radius: 2rem;
+  padding: 1.5rem;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.points-grid {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 1rem;
+  align-items: center;
+}
+
+.separator { height: 80%; background-color: var(--border-color); }
+
+/* Botones de acción */
+.btn-point {
+  height: 3.5rem;
+  width: 100%;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+/* Temas de equipo */
+.local-theme .btn-point { 
+  background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-color: rgba(59,130,246,0.2); 
+}
+.visitor-theme .btn-point { 
+  background: rgba(249, 115, 22, 0.1); color: #fb923c; border-color: rgba(249,115,22,0.2); 
+}
+
+/* Botón Play/Pause Gigante */
+.master-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-play-pause {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  border: 4px solid var(--bg-surface);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.btn-play-pause.is-playing { background-color: var(--warning); color: #422006; }
+.btn-play-pause.is-paused { background-color: var(--success); color: #fff; }
+.btn-play-pause:active { transform: scale(0.9); }

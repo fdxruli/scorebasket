@@ -21,21 +21,21 @@ export function PlayerSelectModal({ teamName, players, action, onSelect, onCance
     const variantClass = isFoul ? 'is-foul' : 'is-score';
 
     return (
-        <div className="pm-overlay" onClick={onCancel}>
+        <div className="modal-overlay" onClick={onCancel}>
             {/* e.stopPropagation() evita que el click dentro del modal lo cierre 
          (solo se cierra si clickeas el fondo oscuro)
       */}
             <div
-                className={`pm-content ${variantClass}`}
+                className={`modal-content ${variantClass}`}
                 onClick={(e) => e.stopPropagation()}
             >
 
                 {/* CABECERA */}
-                <div className="pm-header">
-                    <h3 className="pm-title">
+                <div className="modal-header">
+                    <h3 className="modal-title">
                         {isFoul ? 'Falta Personal' : `¡${action.points} Puntos!`}
                     </h3>
-                    <p className="pm-subtitle">
+                    <p className="modal-subtitle">
                         Selecciona quién de <strong>{teamName}</strong> realizó la acción
                     </p>
                 </div>
@@ -68,7 +68,7 @@ export function PlayerSelectModal({ teamName, players, action, onSelect, onCance
                 </div>
 
                 {/* BOTÓN CANCELAR */}
-                <button onClick={onCancel} className="pm-cancel-btn">
+                <button onClick={onCancel} className="modal-footer">
                     Cancelar
                 </button>
 

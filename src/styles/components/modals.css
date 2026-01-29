@@ -1,0 +1,138 @@
+/* src/styles/components/modals.css */
+
+/* --- BASE: OVERLAY --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: var(--backdrop-blur);
+  z-index: var(--z-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: modalFadeIn 0.2s ease-out forwards;
+}
+
+/* Móvil: Alinear abajo para menús de acción, centro para info */
+.modal-overlay.align-bottom {
+  align-items: flex-end;
+}
+
+/* --- BASE: CONTENIDO --- */
+.modal-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Cabecera y Pie estándar */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.modal-footer {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+/* --- VARIANTE: SELECCIÓN DE JUGADOR (Antes PlayerSelectModal.css) --- */
+.modal-content.player-select-grid {
+  gap: 1rem;
+}
+
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.btn-player-select {
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.85rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-player-select:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--text-muted);
+}
+
+.btn-player-select.special {
+  grid-column: 1 / -1;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* --- VARIANTE: HISTORIAL (Antes HistoryModal.css) --- */
+.modal-content.history-view {
+  max-width: 600px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+
+.history-item.is-score { border-left: 3px solid var(--success); }
+.history-item.is-foul { border-left: 3px solid var(--danger); }
+
+/* --- VARIANTE: FIN DE JUEGO (Game End) --- */
+.modal-content.game-end {
+  align-items: center;
+  text-align: center;
+  border-color: var(--primary);
+}
+
+/* --- ANIMACIONES --- */
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalSlideUp { 
+  from { opacity: 0; transform: translateY(20px) scale(0.96); } 
+  to { opacity: 1; transform: translateY(0) scale(1); } 
+}

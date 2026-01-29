@@ -4,6 +4,8 @@ export interface Team {
   id?: number;
   name: string;
   createdAt: Date;
+  isArchived?: boolean; // 🆕 Soft delete flag
+  archivedAt?: Date;    // 🆕 Fecha de archivo (opcional)
 }
 
 export interface Player {
@@ -25,9 +27,9 @@ export interface Match {
   createdAt: Date;
   finishedAt?: Date;
 
-  // 🆕 Configuración del partido
-  totalQuarters: number;         // Número total de cuartos configurados
-  quarterDuration: number;        // Duración de cada cuarto en minutos
+  // Configuración del partido
+  totalQuarters: number;
+  quarterDuration: number;
   
   // Timer
   timerSecondsRemaining: number;

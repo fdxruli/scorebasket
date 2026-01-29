@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
 import { X, Save, Trash2, Plus, User } from 'lucide-react';
-import './TeamEditorModal.css';
 
 interface TeamEditorModalProps {
     teamId: number;
@@ -119,19 +118,19 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     if (isLoading) return null;
 
     return (
-        <div className="editor-overlay">
-            <div className="editor-content">
+        <div className="modal-overlay">
+            <div className="modal-content">
 
                 {/* Header */}
-                <div className="editor-header">
-                    <h2 className="editor-title">Editar Equipo</h2>
+                <div className="modal-header">
+                    <h2 className="modal-title">Editar Equipo</h2>
                     <button onClick={onClose} className="btn-icon">
                         <X size={24} />
                     </button>
                 </div>
 
                 {/* Body */}
-                <div className="editor-body">
+                <div className="flex-col gap-lg">
 
                     {/* Nombre del Equipo */}
                     <div className="form-group">
@@ -213,7 +212,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="editor-footer">
+                <div className="modal-footer">
                     <button onClick={onClose} className="btn" style={{ color: 'var(--text-muted)' }}>
                         Cancelar
                     </button>

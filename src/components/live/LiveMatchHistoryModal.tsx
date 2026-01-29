@@ -1,8 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { X, Trash2, Clock, AlertCircle, Trophy } from 'lucide-react';
-import './LiveMatchHistoryModal.css';
-import '../live/PlayerSelectModal.css'; // Reutilizamos estilos base del overlay
 
 interface LiveMatchHistoryModalProps {
   matchId: number;
@@ -89,15 +87,15 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
   const { combined, playerMap, teamMap } = historyData;
 
   return (
-    <div className="pm-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onClose}>
       <div 
-        className="pm-content" 
+        className="modal-content" 
         style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-4">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+        <div className="modal-header">
+          <h3 className="modal-title flex-center gap-sm">
             <Clock size={20} className="text-primary" />
             Historial de Acciones
           </h3>
@@ -159,7 +157,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
           )}
         </div>
 
-        <button onClick={onClose} className="pm-cancel-btn mt-4">
+        <button onClick={onClose} className="modal-footer">
           Cerrar
         </button>
       </div>

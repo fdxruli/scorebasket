@@ -1,0 +1,43 @@
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.input, .select, .textarea {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background-color: rgba(0, 0, 0, 0.3); /* Fondo oscuro sutil */
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  appearance: none; /* Eliminar estilos nativos del sistema */
+}
+
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15); /* Anillo de foco naranja */
+}
+
+.input::placeholder {
+  color: #52525b;
+}
+
+/* Clase para inputs de solo números (como marcadores) */
+.input-number {
+  font-family: var(--font-mono);
+  text-align: center;
+  font-weight: 700;
+}

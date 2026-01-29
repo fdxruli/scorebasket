@@ -1,0 +1,18 @@
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg); /* Bordes más redondeados y modernos */
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s;
+}
+
+/* Efecto hover opcional para tarjetas interactivas */
+.card-interactive:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  background-color: var(--bg-surface-hover);
+  cursor: pointer;
+}

@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { Trash2, UserPlus, Save, Users as UsersIcon, Edit2 } from 'lucide-react';
-import { TeamEditorModal } from '../components/teams/TeamEditorModal'; // <--- Importamos el modal
+import { TeamsRepository } from '../db/teams.repository';
+// CAMBIO: Usamos RotateCcw en lugar de ArchiveRestore para evitar errores de versión
+import { Trash2, UserPlus, Save, Users as UsersIcon, Edit2, Archive, RotateCcw, AlertCircle } from 'lucide-react';
+import { TeamEditorModal } from '../components/teams/TeamEditorModal';
 
 interface TempPlayer {
     name: string;
@@ -16,22 +18,32 @@ export function Teams() {
     const [playerNumber, setPlayerNumber] = useState('');
     const [tempPlayers, setTempPlayers] = useState<TempPlayer[]>([]);
     const [isSaving, setIsSaving] = useState(false);
-
-    // Estado para controlar qué equipo se está editando
     const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
+    const [showArchived, setShowArchived] = useState(false);
 
-    const teams = useLiveQuery(() => db.teams.toArray());
+    // Consulta segura
+    const teams = useLiveQuery(async () => {
+        try {
+            if (showArchived) {
+                return await TeamsRepository.getAllIncludingArchived();
+            } else {
+                return await TeamsRepository.getAll();
+            }
+        } catch (err) {
+            console.error("Error cargando equipos:", err);
+            return []; // Retornar array vacío en caso de error para evitar crash
+        }
+    }, [showArchived]);
 
-    // --- LÓGICA DE CREACIÓN (Ya existente) ---
+    // --- LÓGICA DE CREACIÓN ---
     const handleAddTempPlayer = () => {
         if (!playerName.trim()) return;
-        // Agregamos objeto con nombre y número
         setTempPlayers([...tempPlayers, {
             name: playerName.trim(),
             number: playerNumber.trim()
         }]);
         setPlayerName('');
-        setPlayerNumber(''); // Limpiamos el número también
+        setPlayerNumber('');
     };
 
     const handleSaveTeam = async () => {
@@ -41,15 +53,11 @@ export function Teams() {
         setIsSaving(true);
         try {
             await db.transaction('rw', db.teams, db.players, async () => {
-                const teamId = await db.teams.add({
-                    name: teamName,
-                    createdAt: new Date()
-                });
+                const teamId = await TeamsRepository.create(teamName);
 
-                // Guardamos los jugadores con su número
                 const playersToSave = tempPlayers.map(p => ({
                     name: p.name,
-                    number: p.number ? parseInt(p.number) : undefined, // Convertimos a número
+                    number: p.number ? parseInt(p.number) : undefined,
                     teamId: Number(teamId),
                     createdAt: new Date()
                 }));
@@ -58,19 +66,51 @@ export function Teams() {
             });
             setTeamName('');
             setTempPlayers([]);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error al guardar:", error);
+            alert(error.message || "Error al guardar el equipo");
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleDeleteTeam = async (id: number) => {
-        if (!confirm("¿Borrar equipo y sus jugadores?")) return;
-        await db.transaction('rw', db.teams, db.players, async () => {
-            await db.players.where({ teamId: id }).delete();
-            await db.teams.delete(id);
-        });
+    // Archivar equipo (Soft Delete)
+    const handleArchiveTeam = async (id: number, teamName: string) => {
+        const confirmMsg = `¿Archivar "${teamName}"?\n\nEl equipo dejará de aparecer en la lista activa, pero su historial de partidos se mantendrá intacto.`;
+        
+        if (!confirm(confirmMsg)) return;
+        
+        try {
+            await TeamsRepository.archive(id);
+        } catch (error: any) {
+            alert(error.message || "Error al archivar el equipo");
+        }
+    };
+
+    // Restaurar equipo archivado
+    const handleUnarchiveTeam = async (id: number, teamName: string) => {
+        const confirmMsg = `¿Restaurar "${teamName}"?\n\nEl equipo volverá a aparecer en la lista activa y podrá usarse en nuevos partidos.`;
+        
+        if (!confirm(confirmMsg)) return;
+        
+        try {
+            await TeamsRepository.unarchive(id);
+        } catch (error: any) {
+            alert(error.message || "Error al restaurar el equipo");
+        }
+    };
+
+    // Hard Delete
+    const handleDeleteTeam = async (id: number, teamName: string) => {
+        const confirmMsg = `⚠️ BORRADO PERMANENTE\n\n¿Borrar permanentemente "${teamName}" y todos sus jugadores?\n\nEsta acción NO SE PUEDE DESHACER.\n\nSi el equipo tiene partidos registrados, usa "Archivar" en su lugar.`;
+        
+        if (!confirm(confirmMsg)) return;
+        
+        try {
+            await TeamsRepository.remove(id);
+        } catch (error: any) {
+            alert(error.message || "Error al eliminar el equipo");
+        }
     };
 
     return (
@@ -81,7 +121,6 @@ export function Teams() {
             </h1>
 
             {/* --- MODAL DE EDICIÓN --- */}
-            {/* Si hay un ID seleccionado, mostramos el modal */}
             {editingTeamId && (
                 <TeamEditorModal
                     teamId={editingTeamId}
@@ -120,7 +159,7 @@ export function Teams() {
 
                         <input
                             type="text"
-                            className="input flex-1" // flex-1 para que ocupe el resto
+                            className="input flex-1"
                             placeholder="Nombre del jugador"
                             value={playerName}
                             onChange={e => setPlayerName(e.target.value)}
@@ -138,7 +177,6 @@ export function Teams() {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
                         {tempPlayers.map((p, idx) => (
                             <span key={idx} className="pill">
-                                {/* Mostramos el número si existe */}
                                 {p.number && <span className="mr-1 font-bold text-white/50">#{p.number}</span>}
                                 {p.name}
                                 <button
@@ -162,47 +200,148 @@ export function Teams() {
                 </button>
             </div>
 
-            {/* --- LISTA DE EQUIPOS --- */}
-            <div>
-                <h3 className="label" style={{ textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
+            {/* TOGGLE PARA MOSTRAR ARCHIVADOS */}
+            <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                <h3 className="label" style={{ textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
                     Equipos Registrados ({teams?.length || 0})
                 </h3>
+                
+                <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="btn-icon"
+                    style={{ 
+                        color: showArchived ? 'var(--primary)' : 'var(--text-muted)',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}
+                    title={showArchived ? 'Ocultar archivados' : 'Mostrar archivados'}
+                >
+                    <Archive size={16} />
+                    {showArchived ? 'Ver Activos' : 'Ver Archivados'}
+                </button>
+            </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {teams?.map(team => (
-                        <div key={team.id} className="card flex-between" style={{ padding: '1rem' }}>
-                            <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{team.name}</span>
+            {/* --- LISTA DE EQUIPOS --- */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {teams?.map(team => {
+                    const isArchived = team.isArchived === true;
+                    
+                    return (
+                        <div 
+                            key={team.id} 
+                            className="card flex-between" 
+                            style={{ 
+                                padding: '1rem',
+                                opacity: isArchived ? 0.6 : 1,
+                                borderStyle: isArchived ? 'dashed' : 'solid'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                                    {team.name}
+                                </span>
+                                
+                                {isArchived && (
+                                    <span style={{
+                                        fontSize: '0.7rem',
+                                        padding: '0.25rem 0.5rem',
+                                        borderRadius: '4px',
+                                        background: 'rgba(161, 161, 170, 0.2)',
+                                        color: 'var(--text-muted)',
+                                        fontWeight: 700,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px'
+                                    }}>
+                                        Archivado
+                                    </span>
+                                )}
+                            </div>
 
                             <div className="flex-gap">
-                                {/* Botón EDITAR */}
-                                <button
-                                    onClick={() => setEditingTeamId(team.id!)}
-                                    className="btn-icon"
-                                    style={{ color: 'var(--secondary)' }}
-                                    title="Editar equipo y jugadores"
-                                >
-                                    <Edit2 size={18} />
-                                </button>
+                                {!isArchived ? (
+                                    <>
+                                        {/* Botón EDITAR */}
+                                        <button
+                                            onClick={() => setEditingTeamId(team.id!)}
+                                            className="btn-icon"
+                                            style={{ color: 'var(--secondary)' }}
+                                            title="Editar equipo y jugadores"
+                                        >
+                                            <Edit2 size={18} />
+                                        </button>
 
-                                {/* Botón BORRAR */}
-                                <button
-                                    onClick={() => handleDeleteTeam(team.id!)}
-                                    className="btn-icon danger"
-                                    title="Borrar equipo"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
+                                        {/* Botón ARCHIVAR */}
+                                        <button
+                                            onClick={() => handleArchiveTeam(team.id!, team.name)}
+                                            className="btn-icon"
+                                            style={{ color: 'var(--text-muted)' }}
+                                            title="Archivar equipo (mantener historial)"
+                                        >
+                                            <Archive size={18} />
+                                        </button>
+
+                                        {/* Botón BORRAR */}
+                                        <button
+                                            onClick={() => handleDeleteTeam(team.id!, team.name)}
+                                            className="btn-icon danger"
+                                            title="Eliminar permanentemente (solo si no tiene partidos)"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Botón RESTAURAR (USANDO RotateCcw) */}
+                                        <button
+                                            onClick={() => handleUnarchiveTeam(team.id!, team.name)}
+                                            className="btn-icon"
+                                            style={{ color: 'var(--success)' }}
+                                            title="Restaurar equipo"
+                                        >
+                                            <RotateCcw size={18} />
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
-                    ))}
-                </div>
-
-                {teams?.length === 0 && (
-                    <p className="text-center text-muted" style={{ marginTop: '2rem' }}>
-                        No hay equipos registrados aún.
-                    </p>
-                )}
+                    );
+                })}
             </div>
+
+            {teams?.length === 0 && (
+                <p className="text-center text-muted" style={{ marginTop: '2rem' }}>
+                    {showArchived 
+                        ? 'No hay equipos archivados.'
+                        : 'No hay equipos registrados aún.'
+                    }
+                </p>
+            )}
+
+            {!showArchived && (
+                <div style={{
+                    marginTop: '2rem',
+                    padding: '1rem',
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    gap: '0.75rem',
+                    alignItems: 'flex-start'
+                }}>
+                    <AlertCircle size={16} style={{ color: 'var(--secondary)', flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                        <strong style={{ color: 'var(--text-main)' }}>Sobre eliminar equipos:</strong>
+                        <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem', lineHeight: '1.6' }}>
+                            <li><strong>Archivar:</strong> Oculta el equipo pero mantiene su historial completo. Recomendado.</li>
+                            <li><strong>Eliminar:</strong> Borra permanentemente. Solo funciona si no tiene partidos ni jugadores.</li>
+                        </ul>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

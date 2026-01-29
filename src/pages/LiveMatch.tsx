@@ -75,13 +75,21 @@ export function LiveMatch() {
 
     // --- STATS ---
     const stats = useMemo(() => {
-        if (!data) return { localScore: 0, visitorScore: 0, localFoulsQ: 0, visitorFoulsQ: 0 };
-        const { scores, fouls, match } = data;
+        // 🛡️ VALIDACIÓN DE SEGURIDAD:
+        // Si no hay datos, o si FALTA alguno de los equipos (borrado/error),
+        // devolvemos valores en cero para evitar que la app explote.
+        if (!data || !data.localTeam || !data.visitorTeam) {
+            return { localScore: 0, visitorScore: 0, localFoulsQ: 0, visitorFoulsQ: 0 };
+        }
+
+        const { scores, fouls, match, localTeam, visitorTeam } = data;
+        
         return {
-            localScore: scores.filter(s => s.teamId === data.localTeam!.id).reduce((a, b) => a + b.points, 0),
-            visitorScore: scores.filter(s => s.teamId === data.visitorTeam!.id).reduce((a, b) => a + b.points, 0),
-            localFoulsQ: fouls.filter(f => f.teamId === data.localTeam!.id && f.quarter === match.currentQuarter).length,
-            visitorFoulsQ: fouls.filter(f => f.teamId === data.visitorTeam!.id && f.quarter === match.currentQuarter).length
+            // Ahora es seguro acceder a localTeam.id y visitorTeam.id
+            localScore: scores.filter(s => s.teamId === localTeam.id).reduce((a, b) => a + b.points, 0),
+            visitorScore: scores.filter(s => s.teamId === visitorTeam.id).reduce((a, b) => a + b.points, 0),
+            localFoulsQ: fouls.filter(f => f.teamId === localTeam.id && f.quarter === match.currentQuarter).length,
+            visitorFoulsQ: fouls.filter(f => f.teamId === visitorTeam.id && f.quarter === match.currentQuarter).length
         };
     }, [data]);
 
@@ -273,6 +281,25 @@ export function LiveMatch() {
 
     if (!data) return <div className="bg-black h-screen flex items-center justify-center text-white">Cargando...</div>;
     const { match, localTeam, visitorTeam, localPlayers, visitorPlayers } = data;
+
+    if (!localTeam || !visitorTeam) {
+        return (
+            <div className="bg-black h-screen flex flex-col items-center justify-center text-white gap-4 p-4 text-center">
+                <AlertTriangle size={48} className="text-red-500" />
+                <h2 className="text-xl font-bold">Datos Incompletos</h2>
+                <p className="text-gray-400">
+                    No se encontraron los equipos de este partido.<br/>
+                    Es posible que hayan sido eliminados.
+                </p>
+                <button 
+                    onClick={() => navigate('/matches')} 
+                    className="px-6 py-3 bg-gray-800 rounded-lg hover:bg-gray-700 font-bold"
+                >
+                    Volver a Partidos
+                </button>
+            </div>
+        );
+    }
 
     // Calculamos si es el último cuarto para ajustar la UI del modal
     const isLastQuarter = matchConfig && match.currentQuarter >= matchConfig.totalQuarters;

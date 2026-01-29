@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { TeamsRepository } from '../db/teams.repository';
 import { Play, Settings, AlertCircle, Trophy } from 'lucide-react';
 
 import './NewMatch.css';
@@ -23,7 +24,15 @@ export function NewMatch() {
   const [isCreating, setIsCreating] = useState(false);
 
   // --- DATOS ---
-  const teams = useLiveQuery(() => db.teams.toArray());
+  // 🆕 Modificado para manejar errores de esquema/BD sin crashear
+  const teams = useLiveQuery(async () => {
+    try {
+      return await TeamsRepository.getAll();
+    } catch (err) {
+      console.error("Error cargando equipos (NewMatch):", err);
+      return []; // Retorna array vacío en caso de error de esquema
+    }
+  });
 
   // --- LÓGICA ---
   const handleStartMatch = async () => {
@@ -40,7 +49,7 @@ export function NewMatch() {
       return;
     }
 
-    // 🆕 Validar configuración
+    // Validar configuración
     if (config.totalQuarters < 1 || config.totalQuarters > 8) {
       setError("El número de cuartos debe estar entre 1 y 8.");
       return;
@@ -61,7 +70,7 @@ export function NewMatch() {
         status: 'created',
         createdAt: new Date(),
         quarterDuration: config.minutesPerQuarter,
-        totalQuarters: config.totalQuarters, // 🆕 Guardamos la configuración
+        totalQuarters: config.totalQuarters,
         timerSecondsRemaining: config.minutesPerQuarter * 60,
         timerLastStart: undefined
       });
@@ -75,7 +84,8 @@ export function NewMatch() {
     }
   };
 
-  if (!teams) return null;
+  // Si teams es undefined (cargando), mostramos null para evitar errores de render
+  if (teams === undefined) return null;
 
   return (
     <div className="page-container">
@@ -165,7 +175,7 @@ export function NewMatch() {
           </div>
         </div>
 
-        {/* 🆕 Info de configuración */}
+        {/* Info de configuración */}
         <div style={{ 
           marginTop: '1rem', 
           padding: '0.75rem', 
@@ -199,7 +209,7 @@ export function NewMatch() {
       {/* Info extra si no hay equipos */}
       {teams.length < 2 && (
         <p className="warning-banner">
-          Necesitas al menos 2 equipos para jugar. <br/>
+          Necesitas al menos 2 equipos activos para jugar. <br/>
           <Link to="/teams" style={{ color: 'var(--primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
             Crear equipos aquí
           </Link>.

@@ -33,14 +33,25 @@ export class BasketControlDB extends Dexie {
             players: '++id, teamId, name, number'
         });
 
-        // 🆕 Version 4: Agregar totalQuarters a matches
+        // Version 4: Agregar totalQuarters a matches
         this.version(4).stores({
             matches: '++id, status, createdAt, totalQuarters'
         }).upgrade(tx => {
-            // Migración: establecer totalQuarters=4 para partidos existentes
             return tx.table('matches').toCollection().modify(match => {
                 if (!match.totalQuarters) {
                     match.totalQuarters = 4;
+                }
+            });
+        });
+
+        // 🆕 Version 5: Agregar isArchived a teams (Soft Delete)
+        this.version(5).stores({
+            teams: '++id, name, createdAt, isArchived'
+        }).upgrade(tx => {
+            // Migración: marcar todos los equipos existentes como NO archivados
+            return tx.table('teams').toCollection().modify(team => {
+                if (team.isArchived === undefined) {
+                    team.isArchived = false;
                 }
             });
         });

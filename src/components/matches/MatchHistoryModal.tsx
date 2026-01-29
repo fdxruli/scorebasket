@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db'; // Ajusta la ruta según tu estructura
 import { X, Calendar, BarChart2, Trophy } from 'lucide-react';
-import './MatchHistoryModal.css';
 
 interface MatchHistoryModalProps {
     matchId: number;
@@ -90,17 +89,17 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     };
 
     return (
-        <div className="history-overlay" onClick={onClose}>
-            <div className="history-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
                 
                 {/* HEADER */}
-                <div className="history-header">
+                <div className="modal-header">
                     <div>
                         <div className="flex gap-2 items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                             <Calendar size={12} />
                             {formatDate(match.createdAt)}
                         </div>
-                        <h2 className="text-white font-bold text-lg">Resumen del Partido</h2>
+                        <h2 className="modal-title">Resumen del Partido</h2>
                     </div>
                     <button onClick={onClose} className="btn-icon">
                         <X size={24} />
@@ -108,7 +107,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                 </div>
 
                 {/* BODY */}
-                <div className="history-body">
+                <div className="flex-col gap-lg overflow-y-auto">
                     
                     {/* 1. MARCADOR FINAL */}
                     <div className="history-score-panel">

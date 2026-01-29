@@ -1,0 +1,114 @@
+/* src/styles/layout.css */
+
+/* --- CONTENEDOR PRINCIPAL --- */
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 6rem; /* Espacio para el navbar */
+}
+
+.page-container {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100%;
+}
+
+/* --- UTILIDADES FLEX --- */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-col { display: flex; flex-direction: column; }
+.flex-gap { display: flex; gap: 0.5rem; align-items: center; }
+
+.gap-sm { gap: 0.5rem; }
+.gap-md { gap: 1rem; }
+.gap-lg { gap: 1.5rem; }
+
+/* --- NAVBAR INFERIOR (Traído de components/Layout.css) --- */
+.navbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 5rem;
+  background-color: #000000;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: var(--z-navbar, 50);
+  backdrop-filter: blur(10px);
+}
+
+.nav-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 0.25rem;
+  transition: color 0.2s;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: var(--primary);
+}
+
+.nav-text {
+  font-size: 0.70rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Botón Central Flotante */
+.nav-center-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: -2.5rem;
+  text-decoration: none;
+}
+
+.circle-icon {
+  background-color: var(--primary);
+  color: #fff;
+  padding: 1.1rem;
+  border-radius: 50%;
+  box-shadow: var(--shadow-glow);
+  border: 6px solid var(--bg-app);
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.circle-icon:hover {
+  transform: scale(1.1);
+  background-color: var(--primary-hover);
+}
+
+/* Header de Secciones */
+.title-header {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}

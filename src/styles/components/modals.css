@@ -1,138 +1,548 @@
 /* src/styles/components/modals.css */
 
-/* --- BASE: OVERLAY --- */
+/* =========================================
+   1. ESTRUCTURA BASE (Layout y Animación)
+   ========================================= */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: var(--backdrop-blur);
+  background-color: rgba(0, 0, 0, 0.85); /* Fondo más oscuro para enfoque */
+  backdrop-filter: blur(5px);
   z-index: var(--z-modal, 1000);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  animation: modalFadeIn 0.2s ease-out forwards;
+  animation: fadeIn 0.2s ease-out forwards;
 }
 
-/* Móvil: Alinear abajo para menús de acción, centro para info */
-.modal-overlay.align-bottom {
-  align-items: flex-end;
-}
-
-/* --- BASE: CONTENIDO --- */
 .modal-content {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
-  padding: 1.5rem;
-  box-shadow: var(--shadow-lg);
+  max-width: 500px; /* Ancho estándar */
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Cabecera y Pie estándar */
+/* Header Estándar */
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
 }
 
 .modal-title {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-main);
+  line-height: 1.2;
 }
 
+.modal-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 0.25rem;
+}
+
+/* Cuerpo Scrollable */
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1; /* Ocupa el espacio restante */
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Footer de Acciones */
 .modal-footer {
-  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
 }
 
-/* --- VARIANTE: SELECCIÓN DE JUGADOR (Antes PlayerSelectModal.css) --- */
-.modal-content.player-select-grid {
-  gap: 1rem;
+/* =========================================
+   2. VARIANTE: ADMIN / FORMULARIOS 
+   (Usado en: Editar Equipo, Nuevo Partido)
+   ========================================= */
+.modal-content.variant-admin {
+  background-color: #09090b; /* Zinc 950 - Fondo más oscuro para contraste */
+  border-color: #27272a;
 }
 
-.player-grid {
+/* Sección de Roster (Contenedor de lista) */
+.roster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Fila de Jugador Existente */
+.player-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+  background-color: #18181b; /* Zinc 900 */
+  border: 1px solid #27272a; /* Borde sutil */
+  transition: all 0.2s ease;
+}
+
+/* Efecto al pasar el mouse o enfocar */
+.player-edit-row:hover,
+.player-edit-row:focus-within {
+  background-color: #27272a; /* Zinc 800 */
+  border-color: #3f3f46;
+  transform: translateX(2px); /* Pequeño movimiento para feedback */
+}
+
+/* Inputs dentro de la fila (transparentes para que parezca texto integrado) */
+.player-edit-input {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  font-weight: 500;
+  width: 100%;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+.player-edit-input:focus {
+  outline: none;
+  background-color: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 1px var(--primary); /* Focus naranja */
+}
+
+/* Estilo específico para el número */
+.player-number-input {
+  font-family: var(--font-mono);
+  color: var(--secondary); /* Azul para números */
+  font-weight: 700;
+  text-align: center;
+}
+
+/* --- ÁREA DE AGREGAR JUGADOR (Nueva) --- */
+.add-player-box {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: rgba(249, 115, 22, 0.05); /* Fondo naranja muy sutil */
+  border: 1px dashed rgba(249, 115, 22, 0.3); /* Borde dashed naranja */
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.add-player-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.add-player-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* =========================================
+   3. VARIANTE: GAMEPLAY / IN-MATCH 
+   (Usado en: Selección de Jugador, Fin de Cuarto)
+   ========================================= */
+.modal-content.variant-game {
+  border: 1px solid var(--border-color);
+  max-width: 420px;
+  background-color: #09090b;
+  
+  /* CLAVE 1: Estructura Flex Vertical y Altura Máxima */
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh; /* Ocupa máximo el 85% de la pantalla */
+  overflow: hidden; /* Recorta lo que sobre (bordes redondeados) */
+}
+
+/* --- HEADER (Fijo arriba) --- */
+.variant-game .modal-header {
+  flex-shrink: 0; /* No encogerse */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1.5rem 1rem 1.5rem; /* Ajustado padding */
+  border-bottom: none;
+  position: relative;
+  z-index: 10;
+}
+
+/* Fondos temáticos */
+.modal-content.is-score .modal-header {
+  background: linear-gradient(to bottom, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0));
+}
+.modal-content.is-foul .modal-header {
+  background: linear-gradient(to bottom, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0));
+}
+
+.variant-game .modal-title {
+  font-size: 1.75rem; /* Un poco más pequeño para ahorrar espacio */
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+}
+
+.variant-game .modal-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* --- GRID DE JUGADORES (Área con Scroll) --- */
+.variant-game .player-grid {
+  /* CLAVE 2: Scroll independiente */
+  flex: 1;           /* Ocupa todo el espacio disponible restante */
+  overflow-y: auto;  /* Scroll vertical si hace falta */
+  min-height: 0;     /* Truco vital para Flexbox anidado */
+  
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
-  overflow-y: auto;
-  padding: 2px;
+  padding: 0.5rem 1.25rem 1.25rem 1.25rem;
+  
+  /* Scroll suave */
+  -webkit-overflow-scrolling: touch;
 }
 
-.btn-player-select {
-  background-color: var(--bg-app);
+.pm-player-btn {
+  position: relative;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
-  color: var(--text-main);
-  padding: 0.85rem;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 0.75rem; /* Reducir padding interno */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
   cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  transition: all 0.15s ease-out;
+  min-height: 90px; /* Reducir altura mínima un poco */
 }
 
-.btn-player-select:hover {
-  background-color: var(--bg-surface-hover);
+.pm-player-btn:active { transform: scale(0.96); }
+.pm-player-btn:hover {
   border-color: var(--text-muted);
+  background-color: var(--bg-surface-hover);
 }
 
-.btn-player-select.special {
-  grid-column: 1 / -1;
-  border-style: dashed;
-  background: transparent;
+.player-jersey-num {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
   color: var(--text-muted);
+  opacity: 0.3;
+  transition: color 0.2s, opacity 0.2s;
 }
 
-/* --- VARIANTE: HISTORIAL (Antes HistoryModal.css) --- */
-.modal-content.history-view {
+.player-name-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Colores Temáticos */
+.modal-content.is-score .pm-player-btn:active {
+  border-color: var(--success);
+  background-color: rgba(34, 197, 94, 0.1);
+}
+.modal-content.is-score .pm-player-btn:hover .player-jersey-num {
+  color: var(--success); opacity: 1;
+}
+
+.modal-content.is-foul .pm-player-btn:active {
+  border-color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+.modal-content.is-foul .pm-player-btn:hover .player-jersey-num {
+  color: var(--danger); opacity: 1;
+}
+
+/* Botón Especial */
+.pm-special-btn {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  min-height: auto;
+  padding: 1rem;
+  background-color: transparent;
+  border: 1px dashed var(--border-light);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  gap: 0.5rem;
+  margin-top: 0.5rem; /* Separación extra */
+}
+
+/* --- FOOTER (Fijo abajo) --- */
+.variant-game-footer {
+  flex-shrink: 0; /* No encogerse */
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+  background-color: #09090b; /* Mismo fondo para tapar el scroll */
+  z-index: 10;
+}
+
+/* =========================================
+   4. VARIANTE: INFO / HISTORY
+   (Usado en: Historial de Partido, Logs)
+   ========================================= */
+.modal-content.variant-info {
   max-width: 600px;
 }
 
-.history-list {
+.history-action-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  overflow-y: auto;
+  gap: 0; /* Unidos estilo lista iOS */
 }
 
 .history-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background-color: var(--bg-surface);
 }
+.history-item:last-child { border-bottom: none; }
 
 .history-item.is-score { border-left: 3px solid var(--success); }
 .history-item.is-foul { border-left: 3px solid var(--danger); }
 
-/* --- VARIANTE: FIN DE JUEGO (Game End) --- */
-.modal-content.game-end {
-  align-items: center;
-  text-align: center;
-  border-color: var(--primary);
+
+/* Animaciones */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { 
+  from { opacity: 0; transform: translateY(30px) scale(0.98); } 
+  to { opacity: 1; transform: translateY(0) scale(1); } 
 }
 
-/* --- ANIMACIONES --- */
-@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes modalSlideUp { 
-  from { opacity: 0; transform: translateY(20px) scale(0.96); } 
-  to { opacity: 1; transform: translateY(0) scale(1); } 
+/* =========================================
+   4. VARIANTE: REPORTE / SCORECARD 
+   (Para: MatchHistoryModal - Resumen Final)
+   ========================================= */
+.modal-content.variant-report {
+  max-width: 550px;
+  background-color: #18181b;
+}
+
+/* Panel del Marcador (Header del reporte) */
+.report-score-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.report-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.report-team-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.report-score-big {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-main);
+}
+.report-score-big.winner { color: var(--success); text-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
+.report-score-big.loser { color: var(--text-muted); opacity: 0.6; }
+
+.report-vs {
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: var(--text-muted);
+  background-color: var(--bg-surface-hover);
+  padding: 0.5rem;
+  border-radius: 50%;
+  margin: 0 1rem;
+}
+
+/* Tabla de Cuartos */
+.report-table-container {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.report-table th {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.report-table td {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+.report-table .team-col { text-align: left; padding-left: 1rem; font-weight: 700; }
+.report-table .total-col { font-weight: 700; background-color: rgba(255, 255, 255, 0.02); }
+
+/* Lista de Estadísticas (Top Scorers) */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.2s;
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-row:hover { background-color: rgba(255, 255, 255, 0.02); }
+
+.stat-val { font-family: var(--font-mono); font-weight: 700; }
+
+/* =========================================
+   5. VARIANTE: INFO / LOGS 
+   (Para: LiveMatchHistoryModal - Logs de acciones)
+   ========================================= */
+/* Contenedor de la lista con scroll */
+.history-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  background-color: var(--bg-surface);
+  /* Sombra interna sutil para indicar scroll */
+  box-shadow: inset 0 10px 10px -10px rgba(0,0,0,0.5); 
+}
+
+/* Estado Vacío */
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  color: var(--text-muted);
+  text-align: center;
+  gap: 1rem;
+  opacity: 0.6;
+}
+
+/* Item de la lista */
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: transparent;
+  transition: background-color 0.2s;
+}
+
+.history-item:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Indicador lateral de color */
+.history-item.is-score { border-left: 4px solid var(--success); }
+.history-item.is-foul { border-left: 4px solid var(--danger); }
+
+/* Información Izquierda */
+.action-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.action-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-detail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-time {
+  font-family: var(--font-mono);
+  background-color: rgba(255,255,255,0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Botón de eliminar (Papelera) */
+.btn-delete-action {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.btn-delete-action:hover {
+  background-color: rgba(239, 68, 68, 0.15); /* Red bg */
+  color: var(--danger);
+  opacity: 1;
 }

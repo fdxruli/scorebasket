@@ -2,7 +2,6 @@
 
 /* 1. Sistema de Variables */
 @import './styles/variables.css';
-@import './styles/theme.css';
 
 /* 2. Base y Reset */
 @import './styles/base.css';

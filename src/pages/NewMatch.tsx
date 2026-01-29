@@ -6,8 +6,6 @@ import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
 import { Play, Settings, AlertCircle, Trophy } from 'lucide-react';
 
-import './NewMatch.css';
-
 export function NewMatch() {
   const navigate = useNavigate();
 

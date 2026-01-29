@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { X, Trash2, Clock, AlertCircle, Trophy } from 'lucide-react';
+import { X, Trash2, Clock, AlertCircle, Trophy, History } from 'lucide-react';
 
 interface LiveMatchHistoryModalProps {
   matchId: number;
@@ -12,7 +12,7 @@ type HistoryItem = {
   type: 'score' | 'foul';
   teamId: number;
   playerId?: number;
-  points?: number; // Solo para scores
+  points?: number;
   quarter: number;
   createdAt: Date;
 };
@@ -21,19 +21,16 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
   
   // 1. Obtenemos datos combinados
   const historyData = useLiveQuery(async () => {
-    // Obtenemos scores y fouls
     const [scores, fouls, players, teams] = await Promise.all([
       db.scores.where({ matchId }).toArray(),
       db.fouls.where({ matchId }).toArray(),
-      db.players.toArray(), // Traemos todos para mapear nombres rápido
+      db.players.toArray(),
       db.teams.toArray()
     ]);
 
-    // Mapas para acceso rápido a nombres
     const playerMap = new Map(players.map(p => [p.id!, p]));
     const teamMap = new Map(teams.map(t => [t.id!, t]));
 
-    // Normalizamos Scores
     const normalizedScores: HistoryItem[] = scores.map(s => ({
       id: s.id!,
       type: 'score',
@@ -44,7 +41,6 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       createdAt: s.createdAt
     }));
 
-    // Normalizamos Fouls
     const normalizedFouls: HistoryItem[] = fouls.map(f => ({
       id: f.id!,
       type: 'foul',
@@ -54,7 +50,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       createdAt: f.createdAt
     }));
 
-    // Unimos y ordenamos por fecha descendente (lo más nuevo arriba)
+    // Ordenar: Lo más reciente primero
     const combined = [...normalizedScores, ...normalizedFouls].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
@@ -62,9 +58,10 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     return { combined, playerMap, teamMap };
   }, [matchId]);
 
-  // 2. Función para eliminar
+  // 2. Función para eliminar y cerrar
   const handleDelete = async (item: HistoryItem) => {
-    if (!confirm("¿Seguro que deseas eliminar esta acción?")) return;
+    // Usamos un confirm nativo para velocidad, pero cerramos al instante si acepta.
+    if (!confirm("¿Eliminar esta acción? El marcador se actualizará.")) return;
 
     try {
       if (item.type === 'score') {
@@ -72,7 +69,11 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       } else {
         await db.fouls.delete(item.id);
       }
-      // Dexie y useLiveQuery actualizarán la lista automáticamente
+      
+      // ✅ CIERRE INMEDIATO: 
+      // Esto permite al usuario volver al juego rápido sin dar otro click.
+      onClose(); 
+
     } catch (err) {
       console.error("Error al eliminar", err);
       alert("No se pudo eliminar la acción");
@@ -89,29 +90,35 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div 
-        className="modal-content" 
-        style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+        className="modal-content variant-info" 
+        style={{ height: '75vh', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="modal-header">
-          <h3 className="modal-title flex-center gap-sm">
-            <Clock size={20} className="text-primary" />
-            Historial de Acciones
-          </h3>
+          <div>
+            <h3 className="modal-title flex items-center gap-2">
+              <History size={20} className="text-primary" />
+              Historial del Partido
+            </h3>
+            <p className="modal-subtitle">
+              Toca el icono de basura para deshacer una acción.
+            </p>
+          </div>
           <button onClick={onClose} className="btn-icon">
             <X size={24} />
           </button>
         </div>
 
-        {/* Lista Scrollable */}
-        <div style={{ overflowY: 'auto', paddingRight: '0.5rem' }}>
+        {/* Lista Scrollable con nuevas clases */}
+        <div className="history-scroll-area">
           {combined.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No hay acciones registradas aún.
+            <div className="history-empty">
+              <Clock size={48} strokeWidth={1} />
+              <p>No hay acciones registradas aún.</p>
             </div>
           ) : (
-            <div className="history-action-list">
+            <div className="history-list">
               {combined.map(item => {
                 const team = teamMap.get(item.teamId);
                 const player = item.playerId ? playerMap.get(item.playerId) : null;
@@ -122,7 +129,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                     
                     <div className="action-info">
                       {/* Título: Qué pasó y para qué equipo */}
-                      <span className="action-title flex items-center gap-2">
+                      <span className="action-title">
                         {isScore ? (
                           <span className="text-green-400 flex items-center gap-1">
                             <Trophy size={14} /> +{item.points} Pts
@@ -132,23 +139,32 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                             <AlertCircle size={14} /> Falta
                           </span>
                         )}
-                        <span className="text-gray-500">•</span>
-                        <span className="text-gray-300">{team?.name}</span>
+                        <span className="text-muted font-normal">•</span>
+                        <span className="text-main font-bold uppercase text-xs tracking-wide">
+                            {team?.name}
+                        </span>
                       </span>
 
                       {/* Detalle: Quién y Cuándo */}
                       <span className="action-detail">
-                        <span className="action-time">Q{item.quarter} - {formatTime(item.createdAt)}</span>
-                        <span>{player ? `#${player.number || ''} ${player.name}` : '(Jugador Desconocido)'}</span>
+                        <span className="action-time">Q{item.quarter} • {formatTime(item.createdAt)}</span>
+                        <span>
+                            {player ? (
+                                <span className="text-gray-300">#{player.number} {player.name}</span>
+                            ) : (
+                                <span className="italic opacity-50">Desconocido</span>
+                            )}
+                        </span>
                       </span>
                     </div>
 
+                    {/* Botón Eliminar */}
                     <button 
                       onClick={() => handleDelete(item)}
                       className="btn-delete-action"
                       title="Eliminar esta acción"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={20} />
                     </button>
                   </div>
                 );
@@ -157,9 +173,12 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
           )}
         </div>
 
-        <button onClick={onClose} className="modal-footer">
-          Cerrar
-        </button>
+        {/* Footer simple */}
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn btn-secondary btn-full">
+            Volver al Juego
+          </button>
+        </div>
       </div>
     </div>
   );

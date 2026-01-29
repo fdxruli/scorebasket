@@ -1,3 +1,4 @@
+// src/components/live/MatchControls.tsx
 import { Play, Pause, FastForward, X, AlertCircle } from 'lucide-react';
 import type { Player, Team } from '../../db/models';
 import type { GameAction } from './PlayerSelectModal';
@@ -8,8 +9,6 @@ interface MatchControlsProps {
   localPlayers: Player[];
   visitorPlayers: Player[];
   isTimerRunning: boolean;
-  
-  // Eventos
   onActionRequest: (teamId: number, teamName: string, players: Player[], action: GameAction) => void;
   onToggleTimer: () => void;
   onNextQuarter: () => void;
@@ -27,59 +26,97 @@ export function MatchControls({
 }: MatchControlsProps) {
 
   return (
-    <section className="controls-section">
-      {/* Grid de Puntos y Faltas */}
-      <div className="points-grid">
+    <section className="controls-panel">
+      
+      {/* GRILLA DE ACCIONES PRINCIPALES */}
+      <div className="action-grid">
         
-        {/* Columna Local */}
-        <div className="team-actions local-theme">
-          <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:1})} className="btn-point">+1</button>
-              <button onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:2})} className="btn-point">+2</button>
+        {/* LADO LOCAL (IZQUIERDA) */}
+        <div className="team-column">
+          <div className="btn-score-group">
+             <button 
+               onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:1})} 
+               className="btn-action btn-local-sm"
+             >
+               +1
+             </button>
+             <button 
+               onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:2})} 
+               className="btn-action btn-local-sm"
+             >
+               +2
+             </button>
           </div>
-          <button onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:3})} className="btn-point bg-blue-500/20! border-blue-500/40! text-blue-400!">+3</button>
-          
-          <button onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'foul'})} 
-            className="flex items-center justify-center gap-2 py-3 mt-1 rounded-lg bg-red-900/20 text-red-400 border border-red-900/30 text-xs font-bold uppercase tracking-wider active:scale-95"
+          <button 
+             onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:3})} 
+             className="btn-action btn-local-lg"
           >
-            <AlertCircle size={14} /> Falta
+             +3
+          </button>
+          <button 
+             onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'foul'})} 
+             className="btn-action btn-local-foul"
+          >
+             <AlertCircle size={14} className="mr-2" />
+             Falta {localTeam.name.substring(0,3)}
           </button>
         </div>
 
-        <div className="separator"></div>
-
-        {/* Columna Visitante */}
-        <div className="team-actions visitor-theme">
-          <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:1})} className="btn-point">+1</button>
-              <button onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:2})} className="btn-point">+2</button>
+        {/* LADO VISITANTE (DERECHA) */}
+        <div className="team-column">
+          <div className="btn-score-group">
+             <button 
+               onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:1})} 
+               className="btn-action btn-visitor-sm"
+             >
+               +1
+             </button>
+             <button 
+               onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:2})} 
+               className="btn-action btn-visitor-sm"
+             >
+               +2
+             </button>
           </div>
-          <button onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:3})} className="btn-point bg-orange-500/20! border-orange-500/40! text-orange-400!">+3</button>
-          
-          <button onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'foul'})} 
-            className="flex items-center justify-center gap-2 py-3 mt-1 rounded-lg bg-red-900/20 text-red-400 border border-red-900/30 text-xs font-bold uppercase tracking-wider active:scale-95"
+          <button 
+             onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:3})} 
+             className="btn-action btn-visitor-lg"
           >
-            <AlertCircle size={14} /> Falta
+             +3
+          </button>
+          <button 
+             onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'foul'})} 
+             className="btn-action btn-visitor-foul"
+          >
+             <AlertCircle size={14} className="mr-2" />
+             Falta {visitorTeam.name.substring(0,3)}
           </button>
         </div>
+
       </div>
 
-      {/* Controles Maestros */}
-      <div className="master-controls">
-        <button onClick={onEndMatch} className="btn-secondary-action w-16">
-            <div className="p-2 rounded-full bg-gray-800 text-gray-400"><X size={18} /></div>
+      {/* BARRA DE UTILIDADES E INICIO */}
+      <div className="bottom-bar">
+        <button onClick={onEndMatch} className="btn-utility">
+            <X size={20} />
             <span>Fin</span>
         </button>
 
-        <button onClick={onToggleTimer} className={`btn-play-pause ${isTimerRunning ? 'is-playing' : 'is-paused'}`}>
-          {isTimerRunning ? <Pause fill="currentColor" size={32} /> : <Play fill="currentColor" size={32} className="ml-1" />}
+        {/* BOTÓN GIGANTE PLAY/PAUSE */}
+        <button onClick={onToggleTimer} className={`btn-main-play ${isTimerRunning ? 'play' : 'pause'}`}>
+          {isTimerRunning ? (
+             <Pause fill="currentColor" size={36} />
+          ) : (
+             <Play fill="currentColor" size={36} className="ml-1" />
+          )}
         </button>
 
-        <button onClick={onNextQuarter} className="btn-secondary-action w-16">
-            <div className="p-2 rounded-full bg-gray-800 text-gray-400"><FastForward size={18} /></div>
+        <button onClick={onNextQuarter} className="btn-utility">
+            <FastForward size={20} />
             <span>Sig Q</span>
         </button>
       </div>
+
     </section>
   );
 }

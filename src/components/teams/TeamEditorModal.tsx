@@ -1,8 +1,8 @@
-// src/components/TeamEditorModal.tsx
-import { useState, useEffect } from 'react';
+// src/components/teams/TeamEditorModal.tsx
+import { useState, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
-import { X, Save, Trash2, Plus, User } from 'lucide-react';
+import { X, Save, Trash2, Plus, User, Users, Shield } from 'lucide-react';
 
 interface TeamEditorModalProps {
     teamId: number;
@@ -10,21 +10,25 @@ interface TeamEditorModalProps {
 }
 
 export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
-    // Estados locales para la edición
     const [teamName, setTeamName] = useState('');
     const [players, setPlayers] = useState<Player[]>([]);
+    
+    // Estados para el nuevo jugador
     const [newPlayerName, setNewPlayerName] = useState('');
     const [newPlayerNumber, setNewPlayerNumber] = useState('');
-
+    
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Referencia para hacer focus al input de nombre al agregar
+    const newPlayerInputRef = useRef<HTMLInputElement>(null);
 
-    // 1. Cargar datos al montar
+    // 1. Cargar datos
     useEffect(() => {
         const loadData = async () => {
             try {
                 const team = await db.teams.get(teamId);
-                const teamPlayers = await db.players.where({ teamId }).toArray();
+                const teamPlayers = await db.players.where({ teamId }).sortBy('number'); // Ordenar por número
 
                 if (team) {
                     setTeamName(team.name);
@@ -39,11 +43,13 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
         loadData();
     }, [teamId]);
 
-    // 2. Manejadores de cambios locales (en memoria)
     const handlePlayerChange = (id: number | undefined, field: 'name' | 'number', value: string) => {
-        setPlayers(prev => prev.map(p => {
-            if (p.id === id) {
-                return {
+        setPlayers(prev => prev.map((p, idx) => {
+            // Si tiene ID usamos ID, si es temp usamos el índice como referencia (aquí simplificado)
+            const isTarget = p.id === id;
+            // Nota: Para producción idealmente usar un tempId local, pero para este ejemplo simple:
+            if ((p.id && p.id === id) || (!p.id && players.indexOf(p) === players.indexOf(players.find(pl => pl === p)!))) {
+                 return {
                     ...p,
                     [field]: field === 'number' ? parseInt(value) || undefined : value
                 };
@@ -58,55 +64,44 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
     const handleAddPlayer = () => {
         if (!newPlayerName.trim()) return;
-        // Agregamos un jugador temporal (sin ID aún)
+        
         const tempPlayer: Player = {
             name: newPlayerName.trim(),
             number: newPlayerNumber ? parseInt(newPlayerNumber) : undefined,
             teamId: teamId,
             createdAt: new Date()
         };
+        
         setPlayers([...players, tempPlayer]);
         setNewPlayerName('');
+        setNewPlayerNumber('');
+        
+        // Mantener el foco en el nombre para agregar otro rápido
+        newPlayerInputRef.current?.focus();
     };
 
-    // 3. Guardar cambios en la BD
     const handleSave = async () => {
         if (!teamName.trim()) return alert("El nombre del equipo no puede estar vacío");
         setIsSaving(true);
 
         try {
             await db.transaction('rw', db.teams, db.players, async () => {
-                // A. Actualizar nombre del equipo
                 await db.teams.update(teamId, { name: teamName });
 
-                // B. Gestionar Jugadores
-                // 1. Obtener los IDs actuales en BD para este equipo
                 const currentDbPlayers = await db.players.where({ teamId }).toArray();
                 const currentDbIds = currentDbPlayers.map(p => p.id);
-
-                // 2. Identificar qué borrar (estaban en BD pero ya no están en el estado local)
-                // Nota: Los jugadores nuevos no tienen 'id', así que filtramos por los que sí tienen
                 const keptIds = players.filter(p => p.id !== undefined).map(p => p.id);
                 const idsToDelete = currentDbIds.filter(id => !keptIds.includes(id));
 
-                if (idsToDelete.length > 0) {
-                    await db.players.bulkDelete(idsToDelete as number[]);
-                }
+                if (idsToDelete.length > 0) await db.players.bulkDelete(idsToDelete as number[]);
 
-                // 3. Identificar qué actualizar (tienen ID y están en el estado)
                 const playersToUpdate = players.filter(p => p.id !== undefined);
-                for (const p of playersToUpdate) {
-                    await db.players.update(p.id!, { name: p.name });
-                }
+                for (const p of playersToUpdate) await db.players.update(p.id!, { name: p.name, number: p.number });
 
-                // 4. Identificar qué agregar (no tienen ID)
                 const playersToAdd = players.filter(p => p.id === undefined);
-                if (playersToAdd.length > 0) {
-                    await db.players.bulkAdd(playersToAdd);
-                }
+                if (playersToAdd.length > 0) await db.players.bulkAdd(playersToAdd);
             });
-
-            onClose(); // Cerrar modal al terminar
+            onClose();
         } catch (err) {
             console.error("Error al guardar", err);
             alert("Hubo un error al guardar los cambios.");
@@ -119,20 +114,28 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
     return (
         <div className="modal-overlay">
-            <div className="modal-content">
+            <div className="modal-content variant-admin">
 
-                {/* Header */}
+                {/* --- HEADER --- */}
                 <div className="modal-header">
-                    <h2 className="modal-title">Editar Equipo</h2>
+                    <div className="flex flex-col">
+                        <h2 className="modal-title flex items-center gap-2">
+                            <Shield size={20} className="text-primary" />
+                            Editar Equipo
+                        </h2>
+                        <span className="text-xs text-muted uppercase tracking-wider font-bold mt-1">
+                            ID: {teamId}
+                        </span>
+                    </div>
                     <button onClick={onClose} className="btn-icon">
                         <X size={24} />
                     </button>
                 </div>
 
-                {/* Body */}
-                <div className="flex-col gap-lg">
-
-                    {/* Nombre del Equipo */}
+                {/* --- BODY --- */}
+                <div className="modal-body">
+                    
+                    {/* SECCIÓN 1: DATOS DEL EQUIPO */}
                     <div className="form-group">
                         <label className="label">Nombre del Equipo</label>
                         <input
@@ -140,80 +143,116 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                             className="input"
                             value={teamName}
                             onChange={(e) => setTeamName(e.target.value)}
+                            placeholder="Ej. Chicago Bulls"
+                            autoFocus
                         />
                     </div>
 
                     <div className="separator" style={{ height: '1px', background: 'var(--border-color)', margin: '0.5rem 0' }}></div>
 
-                    {/* Lista de Jugadores */}
+                    {/* SECCIÓN 2: ROSTER */}
                     <div>
-                        <label className="label flex-between">
-                            Jugadores ({players.length})
-                        </label>
+                        <div className="flex-between mb-2">
+                            <label className="label flex items-center gap-2">
+                                <Users size={14} />
+                                Plantilla ({players.length})
+                            </label>
+                        </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {/* LISTA DE JUGADORES */}
+                        <div className="roster-section">
+                            {players.length === 0 && (
+                                <div className="text-center py-4 text-muted text-sm border border-dashed border-zinc-800 rounded-lg">
+                                    Sin jugadores asignados
+                                </div>
+                            )}
+                            
                             {players.map((p, idx) => (
                                 <div key={p.id || `temp-${idx}`} className="player-edit-row">
+                                    {/* Icono decorativo */}
                                     <User size={16} className="text-muted" />
-                                    <input
-                                        type="number"
-                                        className="player-edit-input"
-                                        style={{ width: '60px', textAlign: 'center', flex: 'none' }}
-                                        placeholder="#"
-                                        value={p.number || ''}
-                                        onChange={(e) => handlePlayerChange(p.id, 'number', e.target.value)}
-                                        disabled={isSaving}
-                                    />
+                                    
+                                    {/* Input Número */}
+                                    <div className="relative">
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600 text-[10px]">#</span>
+                                        <input
+                                            type="number"
+                                            className="player-edit-input player-number-input"
+                                            style={{ width: '50px', paddingLeft: '1rem' }}
+                                            placeholder="00"
+                                            value={p.number || ''}
+                                            onChange={(e) => handlePlayerChange(p.id, 'number', e.target.value)}
+                                        />
+                                    </div>
 
-                                    {/* INPUT NOMBRE */}
+                                    {/* Input Nombre */}
                                     <input
                                         type="text"
                                         className="player-edit-input"
                                         value={p.name}
                                         onChange={(e) => handlePlayerChange(p.id, 'name', e.target.value)}
-                                        disabled={isSaving}
+                                        placeholder="Nombre del jugador"
                                     />
+
+                                    {/* Botón Borrar */}
                                     <button
                                         onClick={() => handleDeletePlayer(idx)}
-                                        className="btn-icon danger"
-                                        title="Eliminar jugador"
+                                        className="btn-icon danger hover:bg-red-500/10 p-1.5 rounded"
+                                        title="Quitar jugador"
                                     >
-                                        <Trash2 size={18} />
+                                        <Trash2 size={16} />
                                     </button>
                                 </div>
                             ))}
                         </div>
 
-                        {/* Agregar nuevo jugador */}
-                        <div className="flex-gap mt-2">
-                            <input
-                                type="number"
-                                className="input"
-                                style={{ width: '70px', textAlign: 'center' }}
-                                placeholder="#"
-                                value={newPlayerNumber}
-                                onChange={(e) => setNewPlayerNumber(e.target.value)}
-                            />
+                        {/* CAJA DE AGREGAR JUGADOR */}
+                        <div className="add-player-box">
+                            <div className="add-player-header flex items-center gap-2">
+                                <Plus size={12} />
+                                Agregar Nuevo Jugador
+                            </div>
+                            <div className="add-player-controls">
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        className="input"
+                                        style={{ width: '70px', paddingLeft: '1.5rem', fontSize: '0.9rem' }}
+                                        placeholder="Numero"
+                                        value={newPlayerNumber}
+                                        onChange={(e) => setNewPlayerNumber(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && newPlayerInputRef.current?.focus()}
+                                    />
+                                </div>
 
-                            <input
-                                type="text"
-                                className="input"
-                                placeholder="Nuevo jugador..."
-                                value={newPlayerName}
-                                onChange={(e) => setNewPlayerName(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
-                            />
-                            <button onClick={handleAddPlayer} className="btn btn-secondary" style={{ background: '#27272a', border: '1px solid #3f3f46' }}>
-                                <Plus size={20} />
-                            </button>
+                                <input
+                                    ref={newPlayerInputRef}
+                                    type="text"
+                                    className="input flex-1"
+                                    style={{ fontSize: '0.9rem' }}
+                                    placeholder="Nombre jugador"
+                                    value={newPlayerName}
+                                    onChange={(e) => setNewPlayerName(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
+                                />
+                                
+                                <button 
+                                    onClick={handleAddPlayer} 
+                                    className="btn btn-primary"
+                                    disabled={!newPlayerName.trim()}
+                                    style={{ padding: '0.5rem 0.75rem' }}
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
+                    </div>
                 </div>
 
-                {/* Footer */}
+                {/* --- FOOTER --- */}
                 <div className="modal-footer">
-                    <button onClick={onClose} className="btn" style={{ color: 'var(--text-muted)' }}>
+                    <button onClick={onClose} className="btn btn-ghost">
                         Cancelar
                     </button>
                     <button

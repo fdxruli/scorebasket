@@ -90,14 +90,15 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-content variant-report" onClick={e => e.stopPropagation()}>
                 
                 {/* HEADER */}
                 <div className="modal-header">
                     <div>
                         <div className="flex gap-2 items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                             <Calendar size={12} />
-                            {formatDate(match.createdAt)}
+                            {/* Usa tu función formatDate aquí */}
+                            {new Date(match.createdAt).toLocaleDateString()} 
                         </div>
                         <h2 className="modal-title">Resumen del Partido</h2>
                     </div>

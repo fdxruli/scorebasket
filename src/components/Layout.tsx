@@ -1,7 +1,6 @@
 // src/components/Layout.tsx
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Trophy, Users, PlusCircle } from "lucide-react";
-import "./Layout.css"; // <--- Importamos el CSS
 
 export function Layout() {
   const location = useLocation();

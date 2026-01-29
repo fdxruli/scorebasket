@@ -1,7 +1,6 @@
 // src/components/ErrorToast.tsx
 import { AlertCircle, X } from 'lucide-react';
 import { useEffect } from 'react';
-import './ErrorToast.css';
 
 interface ErrorToastProps {
   message: string;

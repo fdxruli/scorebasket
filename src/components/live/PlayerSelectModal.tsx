@@ -1,6 +1,6 @@
 // src/components/live/PlayerSelectModal.tsx
 import type { Player } from '../../db/models';
-import './PlayerSelectModal.css'; // <--- Importamos los nuevos estilos
+import { Trophy, AlertCircle, UserX, Shirt } from 'lucide-react'; // Importamos iconos
 
 export type GameAction =
     | { type: 'score'; points: 1 | 2 | 3 }
@@ -17,61 +17,65 @@ interface PlayerSelectModalProps {
 export function PlayerSelectModal({ teamName, players, action, onSelect, onCancel }: PlayerSelectModalProps) {
     const isFoul = action.type === 'foul';
 
-    // Determinamos la clase variante según la acción
-    const variantClass = isFoul ? 'is-foul' : 'is-score';
-
     return (
         <div className="modal-overlay" onClick={onCancel}>
-            {/* e.stopPropagation() evita que el click dentro del modal lo cierre 
-         (solo se cierra si clickeas el fondo oscuro)
-      */}
             <div
-                className={`modal-content ${variantClass}`}
+                className={`modal-content variant-game ${isFoul ? 'is-foul' : 'is-score'}`}
                 onClick={(e) => e.stopPropagation()}
             >
-
                 {/* CABECERA */}
                 <div className="modal-header">
-                    <h3 className="modal-title">
-                        {isFoul ? 'Falta Personal' : `¡${action.points} Puntos!`}
+                    {/* Icono Grande */}
+                    <div className={`mb-2 p-3 rounded-full ${isFoul ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
+                        {isFoul ? <AlertCircle size={32} /> : <Trophy size={32} />}
+                    </div>
+
+                    <h3 className={`modal-title ${isFoul ? 'text-red-500' : 'text-green-500'}`}>
+                        {isFoul ? 'Falta Personal' : `+${action.points} Puntos`}
                     </h3>
-                    <p className="modal-subtitle">
-                        Selecciona quién de <strong>{teamName}</strong> realizó la acción
+                    <p className="modal-subtitle text-zinc-400">
+                        ¿Quién de <span className="text-white font-bold">{teamName}</span>?
                     </p>
                 </div>
 
                 {/* GRID DE JUGADORES */}
-                <div className="pm-grid">
+                <div className="player-grid">
                     {players.map(p => (
                         <button
                             key={p.id}
                             onClick={() => onSelect(p.id!)}
-                            className="pm-player-btn"
+                            className="pm-player-btn group" // group para efectos hover
                         >
-                            {/* Mostramos el número si existe */}
-                            {p.number !== undefined && (
-                                <span style={{ opacity: 0.5, marginRight: '8px', fontWeight: 800 }}>
-                                    #{p.number}
-                                </span>
-                            )}
-                            {p.name}
+                            {/* Número Grande (Estilo Jersey) */}
+                            <span className="player-jersey-num">
+                                {p.number !== undefined ? p.number : '-'}
+                            </span>
+                            
+                            {/* Nombre */}
+                            <span className="player-name-label">
+                                {p.name}
+                            </span>
                         </button>
                     ))}
 
-                    {/* BOTÓN ESPECIAL (Al final, ancho completo) */}
+                    {/* BOTÓN ESPECIAL (Banca / Otro) */}
                     <button
                         onClick={() => onSelect(null)}
                         className="pm-player-btn pm-special-btn"
                     >
-                        {isFoul ? 'Falta Técnica / Banca' : 'Jugador Desconocido / Otro'}
+                        {isFoul ? <Shirt size={18} /> : <UserX size={18} />}
+                        <span>
+                            {isFoul ? 'Falta Técnica / Banca' : 'Jugador Desconocido'}
+                        </span>
                     </button>
                 </div>
 
                 {/* BOTÓN CANCELAR */}
-                <button onClick={onCancel} className="modal-footer">
-                    Cancelar
-                </button>
-
+                <div className="variant-game-footer">
+                    <button onClick={onCancel} className="btn btn-ghost w-full py-3 text-zinc-500 hover:text-white">
+                        Cancelar
+                    </button>
+                </div>
             </div>
         </div>
     );

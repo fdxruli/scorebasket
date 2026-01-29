@@ -80,3 +80,131 @@
   gap: 1rem;
   opacity: 0.6;
 }
+
+/* --- GRID DE HISTORIAL --- */
+.matches-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Móvil: 1 columna */
+  gap: 1rem;
+}
+
+@media (min-width: 600px) {
+  .matches-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Tablet/PC: Grid */
+  }
+}
+
+/* --- TARJETA TIPO TICKET --- */
+.match-ticket {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0; /* Quitamos padding default de .card para controlar nosotros */
+  overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.match-ticket:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary); /* Borde naranja al pasar mouse */
+  box-shadow: var(--shadow-md);
+}
+
+/* 1. Header (Fecha) */
+.ticket-header {
+  padding: 0.75rem 1rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ticket-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.ticket-badge {
+  font-size: 0.65rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* 2. Body (Equipos y Score) */
+.ticket-body {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ticket-team {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-muted); /* Por defecto gris */
+  transition: color 0.2s;
+}
+
+/* Alineación espejo para visitante */
+.ticket-team:first-child { align-items: flex-start; text-align: left; }
+.ticket-team:last-child { align-items: flex-end; text-align: right; }
+
+.ticket-team-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ticket-score {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Estilo para el Ganador */
+.ticket-team.winner .ticket-score { color: var(--success); }
+.ticket-team.winner .ticket-team-name { color: var(--text-main); }
+
+.ticket-divider {
+  color: var(--text-muted);
+  font-weight: 300;
+  opacity: 0.3;
+  padding: 0 0.5rem;
+}
+
+/* 3. Footer (CTA) */
+.ticket-footer {
+  padding: 0.6rem 1rem;
+  background-color: rgba(0, 0, 0, 0.2); /* Un poco más oscuro */
+  border-top: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  opacity: 0; /* Oculto por defecto para limpieza */
+  transform: translateY(5px);
+  transition: all 0.2s;
+}
+
+/* Mostrar footer al hacer hover en la tarjeta */
+.match-ticket:hover .ticket-footer {
+  opacity: 1;
+  transform: translateY(0);
+}

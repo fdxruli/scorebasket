@@ -1,18 +1,19 @@
+/* src/styles/components/cards.css */
 .card {
   background-color: var(--bg-surface);
+  /* Borde sutil */
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg); /* Bordes más redondeados y modernos */
+  border-radius: var(--radius-lg);
   padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, border-color 0.2s;
+  /* Gradiente sutil para dar profundidad */
+  background-image: linear-gradient(to bottom right, rgba(255,255,255,0.03), transparent);
 }
 
-/* Efecto hover opcional para tarjetas interactivas */
-.card-interactive:hover {
-  border-color: var(--primary);
-  transform: translateY(-2px);
-  background-color: var(--bg-surface-hover);
-  cursor: pointer;
+/* Estado Interactivo */
+.card-interactive:active {
+  transform: scale(0.98);
+  transition: transform 0.1s;
 }

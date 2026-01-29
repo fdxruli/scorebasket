@@ -4,13 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Player } from '../db/models';
-import { History, X, PauseCircle, PlayCircle, AlertTriangle, Trophy, Flag } from 'lucide-react';
+import { History, ChevronLeft, AlertTriangle, Trophy, Flag, Play, Pause } from 'lucide-react';
 import { LiveMatchHistoryModal } from '../components/live/LiveMatchHistoryModal';
 import { MatchesRepository } from '../db/matches.repository';
 import { ScoresRepository } from '../db/scores.repository';
 import { FoulsRepository } from '../db/fouls.repository';
-
-import './LiveMatch.css';
 import { useMatchTimer } from '../hooks/useMatchTimer';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 
@@ -19,7 +17,6 @@ import { MatchControls } from '../components/live/MatchControls';
 import { PlayerSelectModal, type GameAction } from '../components/live/PlayerSelectModal';
 import { ErrorToast } from '../components/ErrorToast';
 
-// 🔧 Tipo para el modal de fin de cuarto
 type QuarterEndModalType = 'end' | 'overtime' | null;
 
 export function LiveMatch() {
@@ -45,10 +42,9 @@ export function LiveMatch() {
         return { match, localTeam, visitorTeam, localPlayers, visitorPlayers, scores, fouls };
     }, [matchId]);
 
-    // --- HOOK DEL TIMER ---
+    // --- TIMER HOOK ---
     const { timeLeft, isRunning, toggleTimer, keepTimerRunningOnUnmount } = useMatchTimer(data?.match);
 
-    // Estado para acciones de juego (puntos/faltas)
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
         action: GameAction;
@@ -58,15 +54,11 @@ export function LiveMatch() {
 
     const [showHistory, setShowHistory] = useState(false);
     const [showExitConfirm, setShowExitConfirm] = useState(false);
-    
-    // 🆕 Estado para el modal de fin de cuarto
     const [quarterEndModal, setQuarterEndModal] = useState<QuarterEndModalType>(null);
 
-    // 🆕 Configuración del partido (para validaciones)
     const matchConfig = useMemo(() => {
         if (!data?.match) return null;
         return {
-            // CORREGIDO: Usar el valor de la BD. Si es undefined (legacy), usar 4.
             totalQuarters: data.match.totalQuarters || 4, 
             quarterDuration: data.match.quarterDuration,
             currentQuarter: data.match.currentQuarter
@@ -75,17 +67,11 @@ export function LiveMatch() {
 
     // --- STATS ---
     const stats = useMemo(() => {
-        // 🛡️ VALIDACIÓN DE SEGURIDAD:
-        // Si no hay datos, o si FALTA alguno de los equipos (borrado/error),
-        // devolvemos valores en cero para evitar que la app explote.
         if (!data || !data.localTeam || !data.visitorTeam) {
             return { localScore: 0, visitorScore: 0, localFoulsQ: 0, visitorFoulsQ: 0 };
         }
-
         const { scores, fouls, match, localTeam, visitorTeam } = data;
-        
         return {
-            // Ahora es seguro acceder a localTeam.id y visitorTeam.id
             localScore: scores.filter(s => s.teamId === localTeam.id).reduce((a, b) => a + b.points, 0),
             visitorScore: scores.filter(s => s.teamId === visitorTeam.id).reduce((a, b) => a + b.points, 0),
             localFoulsQ: fouls.filter(f => f.teamId === localTeam.id && f.quarter === match.currentQuarter).length,
@@ -93,34 +79,26 @@ export function LiveMatch() {
         };
     }, [data]);
 
-    // 🆕 EFECTO: Detectar fin de cuarto automáticamente
+    // --- AUTO DETECT QUARTER END ---
     useEffect(() => {
         if (!data?.match || !matchConfig) return;
-        
-        // Si el tiempo llegó a 0 y el reloj se pausó automáticamente
         if (timeLeft <= 0 && !isRunning) {
             const { currentQuarter } = data.match;
             const { totalQuarters } = matchConfig;
             
-            // Verificar si es el último cuarto
             if (currentQuarter >= totalQuarters) {
-                // Es el último cuarto, verificar si hay empate
                 if (stats.localScore === stats.visitorScore) {
-                    // Empate - ofrecer tiempo extra
                     setQuarterEndModal('overtime');
                 } else {
-                    // Hay ganador - ofrecer finalizar
                     setQuarterEndModal('end');
                 }
             } else {
-                // No es el último cuarto - ofrecer siguiente cuarto
                 setQuarterEndModal('end');
             }
         }
     }, [timeLeft, isRunning, data?.match, matchConfig, stats.localScore, stats.visitorScore]);
 
     // --- HANDLERS ---
-
     const handleBackClick = () => {
         if (isRunning) {
             setShowExitConfirm(true);
@@ -143,109 +121,56 @@ export function LiveMatch() {
         navigate('/matches');
     };
 
-    // 🆕 HANDLER: Avanzar al siguiente cuarto (validado)
     const handleNextQuarter = async () => {
         if (!data?.match || !matchConfig) return;
-        
         try {
-            // 1. Pausar el reloj si está corriendo
             if (isRunning) await toggleTimer();
-            
-            const { currentQuarter } = data.match;
-            const { totalQuarters } = matchConfig;
-            
-            // 2. Validar que no hayamos excedido el número de cuartos
-            if (currentQuarter >= totalQuarters) {
-                handleError(new Error(`Ya se jugaron los ${totalQuarters} cuartos reglamentarios`));
+            if (data.match.currentQuarter >= matchConfig.totalQuarters) {
+                handleError(new Error(`Ya se jugaron los ${matchConfig.totalQuarters} cuartos reglamentarios`));
                 return;
             }
-            
-            // 3. Mostrar modal de confirmación
             setQuarterEndModal('end');
-            
         } catch (err) {
             handleError(err, "Error al cambiar de cuarto");
         }
     };
 
-    // 🆕 HANDLER: Confirmar siguiente cuarto
     const confirmNextQuarter = async () => {
-        if (!data?.match || !matchConfig) return;
-        
+        if (!data?.match) return;
         try {
-            const nextQ = data.match.currentQuarter + 1;
-            
-            await db.matches.update(matchId, {
-                currentQuarter: nextQ,
-                timerSecondsRemaining: data.match.quarterDuration * 60,
-                timerLastStart: undefined
-            });
-            
+            await MatchesRepository.nextQuarter(matchId);
             setQuarterEndModal(null);
         } catch (err) {
             handleError(err, "Error al iniciar siguiente cuarto");
         }
     };
 
-    // 🆕 HANDLER: Iniciar tiempo extra
     const handleStartOvertime = async () => {
         if (!data?.match) return;
-        
         try {
-            const overtimeQuarter = data.match.currentQuarter + 1;
-            const overtimeDuration = 5; // 5 minutos de overtime
-            
-            await db.matches.update(matchId, {
-                currentQuarter: overtimeQuarter,
-                timerSecondsRemaining: overtimeDuration * 60,
-                timerLastStart: undefined,
-                quarterDuration: overtimeDuration // Actualizar duración para este cuarto
-            });
-            
+            await MatchesRepository.startOvertime(matchId);
             setQuarterEndModal(null);
         } catch (err) {
             handleError(err, "Error al iniciar tiempo extra");
         }
     };
 
-    // 🆕 HANDLER: Finalizar partido (validado)
     const handleEndMatch = async () => {
         if (!data?.match) return;
-        
         try {
-            // 1. Pausar reloj si está corriendo
             if (isRunning) await toggleTimer();
             
-            // 2. Verificar si hay empate
             if (stats.localScore === stats.visitorScore) {
-                const shouldEnd = confirm(
-                    "⚠️ El partido está EMPATADO\n\n" +
-                    `${data.localTeam?.name}: ${stats.localScore}\n` +
-                    `${data.visitorTeam?.name}: ${stats.visitorScore}\n\n` +
-                    "¿Deseas finalizar de todas formas?"
-                );
-                
+                const shouldEnd = confirm("El partido está EMPATADO. ¿Finalizar de todas formas?");
                 if (!shouldEnd) return;
             } else {
-                // Hay ganador, confirmación normal
-                const winner = stats.localScore > stats.visitorScore 
-                    ? data.localTeam?.name 
-                    : data.visitorTeam?.name;
-                
-                const shouldEnd = confirm(
-                    `🏆 Finalizar Partido\n\n` +
-                    `Ganador: ${winner}\n` +
-                    `Marcador: ${stats.localScore} - ${stats.visitorScore}\n\n` +
-                    "¿Confirmar?"
-                );
-                
+                const winner = stats.localScore > stats.visitorScore ? data.localTeam?.name : data.visitorTeam?.name;
+                const shouldEnd = confirm(`🏆 Finalizar Partido\nGanador: ${winner}\n¿Confirmar?`);
                 if (!shouldEnd) return;
             }
             
-            // 3. Finalizar
             await MatchesRepository.finish(matchId);
             navigate('/matches');
-            
         } catch (err) {
             handleError(err, "Error al finalizar partido");
         }
@@ -266,10 +191,7 @@ export function LiveMatch() {
             };
 
             if (currentAction.action.type === 'score') {
-                await ScoresRepository.add({
-                    ...commonInput,
-                    points: currentAction.action.points
-                });
+                await ScoresRepository.add({ ...commonInput, points: currentAction.action.points });
             } else {
                 await FoulsRepository.add(commonInput);
             }
@@ -279,50 +201,43 @@ export function LiveMatch() {
         }
     };
 
-    if (!data) return <div className="bg-black h-screen flex items-center justify-center text-white">Cargando...</div>;
+    if (!data) return <div className="live-layout flex-center">Cargando...</div>;
     const { match, localTeam, visitorTeam, localPlayers, visitorPlayers } = data;
 
     if (!localTeam || !visitorTeam) {
         return (
-            <div className="bg-black h-screen flex flex-col items-center justify-center text-white gap-4 p-4 text-center">
-                <AlertTriangle size={48} className="text-red-500" />
+            <div className="live-layout flex-center flex-col gap-md p-4 text-center">
+                <AlertTriangle size={48} className="text-danger" />
                 <h2 className="text-xl font-bold">Datos Incompletos</h2>
-                <p className="text-gray-400">
-                    No se encontraron los equipos de este partido.<br/>
-                    Es posible que hayan sido eliminados.
-                </p>
-                <button 
-                    onClick={() => navigate('/matches')} 
-                    className="px-6 py-3 bg-gray-800 rounded-lg hover:bg-gray-700 font-bold"
-                >
-                    Volver a Partidos
-                </button>
+                <button onClick={() => navigate('/matches')} className="btn btn-primary">Volver</button>
             </div>
         );
     }
 
-    // Calculamos si es el último cuarto para ajustar la UI del modal
     const isLastQuarter = matchConfig && match.currentQuarter >= matchConfig.totalQuarters;
 
     return (
-        <div className="live-overlay">
+        <div className="live-layout">
             {error && <ErrorToast message={error} onClose={clearError} />}
 
             <header className="live-header">
-                <button onClick={handleBackClick} className="live-back-btn">
-                    <X size={24} />
+                <button onClick={handleBackClick} className="live-btn-icon">
+                    <ChevronLeft size={28} />
                 </button>
 
-                <div className="live-status-badge">
-                    Q{match.currentQuarter} • {match.status === 'finished' ? 'FINAL' : 'EN VIVO'}
+                <div className={`live-badge ${match.status === 'playing' ? 'active' : ''}`}>
+                    {match.status === 'finished' ? (
+                        <>FINALIZADO</>
+                    ) : (
+                        <>
+                            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></span>
+                            Q{match.currentQuarter}
+                        </>
+                    )}
                 </div>
 
-                <button
-                    onClick={() => setShowHistory(true)}
-                    className="live-back-btn"
-                    title="Ver Historial y Corregir"
-                >
-                    <History size={20} />
+                <button onClick={() => setShowHistory(true)} className="live-btn-icon">
+                    <History size={22} />
                 </button>
             </header>
 
@@ -349,7 +264,6 @@ export function LiveMatch() {
                 onEndMatch={handleEndMatch}
             />
 
-            {/* MODAL DE SELECCIÓN DE JUGADOR */}
             {currentAction && (
                 <PlayerSelectModal
                     teamName={currentAction.teamName}
@@ -360,65 +274,59 @@ export function LiveMatch() {
                 />
             )}
 
-            {/* 🆕 MODAL DE FIN DE CUARTO MEJORADO */}
+            {/* MODAL DE FIN DE CUARTO / PARTIDO (Ahora usa clases CSS puras) */}
             {quarterEndModal && matchConfig && (
                 <div className="game-modal-overlay">
                     <div className={`game-modal-card ${quarterEndModal === 'overtime' ? 'is-overtime' : 'is-end'}`}>
                         
-                        {/* 1. Icono Principal */}
                         <div className="modal-icon-wrapper">
                             {quarterEndModal === 'overtime' ? (
-                                <AlertTriangle size={40} />
+                                <AlertTriangle size={40} className="text-warning" />
                             ) : isLastQuarter ? (
-                                <Trophy size={40} className="text-yellow-400" />
+                                <Trophy size={40} className="text-warning" />
                             ) : (
                                 <Flag size={40} />
                             )}
                         </div>
 
-                        {/* 2. Título y Mensaje */}
-                        <h3 className="text-2xl font-bold text-white mb-1">
+                        <h3 className="text-2xl font-bold mb-1">
                             {quarterEndModal === 'overtime' 
-                                ? '¡Tiempo Reglamentario Terminado!' 
-                                : isLastQuarter
-                                    ? 'Partido Finalizado'
-                                    : `Fin del Cuarto ${match.currentQuarter}`
+                                ? '¡Tiempo Terminado!' 
+                                : isLastQuarter ? 'Partido Finalizado' : `Fin del Cuarto ${match.currentQuarter}`
                             }
                         </h3>
                         
-                        <p className="text-gray-400 text-sm">
+                        <p className="text-muted text-sm mb-4">
                             {quarterEndModal === 'overtime' 
-                                ? 'El marcador está empatado. Se requiere tiempo extra.'
-                                : 'Confirma la siguiente acción para continuar.'
+                                ? 'El marcador está empatado. ¿Tiempo extra?'
+                                : 'Confirma la siguiente acción.'
                             }
                         </p>
 
-                        {/* 3. Tira de Marcador */}
                         <div className="modal-score-strip">
                             <div className="text-center">
-                                <div className="text-xs text-gray-500 uppercase font-bold mb-1 tracking-wider">
+                                <div className="text-xs text-muted uppercase font-bold mb-1 tracking-wider">
                                     {data.localTeam?.name.substring(0, 3)}
                                 </div>
                                 <span className="modal-score-num text-blue-400">{stats.localScore}</span>
                             </div>
                             
-                            <div className="text-gray-600 font-mono text-xl">vs</div>
+                            <div className="text-muted font-mono text-xl">vs</div>
                             
                             <div className="text-center">
-                                <div className="text-xs text-gray-500 uppercase font-bold mb-1 tracking-wider">
+                                <div className="text-xs text-muted uppercase font-bold mb-1 tracking-wider">
                                     {data.visitorTeam?.name.substring(0, 3)}
                                 </div>
                                 <span className="modal-score-num text-orange-400">{stats.visitorScore}</span>
                             </div>
                         </div>
 
-                        {/* 4. Botones de Acción */}
                         <div className="modal-actions">
                             {quarterEndModal === 'overtime' ? (
                                 <>
                                     <button onClick={handleStartOvertime} className="btn-modal-primary btn-overtime">
-                                        <PlayCircle size={20} />
-                                        Iniciar Tiempo Extra (5:00)
+                                        <Play size={20} />
+                                        Tiempo Extra (5:00)
                                     </button>
                                     <button onClick={handleEndMatch} className="btn-modal-secondary">
                                         Terminar en Empate
@@ -428,7 +336,7 @@ export function LiveMatch() {
                                 <>
                                     {!isLastQuarter ? (
                                         <button onClick={confirmNextQuarter} className="btn-modal-primary btn-next-q">
-                                            <PlayCircle size={20} />
+                                            <Play size={20} />
                                             Comenzar Cuarto {match.currentQuarter + 1}
                                         </button>
                                     ) : (
@@ -439,46 +347,42 @@ export function LiveMatch() {
                                     )}
                                     
                                     <button onClick={() => setQuarterEndModal(null)} className="btn-modal-secondary">
-                                        Corregir / Volver al mapa
+                                        Volver al mapa
                                     </button>
                                 </>
                             )}
                         </div>
-
                     </div>
                 </div>
             )}
 
-            {/* MODAL DE CONFIRMACIÓN DE SALIDA */}
+            {/* MODAL SALIDA (Simplificado con estilos inline para cosas rápidas o puedes crear clase si prefieres) */}
             {showExitConfirm && (
-                <div className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center p-4">
-                    <div className="bg-[#18181b] w-full max-w-sm rounded-2xl p-6 border border-[#27272a] text-center">
-                        <h3 className="text-xl font-bold text-white mb-2">¿Cómo deseas salir?</h3>
-                        <p className="text-gray-400 mb-6 text-sm">
-                            El reloj está corriendo. Puedes pausarlo ahora o dejar que siga contando en segundo plano.
+                <div className="game-modal-overlay">
+                    <div className="game-modal-card">
+                        <h3 className="text-xl font-bold mb-2">¿Cómo deseas salir?</h3>
+                        <p className="text-muted mb-6 text-sm">
+                            El reloj está corriendo.
                         </p>
 
-                        <div className="flex flex-col gap-3">
+                        <div className="modal-actions">
                             <button
                                 onClick={handleExitAndPause}
-                                className="w-full py-3 bg-yellow-500/10 text-yellow-500 font-bold rounded-lg border border-yellow-500/20 flex items-center justify-center gap-2"
+                                className="btn-modal-primary btn-overtime"
                             >
-                                <PauseCircle size={20} />
+                                <Pause size={20} />
                                 Pausar y Salir
                             </button>
 
                             <button
                                 onClick={handleExitRunning}
-                                className="w-full py-3 bg-green-500/10 text-green-500 font-bold rounded-lg border border-green-500/20 flex items-center justify-center gap-2"
+                                className="btn-modal-primary btn-next-q"
                             >
-                                <PlayCircle size={20} />
-                                Dejar Corriendo y Salir
+                                <Play size={20} />
+                                Dejar Corriendo
                             </button>
 
-                            <button
-                                onClick={() => setShowExitConfirm(false)}
-                                className="w-full py-3 text-gray-400 font-medium mt-2"
-                            >
+                            <button onClick={() => setShowExitConfirm(false)} className="btn-modal-secondary">
                                 Cancelar
                             </button>
                         </div>

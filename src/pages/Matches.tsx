@@ -143,7 +143,6 @@ export function Matches() {
             {finishedMatches.map(m => {
                const localWon = m.localPoints > m.visitorPoints;
                const visitorWon = m.visitorPoints > m.localPoints;
-               const isTie = m.localPoints === m.visitorPoints;
                
                return (
                 <div 

@@ -80,13 +80,6 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
     if (!data || !stats) return null;
     const { match, localTeam, visitorTeam } = data;
-    
-    const formatDate = (date: Date) => {
-        return new Intl.DateTimeFormat('es-MX', { 
-            dateStyle: 'full', 
-            timeStyle: 'short' 
-        }).format(date);
-    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>

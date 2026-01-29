@@ -12,14 +12,14 @@ interface TeamEditorModalProps {
 export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const [teamName, setTeamName] = useState('');
     const [players, setPlayers] = useState<Player[]>([]);
-    
+
     // Estados para el nuevo jugador
     const [newPlayerName, setNewPlayerName] = useState('');
     const [newPlayerNumber, setNewPlayerNumber] = useState('');
-    
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
+
     // Referencia para hacer focus al input de nombre al agregar
     const newPlayerInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,13 +43,11 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
         loadData();
     }, [teamId]);
 
-    const handlePlayerChange = (id: number | undefined, field: 'name' | 'number', value: string) => {
-        setPlayers(prev => prev.map((p, idx) => {
-            // Si tiene ID usamos ID, si es temp usamos el índice como referencia (aquí simplificado)
-            const isTarget = p.id === id;
-            // Nota: Para producción idealmente usar un tempId local, pero para este ejemplo simple:
-            if ((p.id && p.id === id) || (!p.id && players.indexOf(p) === players.indexOf(players.find(pl => pl === p)!))) {
-                 return {
+    const handlePlayerChange = (index: number, field: 'name' | 'number', value: string) => {
+        setPlayers(prev => prev.map((p, i) => {
+            // Simplemente comparamos el índice del map (i) con el índice que recibimos (index)
+            if (i === index) {
+                return {
                     ...p,
                     [field]: field === 'number' ? parseInt(value) || undefined : value
                 };
@@ -64,18 +62,18 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
     const handleAddPlayer = () => {
         if (!newPlayerName.trim()) return;
-        
+
         const tempPlayer: Player = {
             name: newPlayerName.trim(),
             number: newPlayerNumber ? parseInt(newPlayerNumber) : undefined,
             teamId: teamId,
             createdAt: new Date()
         };
-        
+
         setPlayers([...players, tempPlayer]);
         setNewPlayerName('');
         setNewPlayerNumber('');
-        
+
         // Mantener el foco en el nombre para agregar otro rápido
         newPlayerInputRef.current?.focus();
     };
@@ -134,7 +132,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
                 {/* --- BODY --- */}
                 <div className="modal-body">
-                    
+
                     {/* SECCIÓN 1: DATOS DEL EQUIPO */}
                     <div className="form-group">
                         <label className="label">Nombre del Equipo</label>
@@ -166,12 +164,12 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                     Sin jugadores asignados
                                 </div>
                             )}
-                            
+
                             {players.map((p, idx) => (
                                 <div key={p.id || `temp-${idx}`} className="player-edit-row">
                                     {/* Icono decorativo */}
                                     <User size={16} className="text-muted" />
-                                    
+
                                     {/* Input Número */}
                                     <div className="relative">
                                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600 text-[10px]">#</span>
@@ -181,7 +179,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                             style={{ width: '50px', paddingLeft: '1rem' }}
                                             placeholder="00"
                                             value={p.number || ''}
-                                            onChange={(e) => handlePlayerChange(p.id, 'number', e.target.value)}
+                                            onChange={(e) => handlePlayerChange(idx, 'number', e.target.value)}
                                         />
                                     </div>
 
@@ -190,7 +188,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                         type="text"
                                         className="player-edit-input"
                                         value={p.name}
-                                        onChange={(e) => handlePlayerChange(p.id, 'name', e.target.value)}
+                                        onChange={(e) => handlePlayerChange(idx, 'name', e.target.value)}
                                         placeholder="Nombre del jugador"
                                     />
 
@@ -235,9 +233,9 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                     onChange={(e) => setNewPlayerName(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
                                 />
-                                
-                                <button 
-                                    onClick={handleAddPlayer} 
+
+                                <button
+                                    onClick={handleAddPlayer}
                                     className="btn btn-primary"
                                     disabled={!newPlayerName.trim()}
                                     style={{ padding: '0.5rem 0.75rem' }}

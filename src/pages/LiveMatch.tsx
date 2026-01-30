@@ -58,7 +58,7 @@ export function LiveMatch() {
     const matchConfig = useMemo(() => {
         if (!data?.match) return null;
         return {
-            totalQuarters: data.match.totalQuarters || 4, 
+            totalQuarters: data.match.totalQuarters || 4,
             quarterDuration: data.match.quarterDuration,
             currentQuarter: data.match.currentQuarter
         };
@@ -66,16 +66,17 @@ export function LiveMatch() {
 
     // --- STATS ---
     const stats = useMemo(() => {
-        if (!data || !data.localTeam || !data.visitorTeam) {
-            return { localScore: 0, visitorScore: 0, localFoulsQ: 0, visitorFoulsQ: 0 };
-        }
-        const { scores, fouls, match, localTeam, visitorTeam } = data;
-        return {
-            localScore: scores.filter(s => s.teamId === localTeam.id).reduce((a, b) => a + b.points, 0),
-            visitorScore: scores.filter(s => s.teamId === visitorTeam.id).reduce((a, b) => a + b.points, 0),
-            localFoulsQ: fouls.filter(f => f.teamId === localTeam.id && f.quarter === match.currentQuarter).length,
-            visitorFoulsQ: fouls.filter(f => f.teamId === visitorTeam.id && f.quarter === match.currentQuarter).length
-        };
+        if (!data?.match) return { localScore: 0, visitorScore: 0, localFoulsQ: 0, visitorFoulsQ: 0 };
+
+        // Para el score total usamos los datos cacheados en el Match (Súper rápido)
+        const { localScore = 0, visitorScore = 0, currentQuarter } = data.match;
+
+        // Para las faltas POR CUARTO, sí necesitamos filtrar el array de faltas
+        // (A menos que agregues localFouls_Q1, localFouls_Q2... al modelo de Match)
+        const localFoulsQ = data.fouls.filter(f => f.teamId === data.localTeam?.id && f.quarter === currentQuarter).length;
+        const visitorFoulsQ = data.fouls.filter(f => f.teamId === data.visitorTeam?.id && f.quarter === currentQuarter).length;
+
+        return { localScore, visitorScore, localFoulsQ, visitorFoulsQ };
     }, [data]);
 
     // --- AUTO DETECT QUARTER END ---
@@ -84,7 +85,7 @@ export function LiveMatch() {
         if (timeLeft <= 0 && !isRunning) {
             const { currentQuarter } = data.match;
             const { totalQuarters } = matchConfig;
-            
+
             if (currentQuarter >= totalQuarters) {
                 if (stats.localScore === stats.visitorScore) {
                     setQuarterEndModal('overtime');
@@ -158,7 +159,7 @@ export function LiveMatch() {
         if (!data?.match) return;
         try {
             if (isRunning) await toggleTimer();
-            
+
             if (stats.localScore === stats.visitorScore) {
                 const shouldEnd = confirm("El partido está EMPATADO. ¿Finalizar de todas formas?");
                 if (!shouldEnd) return;
@@ -167,7 +168,7 @@ export function LiveMatch() {
                 const shouldEnd = confirm(`🏆 Finalizar Partido\nGanador: ${winner}\n¿Confirmar?`);
                 if (!shouldEnd) return;
             }
-            
+
             await MatchesRepository.finish(matchId);
             navigate('/matches');
         } catch (err) {
@@ -277,7 +278,7 @@ export function LiveMatch() {
             {quarterEndModal && matchConfig && (
                 <div className="game-modal-overlay">
                     <div className={`game-modal-card ${quarterEndModal === 'overtime' ? 'is-overtime' : 'is-end'}`}>
-                        
+
                         <div className="modal-icon-wrapper">
                             {quarterEndModal === 'overtime' ? (
                                 <AlertTriangle size={40} className="text-warning" />
@@ -289,14 +290,14 @@ export function LiveMatch() {
                         </div>
 
                         <h3>
-                            {quarterEndModal === 'overtime' 
-                                ? '¡Tiempo Terminado!' 
+                            {quarterEndModal === 'overtime'
+                                ? '¡Tiempo Terminado!'
                                 : isLastQuarter ? 'Partido Finalizado' : `Fin del Cuarto ${match.currentQuarter}`
                             }
                         </h3>
-                        
+
                         <p>
-                            {quarterEndModal === 'overtime' 
+                            {quarterEndModal === 'overtime'
                                 ? 'El marcador está empatado. ¿Tiempo extra?'
                                 : 'Confirma la siguiente acción.'
                             }
@@ -309,9 +310,9 @@ export function LiveMatch() {
                                 </div>
                                 <span className="modal-score-num text-blue-400">{stats.localScore}</span>
                             </div>
-                            
+
                             <div className="text-muted font-mono text-xl">vs</div>
-                            
+
                             <div className="text-center">
                                 <div className="text-xs text-muted uppercase font-bold mb-1 tracking-wider">
                                     {data.visitorTeam?.name.substring(0, 3)}
@@ -344,7 +345,7 @@ export function LiveMatch() {
                                             Oficializar Victoria
                                         </button>
                                     )}
-                                    
+
                                     <button onClick={() => setQuarterEndModal(null)} className="btn-modal-secondary">
                                         Volver al mapa
                                     </button>
@@ -394,9 +395,9 @@ export function LiveMatch() {
             )}
 
             {showHistory && (
-                <LiveMatchHistoryModal 
-                    matchId={matchId} 
-                    onClose={() => setShowHistory(false)} 
+                <LiveMatchHistoryModal
+                    matchId={matchId}
+                    onClose={() => setShowHistory(false)}
                 />
             )}
         </div>

@@ -1,10 +1,9 @@
 import React from 'react';
-// CORRECCIÓN: Usar '../context' en lugar de '../../context'
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 
-// UI Components existentes
+// UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard'; 
 import { MatchControls } from '../../../../components/live/MatchControls';
 import { PlayerSelectModal } from '../../../../components/live/PlayerSelectModal';
@@ -14,28 +13,31 @@ import { LiveHeader } from '../shared/LiveHeader';
 
 export const TraditionalEngine: React.FC = () => {
   const { match, localTeam, visitorTeam } = useLiveMatch();
-  const { addScore, addFoul, undoLastAction } = useGameActions();
+  const { addScore, addFoul } = useGameActions();
 
   if (!match || !localTeam || !visitorTeam) return null;
 
   const {
-    timerDisplay,
+    // timerDisplay, // <--- Ya no necesitamos este string formateado aquí
+    timeLeft,       // <--- Usaremos este número (segundos) para el Scoreboard
     isTimerRunning,
     toggleTimer,
-    currentQuarter,
-    showQuarterEndModal,
+    // currentQuarter, // Si no lo usas directamente aquí, puedes omitirlo
+    // showQuarterEndModal, // (Asegúrate de mantener la lógica de modales si la tenías abajo)
     nextQuarter,
     showMatchEndModal,
     endMatch
   } = useTraditionalLogic({ match });
 
+  // ... (Mantén tu lógica de playerModal igual) ...
   const [playerModal, setPlayerModal] = React.useState<{
     isOpen: boolean;
     teamId: number;
     actionType: 'score' | 'foul';
     points?: 1 | 2 | 3;
   }>({ isOpen: false, teamId: 0, actionType: 'score' });
-
+  
+  // ... (Mantén los handlers handleScoreClick, handleFoulClick, handlePlayerSelect igual) ...
   const handleScoreClick = (teamId: number, points: 1 | 2 | 3) => {
     setPlayerModal({ isOpen: true, teamId, actionType: 'score', points });
   };
@@ -45,23 +47,24 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handlePlayerSelect = (playerId: number | null) => {
-    if (playerId === null && playerModal.actionType === 'foul') {
-       // Lógica para falta técnica o jugador desconocido si lo permites
-       addFoul(playerModal.teamId, undefined);
-    } else if (playerId !== null) {
-        if (playerModal.actionType === 'score') {
-          addScore(playerModal.teamId, playerModal.points || 1, playerId); // Fallback a 1 si undefined
-        } else {
-          addFoul(playerModal.teamId, playerId);
-        }
-    }
-    setPlayerModal({ ...playerModal, isOpen: false });
+      // ... (Tu lógica existente) ...
+      if (playerId === null && playerModal.actionType === 'foul') {
+         addFoul(playerModal.teamId, undefined);
+      } else if (playerId !== null) {
+          if (playerModal.actionType === 'score') {
+            addScore(playerModal.teamId, playerModal.points || 1, playerId);
+          } else {
+            addFoul(playerModal.teamId, playerId);
+          }
+      }
+      setPlayerModal({ ...playerModal, isOpen: false });
   };
 
   return (
     <div className="live-layout">
       <LiveHeader />
 
+      {/* --- CORRECCIÓN AQUÍ --- */}
       <Scoreboard 
         localName={localTeam.name}
         visitorName={visitorTeam.name}
@@ -69,15 +72,22 @@ export const TraditionalEngine: React.FC = () => {
         visitorScore={match.visitorScore}
         localFouls={match.localFouls}
         visitorFouls={match.visitorFouls}
-        timeLeft={0} // El timerDisplay ya viene formateado, pero Scoreboard espera segundos
-        // Nota: Si Scoreboard espera string en timer, ajusta la prop. Si espera segundos:
-        // timeLeft={timeLeft} (pasándolo desde el hook)
+        
+        // 1. Pasamos el tiempo real del hook
+        timeLeft={timeLeft} 
+        
+        // 2. Pasamos el estado real del reloj para la animación
         isTimerRunning={isTimerRunning}
       />
-      {/* Visualización manual del tiempo si Scoreboard no soporta string directo */}
-      <div className="absolute top-[80px] left-1/2 -translate-x-1/2 z-20">
-         <div className="timer-pill">{timerDisplay}</div>
-      </div>
+
+      {/* 3. ELIMINAMOS ESTE BLOQUE:
+         <div className="absolute top-[80px] left-1/2 -translate-x-1/2 z-20">
+            <div className="timer-pill">{timerDisplay}</div>
+         </div>
+         
+         Al eliminarlo, el único reloj visible será el del Scoreboard (en medio),
+         que ahora sí recibirá el tiempo correcto.
+      */}
 
       <MatchControls 
         localTeam={localTeam}
@@ -87,13 +97,14 @@ export const TraditionalEngine: React.FC = () => {
         isTimerRunning={isTimerRunning}
         onToggleTimer={toggleTimer}
         onNextQuarter={nextQuarter}
-        onEndMatch={() => endMatch()} // Asegurar llamada
+        onEndMatch={() => endMatch()}
         onActionRequest={(teamId, _, __, action) => {
             if (action.type === 'score') handleScoreClick(teamId, action.points);
             else handleFoulClick(teamId);
         }}
       />
 
+      {/* ... (Mantén tus modales igual) ... */}
       {playerModal.isOpen && (
         <PlayerSelectModal 
             teamName={playerModal.teamId === localTeam.id ? localTeam.name : visitorTeam.name}

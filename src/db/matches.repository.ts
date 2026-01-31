@@ -1,5 +1,4 @@
 import { db } from './db';
-import type { Match, MatchConfig } from './models';
 
 export const MatchesRepository = {
     async create(localTeamId: number, visitorTeamId: number, quarterDuration: number = 10, totalQuarters: number = 4) {

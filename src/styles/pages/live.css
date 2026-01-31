@@ -226,6 +226,33 @@
 .btn-visitor-lg { background: rgba(249, 115, 22, 0.25); color: white; border: 1px solid rgba(249, 115, 22, 0.4); box-shadow: 0 4px 12px rgba(249,115,22,0.1); }
 .btn-visitor-foul { background: transparent; border: 1px dashed rgba(239, 68, 68, 0.4); color: #fca5a5; font-size: 0.75rem; height: 2.5rem; text-transform: uppercase; }
 
+/* NUEVO: Botón Gigante Local (Race Mode) */
+.btn-local-xl {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1));
+  color: white;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+  font-size: 2.5rem;
+  height: 6rem;
+}
+.btn-local-xl:active { background: rgba(59, 130, 246, 0.3); transform: scale(0.98); }
+
+/* Variantes Visita */
+.btn-visitor-sm { background: rgba(249, 115, 22, 0.15); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.2); }
+.btn-visitor-lg { background: rgba(249, 115, 22, 0.25); color: white; border: 1px solid rgba(249, 115, 22, 0.4); box-shadow: 0 4px 12px rgba(249,115,22,0.1); }
+.btn-visitor-foul { background: transparent; border: 1px dashed rgba(239, 68, 68, 0.4); color: #fca5a5; font-size: 0.75rem; height: 2.5rem; text-transform: uppercase; }
+
+/* NUEVO: Botón Gigante Visitante (Race Mode) */
+.btn-visitor-xl {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.1));
+  color: white;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.15);
+  font-size: 2.5rem;
+  height: 6rem;
+}
+.btn-visitor-xl:active { background: rgba(249, 115, 22, 0.3); transform: scale(0.98); }
+
 /* BARRA INFERIOR */
 .bottom-bar {
   display: flex;

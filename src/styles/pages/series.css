@@ -1,0 +1,105 @@
+/* src/styles/pages/series.css */
+
+/* --- HEADER: Píldora de Información del Set --- */
+.series-info-pill {
+  background-color: #18181b; /* Zinc 900 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1.5rem;
+  border-radius: 99px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+  min-width: 200px;
+  backdrop-filter: blur(8px);
+}
+
+.series-info-main {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.series-info-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.series-info-highlight {
+  color: var(--primary);
+}
+
+/* --- INDICADORES DE PUNTOS DEL SET --- */
+.series-points-container {
+  display: flex;
+  justify-content: space-between; /* Separa a los extremos */
+  align-items: center;
+  width: 100%;
+  padding: 0 1.5rem; /* Alineado con los paneles de control */
+  margin-top: -1.5rem; /* Superposición ligera estética */
+  margin-bottom: 1.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+.series-point-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 9, 11, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 0.75rem 1.25rem;
+  min-width: 100px;
+  box-shadow: 0 8px 20px -5px rgba(0,0,0,0.4);
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.series-point-box:active {
+  transform: scale(0.95);
+}
+
+/* Variante Local */
+.series-point-box.local {
+  border-top: 3px solid var(--secondary); /* Azul */
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, rgba(9, 9, 11, 0.9) 100%);
+}
+
+/* Variante Visitante */
+.series-point-box.visitor {
+  border-top: 3px solid var(--primary); /* Naranja */
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.1) 0%, rgba(9, 9, 11, 0.9) 100%);
+}
+
+.series-point-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.25rem;
+  opacity: 0.9;
+}
+
+.series-point-box.local .series-point-label { color: #93c5fd; }
+.series-point-box.visitor .series-point-label { color: #fdba74; }
+
+.series-point-value {
+  font-family: var(--font-mono);
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: white;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}

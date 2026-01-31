@@ -1,5 +1,3 @@
-// src/features/match-creation/components/TraditionalConfig.tsx
-import { useState } from 'react';
 import { Clock, Info } from 'lucide-react';
 import type { TraditionalConfig } from '../../../db/models';
 import { MODE_OPTIONS } from '../../../config/gamePresets';

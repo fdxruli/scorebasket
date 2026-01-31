@@ -4,10 +4,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
 import { Play, AlertCircle, Trophy } from 'lucide-react';
-import type { Match } from '../db/models';
-
-// --- 1. Importamos tus nuevos componentes de "features" ---
-// Nota: Ajusta 'componets' a 'components' si corriges el nombre de la carpeta en el futuro.
 import { GameModeSelector } from '../features/match-creations/componets/GameModeSelector';
 import { TraditionalConfigComponent } from '../features/match-creations/componets/TraditionalConfig';
 import { RaceConfigComponent } from '../features/match-creations/componets/RaceConfig';

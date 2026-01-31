@@ -1,11 +1,9 @@
-import React from 'react';
 import { useParams } from 'react-router-dom';
 // Eliminamos la importación de Layout porque ya se usa a nivel de rutas
 import { LiveMatchProvider, useLiveMatch } from '../features/match-creations/componets/context/LiveMatchContext';
 import { TraditionalEngine } from '../features/match-creations/componets/engines/TraditionalEngine';
 import { RaceEngine } from '../features/match-creations/componets/engines/RaceEngine';
 import { SeriesEngine } from '../features/match-creations/componets/engines/SeriesEngine';
-import { Layout } from '../components/Layout'; // Opcional: Solo si necesitamos envolver en caso de que NO esté en el router
 
 /**
  * EngineDispatcher:

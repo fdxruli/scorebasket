@@ -1,9 +1,3 @@
-// src/config/gamePresets.ts
-import type { MatchConfig } from '../db/models';
-
-/**
- * Presets predefinidos para configuración rápida
- */
 export const GAME_PRESETS = {
   // Modos tradicionales
   NBA: {

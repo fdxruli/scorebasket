@@ -1,7 +1,7 @@
 // src/hooks/useMatchTimer.ts (VERSIÓN CORREGIDA)
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
-import type { Match } from '../db/models';
+import type { Match } from '../db/models/Match';
 
 interface UseMatchTimerReturn {
   timeLeft: number;

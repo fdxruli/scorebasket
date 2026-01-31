@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMatchTimer } from '../../../hooks/useMatchTimer';
-import type { Match } from '../../../db/models/Match';
+import type { Match } from '../../../db/models';
 import { db } from '../../../db/db';
 
 interface UseTraditionalLogicProps {

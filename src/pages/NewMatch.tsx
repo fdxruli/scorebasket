@@ -1,78 +1,114 @@
-// src/pages/NewMatch.tsx
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
-import { Play, Settings, AlertCircle, Trophy } from 'lucide-react';
+import { Play, AlertCircle, Trophy } from 'lucide-react';
+import type { Match } from '../db/models';
+
+// --- 1. Importamos tus nuevos componentes de "features" ---
+// Nota: Ajusta 'componets' a 'components' si corriges el nombre de la carpeta en el futuro.
+import { GameModeSelector } from '../features/match-creations/componets/GameModeSelector';
+import { TraditionalConfigComponent } from '../features/match-creations/componets/TraditionalConfig';
+import { RaceConfigComponent } from '../features/match-creations/componets/RaceConfig';
+import { BestOfConfigComponent } from '../features/match-creations/componets/BestOfConfig';
+import { ConfigSummary } from '../features/match-creations/componets/ConfigSummary';
+import { useMatchConfig } from '../features/match-creations/hooks/useMatchConfig';
 
 export function NewMatch() {
   const navigate = useNavigate();
-
-  // --- ESTADO ---
   const [localTeamId, setLocalTeamId] = useState<string>('');
   const [visitorTeamId, setVisitorTeamId] = useState<string>('');
-  
-  const [config, setConfig] = useState({
-    minutesPerQuarter: 10,
-    totalQuarters: 4
-  });
-
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  // --- DATOS ---
-  // 🆕 Modificado para manejar errores de esquema/BD sin crashear
+  // --- 2. Usamos el Hook de Configuración que creaste ---
+  const {
+    config,
+    changeMode,
+    updateTraditional,
+    updateRace,
+    updateBestOf,
+    validation,
+    isValid
+  } = useMatchConfig('traditional');
+
+  // Cargar equipos
   const teams = useLiveQuery(async () => {
     try {
       return await TeamsRepository.getAll();
     } catch (err) {
-      console.error("Error cargando equipos (NewMatch):", err);
-      return []; // Retorna array vacío en caso de error de esquema
+      console.error("Error cargando equipos:", err);
+      return [];
     }
   });
 
-  // --- LÓGICA ---
+  // --- 3. Lógica para Guardar el Partido según el Modo ---
   const handleStartMatch = async () => {
     setError(null);
 
-    // Validaciones
+    // Validaciones Básicas
     if (!localTeamId || !visitorTeamId) {
       setError("Debes seleccionar ambos equipos.");
       return;
     }
-
     if (localTeamId === visitorTeamId) {
       setError("El equipo local y visitante no pueden ser el mismo.");
       return;
     }
 
-    // Validar configuración
-    if (config.totalQuarters < 1 || config.totalQuarters > 8) {
-      setError("El número de cuartos debe estar entre 1 y 8.");
-      return;
-    }
-
-    if (config.minutesPerQuarter < 1 || config.minutesPerQuarter > 30) {
-      setError("La duración del cuarto debe estar entre 1 y 30 minutos.");
+    // Validar Configuración del Modo
+    if (!isValid) {
+      setError(validation.errors[0] || "Configuración inválida");
       return;
     }
 
     setIsCreating(true);
 
     try {
-      const matchId = await db.matches.add({
+      // Objeto base del partido
+      // Usamos 'any' temporalmente o 'Partial<Match>' para construirlo dinámicamente
+      const matchData: any = {
         localTeamId: Number(localTeamId),
         visitorTeamId: Number(visitorTeamId),
-        currentQuarter: 1,
         status: 'created',
         createdAt: new Date(),
-        quarterDuration: config.minutesPerQuarter,
-        totalQuarters: config.totalQuarters,
-        timerSecondsRemaining: config.minutesPerQuarter * 60,
-        timerLastStart: undefined
-      });
+        
+        // Aquí guardamos la configuración completa que viene del hook
+        config: config, 
 
+        // Inicializamos marcadores en 0
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0
+      };
+
+      // --- LOGICA ESPECÍFICA POR MODO ---
+      
+      // A. MODO TRADICIONAL (Necesita tiempo y cuartos)
+      if (config.mode === 'traditional' && config.traditional) {
+        matchData.currentQuarter = 1;
+        // Convertimos minutos a segundos para el timer
+        matchData.timerSecondsRemaining = config.traditional.minutesPerQuarter * 60;
+        matchData.timerLastStart = undefined;
+        
+        // Campos legacy para compatibilidad (opcional, pero recomendado por ahora)
+        matchData.totalQuarters = config.traditional.totalQuarters;
+        matchData.quarterDuration = config.traditional.minutesPerQuarter;
+      }
+
+      // B. MODOS SIN RELOJ (Race / Best Of)
+      if (config.mode === 'race' || config.mode === 'best-of-series') {
+        // Inicializamos historial de juegos/sets vacío
+        matchData.gameHistory = [];
+        // No definimos timerSecondsRemaining, el sistema entenderá que no hay reloj
+      }
+
+      // Guardar en BD
+      const matchId = await db.matches.add(matchData);
+      
+      // Redirigir a la pantalla de juego
       navigate(`/live/${matchId}`);
 
     } catch (err) {
@@ -82,7 +118,7 @@ export function NewMatch() {
     }
   };
 
-  // Si teams es undefined (cargando), mostramos null para evitar errores de render
+  // Evitar render si cargando
   if (teams === undefined) return null;
 
   return (
@@ -92,7 +128,7 @@ export function NewMatch() {
         Nuevo Partido
       </h1>
 
-      {/* --- ERROR FEEDBACK --- */}
+      {/* Banner de Error */}
       {error && (
         <div className="error-banner">
           <AlertCircle size={20} />
@@ -102,8 +138,6 @@ export function NewMatch() {
 
       {/* --- SELECCIÓN DE EQUIPOS (Faceoff) --- */}
       <div className="match-faceoff">
-        
-        {/* Local */}
         <div className="team-select-wrapper">
           <label className="team-select-label">Equipo Local</label>
           <select
@@ -119,10 +153,8 @@ export function NewMatch() {
           </select>
         </div>
 
-        {/* VS Badge */}
         <div className="vs-badge">VS</div>
 
-        {/* Visitante */}
         <div className="team-select-wrapper">
           <label className="team-select-label" style={{ textAlign: 'right' }}>
             Equipo Visitante
@@ -141,56 +173,49 @@ export function NewMatch() {
         </div>
       </div>
 
-      {/* --- CONFIGURACIÓN --- */}
-      <div className="card">
-        <div className="flex-gap mb-4" style={{ marginBottom: '1rem' }}>
-          <Settings size={20} color="var(--text-muted)" />
-          <h3 style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Reglas del Juego</h3>
-        </div>
+      {/* --- SELECTOR DE MODO DE JUEGO --- */}
+      <GameModeSelector 
+        selectedMode={config.mode} 
+        onModeChange={changeMode} 
+      />
 
-        <div className="config-grid">
-          <div>
-            <label className="label">Periodos</label>
-            <input 
-              type="number" 
-              min="1" 
-              max="8"
-              className="input input-number"
-              value={config.totalQuarters}
-              onChange={(e) => setConfig({...config, totalQuarters: Number(e.target.value)})}
-            />
-          </div>
-          <div>
-            <label className="label">Minutos / Periodo</label>
-            <input 
-              type="number" 
-              min="1" 
-              max="30"
-              className="input input-number"
-              value={config.minutesPerQuarter}
-              onChange={(e) => setConfig({...config, minutesPerQuarter: Number(e.target.value)})}
-            />
-          </div>
-        </div>
+      {/* --- CONFIGURACIÓN ESPECÍFICA (Render Condicional) --- */}
+      {config.mode === 'traditional' && config.traditional && (
+        <TraditionalConfigComponent
+          config={config.traditional}
+          onChange={updateTraditional}
+        />
+      )}
 
-        {/* Info de configuración */}
-        <div style={{ 
-          marginTop: '1rem', 
-          padding: '0.75rem', 
-          background: 'rgba(249, 115, 22, 0.05)',
-          border: '1px solid rgba(249, 115, 22, 0.2)',
-          borderRadius: '8px',
-          fontSize: '0.85rem',
-          color: 'var(--text-muted)'
-        }}>
-          <strong style={{ color: 'var(--primary)' }}>Duración total:</strong> {config.totalQuarters * config.minutesPerQuarter} minutos
-        </div>
-      </div>
+      {config.mode === 'race' && config.race && (
+        <RaceConfigComponent
+          config={config.race}
+          onChange={updateRace}
+        />
+      )}
 
-      {/* --- BOTÓN DE ACCIÓN --- */}
+      {config.mode === 'best-of-series' && config.bestOf && (
+        <BestOfConfigComponent
+          config={config.bestOf}
+          onChange={updateBestOf}
+        />
+      )}
+
+      {/* --- RESUMEN --- */}
+      <ConfigSummary config={config} />
+
+      {/* Mostrar error de validación específico si existe */}
+      {!isValid && validation.errors.length > 0 && (
+        <div className="error-banner" style={{marginBottom: '1rem'}}>
+          <AlertCircle size={20} />
+          {validation.errors[0]}
+        </div>
+      )}
+
+      {/* --- BOTÓN DE INICIO --- */}
       <button
         onClick={handleStartMatch}
-        disabled={isCreating}
+        disabled={isCreating || !isValid}
         className="btn btn-primary w-full"
         style={{ padding: '1rem', fontSize: '1.1rem' }}
       >
@@ -204,7 +229,7 @@ export function NewMatch() {
         )}
       </button>
 
-      {/* Info extra si no hay equipos */}
+      {/* Warning si no hay equipos suficientes */}
       {teams.length < 2 && (
         <p className="warning-banner">
           Necesitas al menos 2 equipos activos para jugar. <br/>

@@ -12,6 +12,7 @@ export class BasketControlDB extends Dexie {
     constructor() {
         super('basket_control_db');
 
+        // Versiones anteriores (mantener para compatibilidad)
         this.version(2).stores({
             teams: '++id, name, createdAt',
             players: '++id, teamId, name',
@@ -40,23 +41,17 @@ export class BasketControlDB extends Dexie {
             });
         });
 
-        // --- 🟢 VERSIÓN 6: Migración para Desnormalización ---
         this.version(6).stores({
-            // No cambiamos índices, pero definimos la versión para ejecutar el upgrade
             matches: '++id, status, createdAt, totalQuarters' 
         }).upgrade(async tx => {
-            // 1. Obtenemos todos los datos necesarios
             const matches = await tx.table('matches').toArray();
             const scores = await tx.table('scores').toArray();
             const fouls = await tx.table('fouls').toArray();
 
-            // 2. Iteramos cada partido para calcular sus totales
             for (const m of matches) {
-                // Filtrar scores y fouls de este partido
                 const mScores = scores.filter((s: Score) => s.matchId === m.id);
                 const mFouls = fouls.filter((f: Foul) => f.matchId === m.id);
 
-                // Calcular totales
                 const localScore = mScores
                     .filter((s: Score) => s.teamId === m.localTeamId)
                     .reduce((acc: number, curr: Score) => acc + curr.points, 0);
@@ -71,13 +66,41 @@ export class BasketControlDB extends Dexie {
                 const visitorFouls = mFouls
                     .filter((f: Foul) => f.teamId === m.visitorTeamId).length;
 
-                // Actualizar el partido
                 await tx.table('matches').update(m.id, {
                     localScore,
                     visitorScore,
                     localFouls,
                     visitorFouls
                 });
+            }
+        });
+
+        // 🆕 VERSIÓN 7: Migración a nuevo sistema de configuración
+        this.version(7).stores({
+            matches: '++id, status, createdAt, config.mode'
+        }).upgrade(async tx => {
+            const matches = await tx.table('matches').toArray();
+            
+            for (const match of matches) {
+                // Crear configuración tradicional desde campos legacy
+                const config = {
+                    mode: 'traditional' as const,
+                    traditional: {
+                        totalQuarters: match.totalQuarters || 4,
+                        minutesPerQuarter: match.quarterDuration || 10
+                    }
+                };
+                
+                // Asegurar que los scores existan (si no hay migración previa)
+                const updates: any = { 
+                    config,
+                    localScore: match.localScore ?? 0,
+                    visitorScore: match.visitorScore ?? 0,
+                    localFouls: match.localFouls ?? 0,
+                    visitorFouls: match.visitorFouls ?? 0
+                };
+                
+                await tx.table('matches').update(match.id, updates);
             }
         });
     }

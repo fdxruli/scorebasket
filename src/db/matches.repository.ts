@@ -1,16 +1,30 @@
 import { db } from './db';
+import type { Match, MatchConfig } from './models';
 
 export const MatchesRepository = {
     async create(localTeamId: number, visitorTeamId: number, quarterDuration: number = 10, totalQuarters: number = 4) {
         return db.matches.add({
             localTeamId,
             visitorTeamId,
-            currentQuarter: 1,
             status: 'created',
             createdAt: new Date(),
+            // 🆕 Nueva estructura de configuración
+            config: {
+                mode: 'traditional',
+                traditional: {
+                    totalQuarters,
+                    minutesPerQuarter: quarterDuration
+                }
+            },
+            localScore: 0,
+            visitorScore: 0,
+            localFouls: 0,
+            visitorFouls: 0,
+            currentQuarter: 1,
+            timerSecondsRemaining: quarterDuration * 60,
+            // Mantener temporalmente para compatibilidad si es necesario
             quarterDuration,
-            totalQuarters, // 🆕 Guardamos la configuración
-            timerSecondsRemaining: quarterDuration * 60
+            totalQuarters
         });
     },
 
@@ -28,12 +42,16 @@ export const MatchesRepository = {
         });
     },
 
+    async getById(matchId: number) {
+        return db.matches.get(matchId);
+    },
+
     // 🟢 NUEVO — iniciar reloj
     async startTimer(matchId: number) {
         const match = await db.matches.get(matchId);
         if (!match) return;
 
-        if (match.timerSecondsRemaining <= 0) return;
+        if ((match.timerSecondsRemaining ?? 0) <= 0) return;
 
         await db.matches.update(matchId, {
             timerLastStart: new Date(),
@@ -53,7 +71,7 @@ export const MatchesRepository = {
             timerLastStart: undefined,
             timerSecondsRemaining: Math.max(
                 0,
-                match.timerSecondsRemaining - elapsed
+                (match.timerSecondsRemaining ?? 0) - elapsed
             )
         });
     },
@@ -63,14 +81,18 @@ export const MatchesRepository = {
         const match = await db.matches.get(matchId);
         if (!match) return;
 
-        // Validar que no excedamos el número de cuartos configurados
-        if (match.currentQuarter >= match.totalQuarters) {
-            throw new Error(`Ya se completaron los ${match.totalQuarters} cuartos reglamentarios`);
+        // Usamos el helper o accedemos a la config de forma segura
+        const totalQuarters = match.config?.traditional?.totalQuarters ?? match.totalQuarters ?? 4;
+        const currentQuarter = match.currentQuarter ?? 1;
+        const quarterDuration = match.config?.traditional?.minutesPerQuarter ?? match.quarterDuration ?? 10;
+
+        if (currentQuarter >= totalQuarters) {
+            throw new Error(`Ya se completaron los ${totalQuarters} cuartos reglamentarios`);
         }
 
         await db.matches.update(matchId, {
-            currentQuarter: match.currentQuarter + 1,
-            timerSecondsRemaining: match.quarterDuration * 60,
+            currentQuarter: currentQuarter + 1,
+            timerSecondsRemaining: quarterDuration * 60,
             timerLastStart: undefined
         });
     },
@@ -80,11 +102,26 @@ export const MatchesRepository = {
         const match = await db.matches.get(matchId);
         if (!match) return;
 
+        // Obtenemos el cuarto actual de forma segura (fallback a 1 si es undefined)
+        const currentQuarter = match.currentQuarter ?? 1;
+
         await db.matches.update(matchId, {
-            currentQuarter: match.currentQuarter + 1,
+            currentQuarter: currentQuarter + 1,
             timerSecondsRemaining: overtimeDuration * 60,
-            quarterDuration: overtimeDuration, // Actualizar duración para overtime
-            timerLastStart: undefined
+            timerLastStart: undefined,
+
+            // 🆕 También actualizamos la configuración interna para que el timer 
+            // sepa que la duración "reglamentaria" cambió en este periodo
+            config: {
+                ...match.config,
+                traditional: match.config.traditional ? {
+                    ...match.config.traditional,
+                    minutesPerQuarter: overtimeDuration
+                } : undefined
+            },
+
+            // Mantenemos este para compatibilidad si aún usas el campo legacy
+            quarterDuration: overtimeDuration
         });
     },
 

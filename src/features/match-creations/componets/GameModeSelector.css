@@ -1,0 +1,135 @@
+/* src/features/match-creation/components/GameModeSelector.css */
+
+.game-mode-selector {
+  margin-bottom: 2rem;
+}
+
+.mode-selector-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.mode-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .mode-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- TARJETA DE MODO --- */
+.mode-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background-color: var(--bg-surface);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.mode-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: transparent;
+  transition: background 0.3s;
+}
+
+.mode-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--text-muted);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
+}
+
+/* Estado Activo */
+.mode-card.active {
+  border-color: var(--primary);
+  background: linear-gradient(to bottom, rgba(249, 115, 22, 0.05), transparent);
+}
+
+.mode-card.active.blue::before { background: #3b82f6; }
+.mode-card.active.orange::before { background: var(--primary); }
+.mode-card.active.green::before { background: var(--success); }
+
+/* Icono */
+.mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 1rem;
+  transition: all 0.3s;
+}
+
+.mode-card.blue .mode-icon { color: #3b82f6; }
+.mode-card.orange .mode-icon { color: var(--primary); }
+.mode-card.green .mode-icon { color: var(--success); }
+
+.mode-card.active .mode-icon {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+/* Info */
+.mode-info {
+  flex: 1;
+}
+
+.mode-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.mode-description {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Checkmark */
+.mode-checkmark {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  animation: checkPop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}

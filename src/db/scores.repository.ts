@@ -12,16 +12,21 @@ export const ScoresRepository = {
     async add(input: AddScoreInput): Promise<number> {
         return db.transaction('rw', db.scores, db.matches, async () => {
             const match = await db.matches.get(input.matchId);
+
             if (!match) throw new Error('El partido no existe');
             if (match.status === 'finished') throw new Error('El partido ha finalizado');
+
+            // 1. Validar que el equipo pertenezca al partido
             if (input.teamId !== match.localTeamId && input.teamId !== match.visitorTeamId) {
                 throw new Error('El equipo no corresponde a este partido');
             }
-            if (!match.timerLastStart || match.timerSecondsRemaining <= 0) {
+
+            // 2. 🛡️ CORRECCIÓN: Validar reloj y tiempo restante (con fallback a 0)
+            if (!match.timerLastStart || (match.timerSecondsRemaining ?? 0) <= 0) {
                 throw new Error('Debes reanudar el reloj para anotar puntos.');
             }
 
-            // 1. Agregar Score
+            // 3. Agregar el Score
             const scoreId = await db.scores.add({
                 matchId: input.matchId,
                 teamId: input.teamId,
@@ -31,19 +36,18 @@ export const ScoresRepository = {
                 createdAt: new Date()
             });
 
-            // 2. 🟢 Actualizar Match (Desnormalización)
+            // 4. 🟢 ACTUALIZAR MATCH (Marcador acumulado)
+            // Esto es vital para que Matches.tsx muestre el score sin recalcular todo
             const isLocal = input.teamId === match.localTeamId;
-            const updatePayload = isLocal 
+            const updatePayload = isLocal
                 ? { localScore: (match.localScore || 0) + input.points }
                 : { visitorScore: (match.visitorScore || 0) + input.points };
-            
+
             await db.matches.update(input.matchId, updatePayload);
 
             return scoreId;
         });
     },
-
-    // ... (Mantén getByMatch, getByMatchAndQuarter, getScoreboard iguales) ...
 
     async removeLast(matchId: number): Promise<void> {
         return db.transaction('rw', db.scores, db.matches, async () => {
@@ -56,21 +60,19 @@ export const ScoresRepository = {
             if (lastArray.length === 0) return;
             const lastScore = lastArray[0];
 
-            // 1. Borrar Score
+            // 1. Borrar de la tabla Scores
             await db.scores.delete(lastScore.id!);
 
-            // 2. 🟢 Restar del Match
+            // 2. 🟢 RESTAR DEL MATCH (Para mantener sincronía)
             const match = await db.matches.get(matchId);
             if (match) {
                 const isLocal = lastScore.teamId === match.localTeamId;
                 const currentScore = isLocal ? (match.localScore || 0) : (match.visitorScore || 0);
-                // Evitar negativos por seguridad
-                const newScore = Math.max(0, currentScore - lastScore.points);
 
-                const updatePayload = isLocal 
-                    ? { localScore: newScore }
-                    : { visitorScore: newScore };
-                
+                const updatePayload = isLocal
+                    ? { localScore: Math.max(0, currentScore - lastScore.points) }
+                    : { visitorScore: Math.max(0, currentScore - lastScore.points) };
+
                 await db.matches.update(matchId, updatePayload);
             }
         });

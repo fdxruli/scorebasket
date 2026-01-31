@@ -1,5 +1,5 @@
 // src/config/validations.ts
-import type { MatchConfig } from '../db/models';
+import type { MatchConfig } from '../db/models/MatchConfig';
 
 /**
  * Límites y reglas de validación

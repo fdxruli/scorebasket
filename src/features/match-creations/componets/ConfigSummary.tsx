@@ -1,6 +1,6 @@
 // src/features/match-creation/components/ConfigSummary.tsx
 import { Clock, Target, Trophy, Calendar } from 'lucide-react';
-import type { MatchConfig } from '../../../db/models';
+import type { MatchConfig } from '../../../db/models/MatchConfig';
 import { getModeName } from '../../../utils/matchHelpers';
 import './ConfigSummary.css';
 

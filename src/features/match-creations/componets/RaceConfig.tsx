@@ -1,6 +1,6 @@
 // src/features/match-creation/components/RaceConfig.tsx
 import { Target, RotateCcw, Info } from 'lucide-react';
-import type { RaceConfig } from '../../../db/models';
+import type { RaceConfig } from '../../../db/models/MatchConfig';
 import { MODE_OPTIONS } from '../../../config/gamePresets';
 import './ModeConfig.css';
 

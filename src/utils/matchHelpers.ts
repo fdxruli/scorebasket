@@ -1,5 +1,5 @@
-// src/utils/matchHelpers.ts
-import type { Match, MatchConfig } from '../db/models';
+import type { Match } from '../db/models/Match';
+import type { MatchConfig } from '../db/models/MatchConfig';
 
 /**
  * Helper para obtener la configuración tradicional de forma segura

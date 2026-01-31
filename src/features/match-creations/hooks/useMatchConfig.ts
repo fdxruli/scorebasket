@@ -1,6 +1,6 @@
 // src/features/match-creation/hooks/useMatchConfig.ts
 import { useState, useCallback } from 'react';
-import type { MatchConfig, GameMode } from '../../../db/models';
+import type { MatchConfig, GameMode } from '../../../db/models/MatchConfig';
 import { getDefaultConfig, validateMatchConfig } from '../../../config/validations';
 
 export function useMatchConfig(initialMode: GameMode = 'traditional') {

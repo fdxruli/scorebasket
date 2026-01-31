@@ -1,6 +1,10 @@
 // src/db/db.ts
 import Dexie, { type Table } from 'dexie';
-import type { Team, Player, Match, Score, Foul } from './models';
+import type { Team } from './models/Team';
+import type { Player } from './models/Player';
+import type { Match } from './models/Match';
+import type { Score } from './models/Score';
+import type { Foul } from './models/Foul';
 
 export class BasketControlDB extends Dexie {
     teams!: Table<Team>;

@@ -1,6 +1,6 @@
 // src/features/match-creation/components/BestOfConfig.tsx
 import { Trophy, Target, Info } from 'lucide-react';
-import type { BestOfConfig } from '../../../db/models';
+import type { BestOfConfig } from '../../../db/models/MatchConfig';
 import { MODE_OPTIONS } from '../../../config/gamePresets';
 import './ModeConfig.css';
 

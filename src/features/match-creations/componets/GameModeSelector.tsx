@@ -1,6 +1,6 @@
 // src/features/match-creation/components/GameModeSelector.tsx
 import { Clock, Target, Trophy } from 'lucide-react';
-import type { GameMode } from '../../../db/models';
+import type { GameMode } from '../../../db/models/MatchConfig';
 import './GameModeSelector.css';
 
 interface GameModeSelectorProps {

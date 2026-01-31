@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Match } from '../../../db/models';
+import type { Match } from '../../../db/models/Match';
 import { db } from '../../../db/db';
 
 interface UseRaceLogicProps {

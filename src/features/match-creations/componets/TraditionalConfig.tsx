@@ -1,5 +1,5 @@
 import { Clock, Info } from 'lucide-react';
-import type { TraditionalConfig } from '../../../db/models';
+import type { TraditionalConfig } from '../../../db/models/MatchConfig';
 import { MODE_OPTIONS } from '../../../config/gamePresets';
 import './ModeConfig.css';
 

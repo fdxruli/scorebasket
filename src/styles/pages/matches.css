@@ -226,3 +226,76 @@
   padding: 3rem 1rem;
   background: radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 60%);
 }
+
+/* Estilos de tabla historial*/
+
+/* Grid contenedor */
+.report-quarters-grid {
+    display: grid;
+    /* Las columnas se definen inline en el JSX para ser dinámicas */
+    gap: 12px 0; /* Espacio vertical entre filas */
+    align-items: center;
+    width: 100%;
+    min-width: 100%; /* Asegura que ocupe el espacio disponible */
+}
+
+/* Estilo base de celdas */
+.q-cell {
+    font-size: 0.95rem;
+    text-align: center;
+    padding: 0 4px;
+}
+
+/* Cabeceras (Q1, Q2, Set 1...) */
+.q-cell.head {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--muted-foreground, #888); /* Color gris suave */
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+}
+
+/* Nombres de Equipos */
+.q-cell.team-name {
+    text-align: left;
+    font-weight: 600;
+    padding-left: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Puntos suspensivos si es muy largo */
+    border-radius: 4px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+}
+
+/* Colores específicos para distinguir equipos */
+.q-cell.team-name.local {
+    color: var(--secondary); /* Tu color para local */
+    background: linear-gradient(90deg, rgba(var(--secondary-rgb), 0.1) 0%, transparent 100%);
+    border-left: 3px solid var(--secondary);
+}
+
+.q-cell.team-name.visitor {
+    color: var(--primary); /* Tu color para visita */
+    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.1) 0%, transparent 100%);
+    border-left: 3px solid var(--primary);
+}
+
+/* Valores de Puntos (Cuartos/Sets) */
+.q-cell.score-val {
+    font-family: 'Monospace', monospace; /* Para tabular mejor los números */
+    font-weight: 500;
+    color: var(--foreground);
+    opacity: 0.9;
+}
+
+/* Columna Total */
+.q-cell.total-val {
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--foreground);
+}

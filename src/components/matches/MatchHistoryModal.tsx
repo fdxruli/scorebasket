@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { X, Calendar, BarChart2, Users } from 'lucide-react';
+import { X, Calendar, BarChart2, Users, Target, Layers } from 'lucide-react';
 
 interface MatchHistoryModalProps {
     matchId: number;
@@ -18,7 +18,7 @@ interface PlayerStat {
 }
 
 export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) {
-    
+
     // --- 1. CARGA DE DATOS ---
     const data = useLiveQuery(async () => {
         const match = await db.matches.get(matchId);
@@ -32,60 +32,77 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             db.players.where('teamId').anyOf([match.localTeamId, match.visitorTeamId]).toArray()
         ]);
 
-        return { 
-            match, 
-            localTeam, 
-            visitorTeam, 
-            scores: scores || [], 
-            fouls: fouls || [], 
-            players: players || [] 
+        return {
+            match,
+            localTeam,
+            visitorTeam,
+            scores: scores || [],
+            fouls: fouls || [],
+            players: players || []
         };
     }, [matchId]);
 
-    // --- 2. CÁLCULOS ---
+    // --- 2. CÁLCULOS Y LÓGICA DE MODO ---
     const stats = useMemo(() => {
         if (!data) return null;
         const { match, scores, fouls, players } = data;
+        const mode = match.config?.mode || 'traditional';
 
-        // A. Totales
-        const localPoints = scores.filter(s => s.teamId === match.localTeamId).reduce((a, b) => a + b.points, 0);
-        const visitorPoints = scores.filter(s => s.teamId === match.visitorTeamId).reduce((a, b) => a + b.points, 0);
+        // A. Totales de Puntos (Siempre útil para stats de jugador)
+        const localPointsTotal = scores.filter(s => s.teamId === match.localTeamId).reduce((a, b) => a + b.points, 0);
+        const visitorPointsTotal = scores.filter(s => s.teamId === match.visitorTeamId).reduce((a, b) => a + b.points, 0);
 
-        // B. Cuartos
+        // B. Lógica de Marcador Principal (Big Score)
+        let mainLocalScore = localPointsTotal;
+        let mainVisitorScore = visitorPointsTotal;
+
+        // Si es SERIES, el marcador principal son los SETS GANADOS
+        if (mode === 'best-of-series') {
+            mainLocalScore = match.config.bestOf?.wins?.local || 0;
+            mainVisitorScore = match.config.bestOf?.wins?.visitor || 0;
+        }
+
+        // C. Lógica de la Tabla (Cuartos / Sets)
         const safeScores = scores || [];
         const safeFouls = fouls || [];
-        
+
+        // Determinar qué periodos existen realmente en los datos
         const quartersSet = new Set([
-            ...safeScores.map(s => s.quarter), 
+            ...safeScores.map(s => s.quarter),
             ...safeFouls.map(f => f.quarter)
         ]);
+        const maxDataQuarter = Math.max(...Array.from(quartersSet), 0);
 
-        const maxQuarter = Math.max(
-            match.totalQuarters || 4, 
-            match.currentQuarter || 1, 
-            ...Array.from(quartersSet),
-            0
-        );
-        
-        const quarterStats = [];
-        for (let q = 1; q <= maxQuarter; q++) {
-            quarterStats.push({
-                q,
+        // Definir límite visual de la tabla según el modo
+        let maxDisplayPeriod = maxDataQuarter;
+
+        if (mode === 'traditional') {
+            // En tradicional, mostramos al menos los configurados (ej: 4)
+            const configQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
+            maxDisplayPeriod = Math.max(maxDataQuarter, configQuarters);
+        }
+        // En 'best-of-series' y 'race', maxDisplayPeriod se basa puramente en los datos jugados (maxDataQuarter)
+        // para evitar mostrar "Sets" vacíos que no ocurrieron.
+
+        const periodStats = [];
+        for (let q = 1; q <= maxDisplayPeriod; q++) {
+            periodStats.push({
+                period: q,
                 local: safeScores.filter(s => s.teamId === match.localTeamId && s.quarter === q).reduce((a, b) => a + b.points, 0),
                 visitor: safeScores.filter(s => s.teamId === match.visitorTeamId && s.quarter === q).reduce((a, b) => a + b.points, 0),
             });
         }
 
-        // C. Estadísticas por Jugador
+        // D. Estadísticas por Jugador
         const processTeamStats = (teamId: number): PlayerStat[] => {
             if (!players) return [];
             const teamPlayers = players.filter(p => p.teamId === teamId);
-            
+
             return teamPlayers.map(p => {
                 const pPoints = safeScores
                     .filter(s => s.playerId === p.id)
                     .reduce((acc, curr) => acc + curr.points, 0);
-                
+
                 const pFouls = safeFouls
                     .filter(f => f.playerId === p.id)
                     .length;
@@ -98,56 +115,68 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                     fouls: pFouls
                 };
             })
-            .filter(p => p.points > 0 || p.fouls > 0) // Mostrar solo si jugaron
-            .sort((a, b) => b.points - a.points);
+                .filter(p => p.points > 0 || p.fouls > 0) // Mostrar solo si participaron
+                .sort((a, b) => b.points - a.points);
         };
 
-        return { 
-            localPoints, 
-            visitorPoints, 
-            quarterStats, 
+        return {
+            mainLocalScore,
+            mainVisitorScore,
+            localPointsTotal,
+            visitorPointsTotal,
+            periodStats,
             localStats: processTeamStats(match.localTeamId),
-            visitorStats: processTeamStats(match.visitorTeamId)
+            visitorStats: processTeamStats(match.visitorTeamId),
+            mode
         };
     }, [data]);
 
     if (!data || !stats) return null;
     const { match, localTeam, visitorTeam } = data;
-    const localWon = stats.localPoints > stats.visitorPoints;
-    const visitorWon = stats.visitorPoints > stats.localPoints;
+
+    // Determinar ganador visual
+    const localWon = stats.mainLocalScore > stats.mainVisitorScore;
+    const visitorWon = stats.mainVisitorScore > stats.mainLocalScore;
 
     const formatDate = (date: Date) => {
         try {
             return new Intl.DateTimeFormat('es-MX', {
-              weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+                weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
             }).format(date);
-        } catch (e) {
-            return date.toLocaleDateString();
-        }
+        } catch (e) { return ""; }
+    };
+
+    // Helper para etiquetas de la tabla
+    const getPeriodLabel = (p: number) => {
+        if (stats.mode === 'best-of-series') return `Set ${p}`;
+        if (stats.mode === 'race') return `Juego`;
+        return `Q${p}`;
+    };
+
+    const getModeIcon = () => {
+        if (stats.mode === 'best-of-series') return <Layers size={14} />;
+        if (stats.mode === 'race') return <Target size={14} />;
+        return <BarChart2 size={14} />;
+    };
+
+    const getModeTitle = () => {
+        if (stats.mode === 'best-of-series') return 'Desglose por Sets';
+        if (stats.mode === 'race') return 'Puntuación Final';
+        return 'Desglose por Periodos';
     };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            {/* Se usa 'variant-report' definido en modals.css */}
             <div className="modal-content variant-report" onClick={e => e.stopPropagation()}>
-                
-                {/* 1. HEADER ESTÁNDAR (Usando clases de modals.css) */}
+
+                {/* 1. HEADER */}
                 <div className="modal-header">
                     <div className="flex flex-col">
-                        <span style={{ 
-                            fontSize: '0.75rem', 
-                            fontWeight: 700, 
-                            color: 'var(--text-muted)', 
-                            textTransform: 'uppercase', 
-                            letterSpacing: '1px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem'
-                        }}>
+                        <span className="text-xs font-bold text-muted uppercase tracking-widest flex items-center gap-2">
                             <Calendar size={12} />
                             {formatDate(match.createdAt)}
                         </span>
-                        <h2 className="modal-title" style={{ marginTop: '0.25rem' }}>
+                        <h2 className="modal-title mt-1">
                             Resumen Oficial
                         </h2>
                     </div>
@@ -156,147 +185,93 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                     </button>
                 </div>
 
-                {/* 2. MARCADOR GRANDE (Panel destacado) */}
+                {/* 2. MARCADOR PRINCIPAL (ADAPTABLE) */}
                 <div className="report-score-panel">
-                    {/* Local (Azul - Secondary) */}
+                    {/* Local */}
                     <div className={`report-team ${localWon ? 'is-winner' : ''}`}>
                         <span className="report-team-name">{localTeam?.name || 'Local'}</span>
-                        <span className="report-score-big">{stats.localPoints}</span>
+                        <span className="report-score-big">{stats.mainLocalScore}</span>
                     </div>
 
-                    <div className="report-vs">VS</div>
+                    <div className="report-vs">
+                        {stats.mode === 'best-of-series' ? 'SETS' : 'VS'}
+                    </div>
 
-                    {/* Visita (Naranja - Primary) */}
+                    {/* Visita */}
                     <div className={`report-team ${visitorWon ? 'is-winner' : ''}`}>
                         <span className="report-team-name">{visitorTeam?.name || 'Visita'}</span>
-                        <span className="report-score-big">{stats.visitorPoints}</span>
+                        <span className="report-score-big">{stats.mainVisitorScore}</span>
                     </div>
                 </div>
 
                 {/* 3. CUERPO SCROLLABLE */}
-                <div className="modal-body" style={{ padding: 0, paddingBottom: '2rem' }}>
+                <div className="modal-body p-0 pb-8">
                     <div className="report-section">
-                        
-                        {/* TABLA DE CUARTOS */}
-                        <div className="report-subtitle">
-                            <BarChart2 size={14} /> Desglose por Periodos
-                        </div>
-                        
-                        <div 
-                            className="report-quarters-grid" 
-                            style={{ gridTemplateColumns: `100px repeat(${stats.quarterStats.length}, 1fr) 50px` }}
-                        >
-                            {/* Header Row */}
-                            <div className="q-cell head">Equipo</div>
-                            {stats.quarterStats.map(qs => <div key={qs.q} className="q-cell head">Q{qs.q}</div>)}
-                            <div className="q-cell head">T</div>
 
-                            {/* Local Row */}
-                            <div className="q-cell team-name" style={{ color: 'var(--secondary)' }}>
-                                {localTeam?.name?.substring(0,10)}
-                            </div>
-                            {stats.quarterStats.map(qs => <div key={`l-${qs.q}`} className="q-cell">{qs.local}</div>)}
-                            <div className="q-cell total">{stats.localPoints}</div>
+                        {/* TABLA DINÁMICA DE PERIODOS / SETS */}
+                        {stats.periodStats.length > 0 && (
+                            <>
+                                <div className="report-subtitle mb-4">
+                                    {getModeIcon()} {getModeTitle()}
+                                </div>
 
-                            {/* Visitor Row */}
-                            <div className="q-cell team-name" style={{ color: 'var(--primary)' }}>
-                                {visitorTeam?.name?.substring(0,10)}
-                            </div>
-                            {stats.quarterStats.map(qs => <div key={`v-${qs.q}`} className="q-cell">{qs.visitor}</div>)}
-                            <div className="q-cell total">{stats.visitorPoints}</div>
-                        </div>
+                                {/* CONTENEDOR CON SCROLL HORIZONTAL (por si hay muchos sets) */}
+                                <div className="overflow-x-auto pb-2">
+                                    <div
+                                        className="report-quarters-grid"
+                                        style={{
+                                            // MEJORA CLAVE:
+                                            // 1. Nombre: minmax(140px, 2fr) -> Mínimo 140px, pero puede crecer.
+                                            // 2. Periodos: minmax(45px, 1fr) -> Ancho cómodo para números.
+                                            // 3. Total: minmax(70px, 0.5fr) -> Espacio fijo para el total.
+                                            gridTemplateColumns: `minmax(140px, 2fr) repeat(${stats.periodStats.length}, minmax(45px, 1fr)) minmax(70px, 0.5fr)`
+                                        }}
+                                    >
+                                        {/* --- HEADER --- */}
+                                        <div className="q-cell head text-left pl-2">Equipo</div>
+                                        {stats.periodStats.map(qs => (
+                                            <div key={qs.period} className="q-cell head">
+                                                {getPeriodLabel(qs.period)}
+                                            </div>
+                                        ))}
+                                        <div className="q-cell head">Total</div>
 
+                                        {/* --- FILA LOCAL --- */}
+                                        <div className="q-cell team-name local">
+                                            {localTeam?.name || 'Local'}
+                                        </div>
+                                        {stats.periodStats.map(qs => (
+                                            <div key={`l-${qs.period}`} className="q-cell score-val">
+                                                {qs.local}
+                                            </div>
+                                        ))}
+                                        <div className="q-cell total-val">{stats.localPointsTotal}</div>
 
-                        {/* ESTADÍSTICAS DETALLADAS (BOX SCORE) */}
-                        <div className="report-subtitle" style={{ marginTop: '2rem' }}>
+                                        {/* --- FILA VISITANTE --- */}
+                                        <div className="q-cell team-name visitor">
+                                            {visitorTeam?.name || 'Visita'}
+                                        </div>
+                                        {stats.periodStats.map(qs => (
+                                            <div key={`v-${qs.period}`} className="q-cell score-val">
+                                                {qs.visitor}
+                                            </div>
+                                        ))}
+                                        <div className="q-cell total-val">{stats.visitorPointsTotal}</div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ESTADÍSTICAS JUGADORES (BOX SCORE) */}
+                        <div className="report-subtitle mt-8">
                             <Users size={14} /> Estadísticas de Jugadores
                         </div>
 
-                        {/* GRUPO LOCAL (Usando variables CSS para bordes y colores) */}
-                        <div className="stats-group">
-                            <h4 
-                                style={{ 
-                                    fontSize: '0.85rem', 
-                                    fontWeight: 700, 
-                                    color: 'var(--secondary)', 
-                                    borderBottom: '1px solid var(--secondary-bg)',
-                                    paddingBottom: '0.25rem',
-                                    marginBottom: '0.5rem',
-                                    paddingLeft: '0.5rem'
-                                }}
-                            >
-                                {localTeam?.name}
-                            </h4>
-                            <div className="stats-header-row">
-                                <span>Jugador</span>
-                                <div className="flex gap-4">
-                                    <span style={{ width: '40px', textAlign: 'center' }} title="Faltas Personales">FAL</span>
-                                    <span style={{ width: '40px', textAlign: 'center' }} title="Puntos">PTS</span>
-                                </div>
-                            </div>
-                            {stats.localStats.length === 0 ? (
-                                <p className="text-muted" style={{ fontSize: '0.8rem', padding: '0.5rem', fontStyle: 'italic' }}>Sin registros.</p>
-                            ) : stats.localStats.map(p => (
-                                <div key={p.id} className="stat-player-row">
-                                    <div className="player-info">
-                                        <span className="player-num">{p.number ?? '-'}</span>
-                                        <span className="player-name">{p.name}</span>
-                                    </div>
-                                    <div className="stat-numbers">
-                                        <span 
-                                            className="stat-col fls"
-                                            style={{ color: p.fouls >= 5 ? 'var(--danger)' : 'inherit', fontWeight: p.fouls >= 5 ? 700 : 400 }}
-                                        >
-                                            {p.fouls > 0 ? '●'.repeat(p.fouls) : '-'}
-                                        </span>
-                                        <span className="stat-col pts">{p.points}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        {/* GRUPO LOCAL */}
+                        <TeamStatsGroup teamName={localTeam?.name} stats={stats.localStats} color="var(--secondary)" />
 
                         {/* GRUPO VISITANTE */}
-                        <div className="stats-group">
-                             <h4 
-                                style={{ 
-                                    fontSize: '0.85rem', 
-                                    fontWeight: 700, 
-                                    color: 'var(--primary)', 
-                                    borderBottom: '1px solid rgba(249, 115, 22, 0.2)', /* Primary con opacidad manual o var */
-                                    paddingBottom: '0.25rem',
-                                    marginBottom: '0.5rem',
-                                    paddingLeft: '0.5rem'
-                                }}
-                            >
-                                {visitorTeam?.name}
-                            </h4>
-                            <div className="stats-header-row">
-                                <span>Jugador</span>
-                                <div className="flex gap-4">
-                                    <span style={{ width: '40px', textAlign: 'center' }}>FAL</span>
-                                    <span style={{ width: '40px', textAlign: 'center' }}>PTS</span>
-                                </div>
-                            </div>
-                            {stats.visitorStats.length === 0 ? (
-                                <p className="text-muted" style={{ fontSize: '0.8rem', padding: '0.5rem', fontStyle: 'italic' }}>Sin registros.</p>
-                            ) : stats.visitorStats.map(p => (
-                                <div key={p.id} className="stat-player-row">
-                                    <div className="player-info">
-                                        <span className="player-num">{p.number ?? '-'}</span>
-                                        <span className="player-name">{p.name}</span>
-                                    </div>
-                                    <div className="stat-numbers">
-                                        <span 
-                                            className="stat-col fls"
-                                            style={{ color: p.fouls >= 5 ? 'var(--danger)' : 'inherit', fontWeight: p.fouls >= 5 ? 700 : 400 }}
-                                        >
-                                            {p.fouls > 0 ? '●'.repeat(p.fouls) : '-'}
-                                        </span>
-                                        <span className="stat-col pts">{p.points}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <TeamStatsGroup teamName={visitorTeam?.name} stats={stats.visitorStats} color="var(--primary)" />
 
                     </div>
                 </div>
@@ -304,3 +279,44 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         </div>
     );
 }
+
+// Subcomponente para lista de jugadores (limpieza de código)
+const TeamStatsGroup = ({ teamName, stats, color }: { teamName?: string, stats: PlayerStat[], color: string }) => (
+    <div className="stats-group">
+        <h4
+            style={{
+                fontSize: '0.85rem', fontWeight: 700, color: color,
+                borderBottom: `1px solid ${color}33`, // 33 es aprox 20% opacity hex
+                paddingBottom: '0.25rem', marginBottom: '0.5rem', paddingLeft: '0.5rem'
+            }}
+        >
+            {teamName}
+        </h4>
+        <div className="stats-header-row">
+            <span>Jugador</span>
+            <div className="flex gap-4">
+                <span className="w-10 text-center">FAL</span>
+                <span className="w-10 text-center">PTS</span>
+            </div>
+        </div>
+        {stats.length === 0 ? (
+            <p className="text-muted text-xs p-2 italic">Sin registros.</p>
+        ) : stats.map(p => (
+            <div key={p.id} className="stat-player-row">
+                <div className="player-info">
+                    <span className="player-num">{p.number ?? '-'}</span>
+                    <span className="player-name">{p.name}</span>
+                </div>
+                <div className="stat-numbers">
+                    <span className="stat-col fls" style={{
+                        color: p.fouls >= 5 ? 'var(--danger)' : 'inherit',
+                        fontWeight: p.fouls >= 5 ? 700 : 400
+                    }}>
+                        {p.fouls > 0 ? '●'.repeat(p.fouls) : '-'}
+                    </span>
+                    <span className="stat-col pts">{p.points}</span>
+                </div>
+            </div>
+        ))}
+    </div>
+);

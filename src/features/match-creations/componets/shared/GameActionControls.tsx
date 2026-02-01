@@ -6,7 +6,7 @@ interface Props {
   onFoul: () => void;
   disabled?: boolean;
   simpleScoring?: boolean;
-  balancedLayout?: boolean; // <--- NUEVA PROP
+  balancedLayout?: boolean;
   variant: 'local' | 'visitor';
 }
 
@@ -15,7 +15,7 @@ export const GameActionControls: React.FC<Props> = ({
   onFoul, 
   disabled = false, 
   simpleScoring = false,
-  balancedLayout = false, // Por defecto falso para mantener compatibilidad
+  balancedLayout = false,
   variant
 }) => {
   
@@ -24,7 +24,7 @@ export const GameActionControls: React.FC<Props> = ({
   const xlBtnClass = variant === 'local' ? 'btn-local-xl' : 'btn-visitor-xl';
   const foulBtnClass = variant === 'local' ? 'btn-local-foul' : 'btn-visitor-foul';
 
-  // Clase común para botones balanceados (misma altura que el grande)
+  // Clase común para botones balanceados (Series Mode)
   const balancedBtnClass = variant === 'local' ? 'btn-local-lg' : 'btn-visitor-lg';
 
   return (
@@ -48,9 +48,10 @@ export const GameActionControls: React.FC<Props> = ({
         </button>
 
       ) : balancedLayout ? (
-        /* --- MODO SERIES (BALANCEADO +1 +2 +3) --- */
-        <div className="grid grid-cols-3 gap-2">
-           <button
+        /* --- MODO SERIES (MEJORADO: Jerarquía Vertical 1, 2, 3) --- */
+        /* Usamos flex vertical para un orden claro y botones de tamaño consistente */
+        <div className="flex flex-col gap-2">
+            <button
               disabled={disabled}
               onClick={() => onScore(1)}
               className={`btn-action ${balancedBtnClass}`}

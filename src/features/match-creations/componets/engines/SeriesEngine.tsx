@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// src/features/match-creations/componets/engines/SeriesEngine.tsx
+import React, { useState, useEffect } from 'react';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useSeriesLogic } from '../../hooks/useSeriesLogic';
@@ -7,10 +8,12 @@ import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { Trophy, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // Importar useNavigate
 
 export const SeriesEngine: React.FC = () => {
     const { match, localTeam, visitorTeam } = useLiveMatch();
     const { addScore, addFoul } = useGameActions();
+    const navigate = useNavigate(); // Hook de navegación
 
     if (!match || !localTeam || !visitorTeam) return null;
 
@@ -19,13 +22,19 @@ export const SeriesEngine: React.FC = () => {
         localSetsWon,
         visitorSetsWon,
         setsToWin,
-        pointsPerSet, // <--- Dato necesario para el header
+        pointsPerSet,
         showSetEndModal,
         showSeriesEndModal,
         confirmSetEnd,
         endSeries,
         setWinnerId
     } = useSeriesLogic({ match });
+
+    useEffect(() => {
+        if (match.status === 'finished') {
+            navigate('/matches'); // O redirigir al historial si prefieres
+        }
+    }, [match.status, navigate]);
 
     // Estado para selección de jugador
     const [currentAction, setCurrentAction] = useState<{
@@ -53,8 +62,14 @@ export const SeriesEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            {/* --- HEADER MEJORADO --- */}
-            <div className="absolute top-[80px] left-1/2 -translate-x-1/2 z-20">
+            {/* --- CONTENEDOR PRINCIPAL FLEXIBLE --- 
+                CORRECCIÓN: Se cambió pb-32 a pb-4. 
+                Al usar flex-col con la controls-panel al final, no necesitamos un padding gigante
+                que generaba un espacio negro vacío innecesario.
+            */}
+            <div className="flex-1 flex flex-col items-center justify-start pt-4 pb-4 overflow-y-auto w-full max-w-lg mx-auto gap-6">
+
+                {/* 1. INFORMACIÓN DE LA SERIE (Sets) */}
                 <div className="series-info-pill">
                     <div className="series-info-main">
                         <Layers size={16} className="text-secondary" />
@@ -64,46 +79,55 @@ export const SeriesEngine: React.FC = () => {
                         A {pointsPerSet} Puntos • Gana {setsToWin} de {((setsToWin * 2) - 1)}
                     </div>
                 </div>
-            </div>
 
-            {/* Scoreboard Principal: Muestra SETS GANADOS */}
-            <div className="relative">
-                <Scoreboard
-                    localName={localTeam.name}
-                    visitorName={visitorTeam.name}
-                    localScore={localSetsWon}      
-                    visitorScore={visitorSetsWon}  
-                    localFouls={0} 
-                    visitorFouls={0}
-                    timeLeft={0}
-                    isTimerRunning={false}
-                />
+                {/* 2. SCOREBOARD DE SETS */}
+                <div className="w-full px-4">
+                    <Scoreboard
+                        localName={localTeam.name}
+                        visitorName={visitorTeam.name}
+                        localScore={localSetsWon}      
+                        visitorScore={visitorSetsWon}  
+                        localFouls={0} 
+                        visitorFouls={0}
+                        timeLeft={0}
+                        isTimerRunning={false}
+                        showTimer={false} 
+                        showFouls={false} 
+                    />
+                    <div className="text-center text-xs text-muted font-bold uppercase tracking-widest mt-2 opacity-60">
+                        Sets Ganados
+                    </div>
+                </div>
 
-                {/* --- PUNTOS DEL SET ACTUAL (REDISENADO) --- */}
-                {/* Ahora usa 'series-points-container' para alinearse a los extremos */}
+                {/* 3. PUNTOS DEL SET ACTUAL */}
                 <div className="series-points-container">
-                    {/* Puntos Local (Izquierda) */}
+                    {/* Puntos Local */}
                     <div className="series-point-box local">
                         <div className="series-point-label">Puntos Set</div>
                         <div className="series-point-value">{match.localScore}</div>
                     </div>
 
-                    {/* Puntos Visitante (Derecha) */}
+                    {/* VS central decorativo */}
+                    <div className="text-xs font-black text-zinc-700 bg-zinc-900 p-2 rounded-full border border-zinc-800">
+                        VS
+                    </div>
+
+                    {/* Puntos Visitante */}
                     <div className="series-point-box visitor">
                         <div className="series-point-label">Puntos Set</div>
                         <div className="series-point-value">{match.visitorScore}</div>
                     </div>
                 </div>
+
             </div>
 
-            {/* Controles */}
+            {/* Controles (Fixed Bottom) */}
             <section className="controls-panel">
                 <div className="action-grid">
-
                     <div className="team-column">
                         <GameActionControls
                             variant="local"
-                            balancedLayout={true} /* <--- Activa botones iguales */
+                            balancedLayout={true}
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
                         />
@@ -112,16 +136,15 @@ export const SeriesEngine: React.FC = () => {
                     <div className="team-column">
                         <GameActionControls
                             variant="visitor"
-                            balancedLayout={true} /* <--- Activa botones iguales */
+                            balancedLayout={true}
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
                         />
                     </div>
-
                 </div>
             </section>
 
-            {/* Modales */}
+            {/* --- MODALES --- */}
             {currentAction && (
                 <PlayerSelectModal
                     teamName={currentAction.teamName}
@@ -132,7 +155,6 @@ export const SeriesEngine: React.FC = () => {
                 />
             )}
 
-            {/* Modal Fin de Set */}
             {showSetEndModal && (
                 <div className="game-modal-overlay">
                     <div className="game-modal-card">
@@ -153,7 +175,6 @@ export const SeriesEngine: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal Fin de Serie */}
             {showSeriesEndModal && (
                 <div className="game-modal-overlay">
                     <div className="game-modal-card is-end">

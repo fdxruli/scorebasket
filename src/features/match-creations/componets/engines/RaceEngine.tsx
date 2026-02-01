@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Importar useEffect
+import { useNavigate } from 'react-router-dom';     // Importar useNavigate
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useRaceLogic } from '../../hooks/useRaceLogic';
@@ -6,15 +7,30 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
-import { Target, Trophy } from 'lucide-react';
+import { Target, Trophy, RotateCcw } from 'lucide-react';
 
 export const RaceEngine: React.FC = () => {
+    const navigate = useNavigate(); // Hook de navegación
     const { match, localTeam, visitorTeam } = useLiveMatch();
     const { addScore, addFoul } = useGameActions();
 
     if (!match || !localTeam || !visitorTeam) return null;
 
-    const { targetScore, showMatchEndModal, endMatch, winnerTeamId } = useRaceLogic({ match });
+    const {
+        targetScore,
+        hasRematches,
+        showMatchEndModal,
+        endMatch,
+        handleRematch,
+        winnerTeamId
+    } = useRaceLogic({ match });
+
+    // 🟢 NUEVO: Redirección automática al terminar el partido
+    useEffect(() => {
+        if (match.status === 'finished') {
+            navigate('/matches'); // O redirigir al historial si prefieres
+        }
+    }, [match.status, navigate]);
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
@@ -24,6 +40,7 @@ export const RaceEngine: React.FC = () => {
     } | null>(null);
 
     const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
+        // Evitar acciones si el modal de fin ya está visible
         if (showMatchEndModal) return;
         setCurrentAction({ teamId, teamName, players, action });
     };
@@ -42,12 +59,13 @@ export const RaceEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            <div className="absolute top-[80px] left-1/2 -translate-x-1/2 z-20 flex flex-col items-center">
-                <div className="bg-zinc-900 border border-zinc-700 px-4 py-1 rounded-full flex items-center gap-2 shadow-lg">
-                    <Target size={14} className="text-primary" />
-                    <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
-                        Meta: <span className="text-white text-sm">{targetScore}</span>
+            <div className="absolute top-[85px] left-1/2 -translate-x-1/2 z-20">
+                <div className="race-info-pill">
+                    <span className="race-info-label">
+                        <Target size={16} className="text-primary" />
+                        Meta
                     </span>
+                    <span className="race-info-value">{targetScore}</span>
                 </div>
             </div>
 
@@ -64,7 +82,6 @@ export const RaceEngine: React.FC = () => {
 
             <section className="controls-panel">
                 <div className="action-grid">
-
                     {/* COLUMNA LOCAL */}
                     <div className="team-column">
                         <GameActionControls
@@ -72,16 +89,18 @@ export const RaceEngine: React.FC = () => {
                             variant="local"
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
+                            disabled={showMatchEndModal} // Deshabilitar botones si el modal está abierto
                         />
                     </div>
 
-                    {/* COLUMNA VISITANTE (Sin línea divisoria manual, el grid usa gap) */}
+                    {/* COLUMNA VISITANTE */}
                     <div className="team-column">
                         <GameActionControls
                             simpleScoring={true}
                             variant="visitor"
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            disabled={showMatchEndModal} // Deshabilitar botones si el modal está abierto
                         />
                     </div>
                 </div>
@@ -110,9 +129,25 @@ export const RaceEngine: React.FC = () => {
                         <p className="text-sm text-muted mb-6">
                             Ha alcanzado la meta de {targetScore} puntos.
                         </p>
-                        <button onClick={endMatch} className="btn-modal-primary btn-finish">
-                            Finalizar Partido
-                        </button>
+
+                        <div className="modal-actions">
+                            {/* BOTÓN DAR VUELTA / REVANCHA (Solo si está activado) */}
+                            {hasRematches && (
+                                <button
+                                    onClick={handleRematch}
+                                    className="btn-modal-primary"
+                                    style={{ background: 'var(--secondary)', marginBottom: '0.5rem' }}
+                                >
+                                    <RotateCcw size={18} />
+                                    Dar la Vuelta (Revancha)
+                                </button>
+                            )}
+
+                            {/* BOTÓN FINALIZAR */}
+                            <button onClick={endMatch} className="btn-modal-primary btn-finish">
+                                Finalizar Partido
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

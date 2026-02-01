@@ -1,6 +1,3 @@
-// src/components/live/Scoreboard.tsx
-import React from 'react';
-
 interface ScoreboardProps {
     localName: string;
     visitorName: string;

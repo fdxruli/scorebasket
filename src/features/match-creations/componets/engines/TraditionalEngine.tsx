@@ -1,7 +1,9 @@
 import React from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
+import { db } from '../../../../db/db';
 
 // UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard'; 
@@ -28,6 +30,23 @@ export const TraditionalEngine: React.FC = () => {
     showMatchEndModal,
     endMatch
   } = useTraditionalLogic({ match });
+
+  const currentQuarterFouls = useLiveQuery(async () => {
+    if (!match.id) {
+      return {
+        local: match.localFouls || 0,
+        visitor: match.visitorFouls || 0
+      };
+    }
+
+    const fouls = await db.fouls.where('matchId').equals(match.id).toArray();
+    const quarterFouls = fouls.filter(foul => foul.quarter === currentQuarter);
+
+    return {
+      local: quarterFouls.filter(foul => foul.teamId === match.localTeamId).length,
+      visitor: quarterFouls.filter(foul => foul.teamId === match.visitorTeamId).length
+    };
+  }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
 
   const [playerModal, setPlayerModal] = React.useState<{
     isOpen: boolean;
@@ -92,8 +111,8 @@ export const TraditionalEngine: React.FC = () => {
         visitorName={visitorTeam.name}
         localScore={match.localScore}
         visitorScore={match.visitorScore}
-        localFouls={match.localFouls}
-        visitorFouls={match.visitorFouls}
+        localFouls={currentQuarterFouls?.local ?? 0}
+        visitorFouls={currentQuarterFouls?.visitor ?? 0}
         timeLeft={timeLeft} 
         isTimerRunning={isTimerRunning}
       />

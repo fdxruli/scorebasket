@@ -58,7 +58,8 @@ export function Teams() {
                     name: p.name,
                     number: p.number ? parseInt(p.number) : undefined,
                     teamId: Number(teamId),
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    isArchived: false
                 }));
 
                 await db.players.bulkAdd(playersToSave);

@@ -8,9 +8,9 @@ interface UseTraditionalLogicProps {
 }
 
 export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
-  // 1. Extraer configuración (con fallback seguros)
-  const quartersConfig = match.config.traditional?.totalQuarters || 4;
-  const minutesPerQuarter = match.config.traditional?.minutesPerQuarter || 10;
+  // 1. Extraer configuración con fallbacks seguros para partidos legacy
+  const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
+  const minutesPerQuarter = match.config?.traditional?.minutesPerQuarter || match.quarterDuration || 10;
   
   // 2. Estado local para modales
   const [showQuarterEndModal, setShowQuarterEndModal] = useState(false);
@@ -28,20 +28,10 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     return `${m}:${sec}`;
   };
 
-  // 4. Efecto: Detectar cuando el reloj llega a cero
-  useEffect(() => {
-    // Si el tiempo se acabó, no está corriendo y el partido no ha terminado...
-    if (timeLeft <= 0 && !isRunning && match.status !== 'finished') {
-       // Evitar abrir el modal si ya está abierto
-       if (!showQuarterEndModal && !showMatchEndModal) {
-          handleTimerZero();
-       }
-    }
-  }, [timeLeft, isRunning, match.status, showQuarterEndModal, showMatchEndModal]);
-
   const handleTimerZero = useCallback(() => {
     const currentQ = match.currentQuarter || 1;
-    // Si estamos en el último cuarto (o más), es fin de partido
+
+    // Si estamos en el último cuarto (o más), es fin de partido.
     if (currentQ >= quartersConfig) {
       setShowMatchEndModal(true);
     } else {
@@ -49,9 +39,19 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     }
   }, [match.currentQuarter, quartersConfig]);
 
+  // 4. Efecto: Detectar cuando el reloj llega a cero
+  useEffect(() => {
+    // Si el tiempo se acabó, no está corriendo y el partido no ha terminado...
+    if (timeLeft <= 0 && !isRunning && match.status !== 'finished') {
+      // Evitar abrir el modal si ya está abierto
+      if (!showQuarterEndModal && !showMatchEndModal) {
+        handleTimerZero();
+      }
+    }
+  }, [timeLeft, isRunning, match.status, showQuarterEndModal, showMatchEndModal, handleTimerZero]);
+
   // 5. Acción: Siguiente Cuarto
   const nextQuarter = useCallback(async () => {
-    // Eliminado try/catch para que el error suba al componente (Engine)
     const currentQ = match.currentQuarter || 1;
     
     if (currentQ < quartersConfig) {
@@ -66,11 +66,13 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
 
   // 6. Acción: Finalizar Partido
   const endMatch = useCallback(async () => {
-     await db.matches.update(match.id!, {
-       status: 'finished',
-       finishedAt: new Date()
-     });
-     setShowMatchEndModal(false);
+    await db.matches.update(match.id!, {
+      status: 'finished',
+      finishedAt: new Date(),
+      timerLastStart: undefined
+    });
+    setShowMatchEndModal(false);
+    setShowQuarterEndModal(false);
   }, [match.id]);
 
   return {

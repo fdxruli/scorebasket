@@ -28,6 +28,8 @@ interface LiveMatchProviderProps {
   children: ReactNode;
 }
 
+const isActivePlayer = (player: Player) => !player.isArchived;
+
 // --- 2. Creación del Contexto ---
 
 const LiveMatchContext = createContext<LiveMatchContextState | undefined>(undefined);
@@ -49,7 +51,7 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
     const [localTeamData, visitorTeamData, localPlayersData, visitorPlayersData] = await Promise.all([
       db.teams.get(matchData.localTeamId),
       db.teams.get(matchData.visitorTeamId),
-      db.players.where('teamId').equals(matchData.localTeamId).sortBy('number'), // Orden opcional por número
+      db.players.where('teamId').equals(matchData.localTeamId).sortBy('number'),
       db.players.where('teamId').equals(matchData.visitorTeamId).sortBy('number')
     ]);
 
@@ -59,14 +61,16 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
     }
 
     // d. Construir objetos TeamWithPlayers
+    // Solo se muestran jugadores activos en el partido vivo.
+    // Los archivados permanecen en BD para reportes históricos.
     const localTeamFull: TeamWithPlayers = {
       ...localTeamData,
-      players: localPlayersData
+      players: localPlayersData.filter(isActivePlayer)
     };
 
     const visitorTeamFull: TeamWithPlayers = {
       ...visitorTeamData,
-      players: visitorPlayersData
+      players: visitorPlayersData.filter(isActivePlayer)
     };
 
     // e. Retornar estructura completa

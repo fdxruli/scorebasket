@@ -149,7 +149,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     // Helper para etiquetas de la tabla
     const getPeriodLabel = (p: number) => {
         if (stats.mode === 'best-of-series') return `Set ${p}`;
-        if (stats.mode === 'race') return `Juego`;
+        if (stats.mode === 'race') return `Juego ${p}`;
         return `Q${p}`;
     };
 

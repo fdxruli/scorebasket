@@ -6,4 +6,6 @@ export interface Player {
   number?: number;
   teamId: number;
   createdAt: Date;
+  isArchived?: boolean;
+  archivedAt?: Date;
 }

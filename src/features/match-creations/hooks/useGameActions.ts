@@ -76,6 +76,16 @@ const getLatestByCreatedAt = <T extends { createdAt: Date }>(items: T[]): T | un
   return [...items].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 };
 
+const notifyActionError = (error: unknown, fallbackMessage: string) => {
+  console.error(error);
+
+  const message = error instanceof Error ? error.message : fallbackMessage;
+
+  if (typeof window !== 'undefined') {
+    window.alert(message);
+  }
+};
+
 export const useGameActions = () => {
   const { match, localTeam, visitorTeam } = useLiveMatch();
 
@@ -89,72 +99,80 @@ export const useGameActions = () => {
    * Acción: Agregar Puntos
    */
   const addScore = useCallback(async (teamId: number, points: number, playerId?: number) => {
-    if (!match?.id) return;
+    try {
+      if (!match?.id) return;
 
-    const normalizedPoints = normalizePoints(points);
+      const normalizedPoints = normalizePoints(points);
 
-    await db.transaction('rw', db.matches, db.scores, async () => {
-      const currentMatch = await db.matches.get(match.id!);
-      if (!currentMatch) throw new Error('El partido no existe');
+      await db.transaction('rw', db.matches, db.scores, async () => {
+        const currentMatch = await db.matches.get(match.id!);
+        if (!currentMatch) throw new Error('El partido no existe');
 
-      validateMatchIsActive(currentMatch);
-      validateTraditionalClock(currentMatch);
-      validateScoreWindow(currentMatch);
+        validateMatchIsActive(currentMatch);
+        validateTraditionalClock(currentMatch);
+        validateScoreWindow(currentMatch);
 
-      const side = getTeamSide(currentMatch, teamId);
-      const currentPeriod = getCurrentActionPeriod(currentMatch);
+        const side = getTeamSide(currentMatch, teamId);
+        const currentPeriod = getCurrentActionPeriod(currentMatch);
 
-      const newScore: Omit<Score, 'id'> = {
-        matchId: currentMatch.id!,
-        teamId,
-        playerId,
-        points: normalizedPoints,
-        quarter: currentPeriod,
-        createdAt: new Date(),
-      };
+        const newScore: Omit<Score, 'id'> = {
+          matchId: currentMatch.id!,
+          teamId,
+          playerId,
+          points: normalizedPoints,
+          quarter: currentPeriod,
+          createdAt: new Date(),
+        };
 
-      await db.scores.add(newScore as Score);
+        await db.scores.add(newScore as Score);
 
-      const updateData = side === 'local'
-        ? { localScore: (currentMatch.localScore || 0) + normalizedPoints }
-        : { visitorScore: (currentMatch.visitorScore || 0) + normalizedPoints };
+        const updateData = side === 'local'
+          ? { localScore: (currentMatch.localScore || 0) + normalizedPoints }
+          : { visitorScore: (currentMatch.visitorScore || 0) + normalizedPoints };
 
-      await db.matches.update(currentMatch.id!, updateData);
-    });
+        await db.matches.update(currentMatch.id!, updateData);
+      });
+    } catch (error) {
+      notifyActionError(error, 'No se pudieron registrar los puntos.');
+    }
   }, [match?.id]);
 
   /**
    * Acción: Agregar Falta
    */
   const addFoul = useCallback(async (teamId: number, playerId?: number) => {
-    if (!match?.id) return;
+    try {
+      if (!match?.id) return;
 
-    await db.transaction('rw', db.matches, db.fouls, async () => {
-      const currentMatch = await db.matches.get(match.id!);
-      if (!currentMatch) throw new Error('El partido no existe');
+      await db.transaction('rw', db.matches, db.fouls, async () => {
+        const currentMatch = await db.matches.get(match.id!);
+        if (!currentMatch) throw new Error('El partido no existe');
 
-      validateMatchIsActive(currentMatch);
-      validateTraditionalClock(currentMatch);
+        validateMatchIsActive(currentMatch);
+        validateTraditionalClock(currentMatch);
 
-      const side = getTeamSide(currentMatch, teamId);
-      const currentPeriod = getCurrentActionPeriod(currentMatch);
+        const side = getTeamSide(currentMatch, teamId);
+        const currentPeriod = getCurrentActionPeriod(currentMatch);
 
-      const newFoul: Omit<Foul, 'id'> = {
-        matchId: currentMatch.id!,
-        teamId,
-        playerId,
-        quarter: currentPeriod,
-        createdAt: new Date(),
-      };
+        const newFoul: Omit<Foul, 'id'> = {
+          matchId: currentMatch.id!,
+          teamId,
+          playerId,
+          quarter: currentPeriod,
+          createdAt: new Date(),
+        };
 
-      await db.fouls.add(newFoul as Foul);
+        await db.fouls.add(newFoul as Foul);
 
-      const updateData = side === 'local'
-        ? { localFouls: (currentMatch.localFouls || 0) + 1 }
-        : { visitorFouls: (currentMatch.visitorFouls || 0) + 1 };
-        
-      await db.matches.update(currentMatch.id!, updateData);
-    });
+        const updateData = side === 'local'
+          ? { localFouls: (currentMatch.localFouls || 0) + 1 }
+          : { visitorFouls: (currentMatch.visitorFouls || 0) + 1 };
+          
+        await db.matches.update(currentMatch.id!, updateData);
+      });
+    } catch (error) {
+      notifyActionError(error, 'No se pudo registrar la falta.');
+    }
   }, [match?.id]);
 
   /**
@@ -164,59 +182,63 @@ export const useGameActions = () => {
    * Así evitamos borrar acciones de juegos o sets ya cerrados y descontarlas del marcador actual.
    */
   const undoLastAction = useCallback(async () => {
-    if (!match?.id) return;
+    try {
+      if (!match?.id) return;
 
-    await db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
-      const currentMatch = await db.matches.get(match.id!);
-      if (!currentMatch) throw new Error('El partido no existe');
+      await db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
+        const currentMatch = await db.matches.get(match.id!);
+        if (!currentMatch) throw new Error('El partido no existe');
 
-      validateMatchIsActive(currentMatch);
+        validateMatchIsActive(currentMatch);
 
-      const currentPeriod = getCurrentActionPeriod(currentMatch);
+        const currentPeriod = getCurrentActionPeriod(currentMatch);
 
-      const [scores, fouls] = await Promise.all([
-        db.scores.where('matchId').equals(currentMatch.id!).toArray(),
-        db.fouls.where('matchId').equals(currentMatch.id!).toArray()
-      ]);
+        const [scores, fouls] = await Promise.all([
+          db.scores.where('matchId').equals(currentMatch.id!).toArray(),
+          db.fouls.where('matchId').equals(currentMatch.id!).toArray()
+        ]);
 
-      const lastScore = getLatestByCreatedAt(
-        scores.filter(score => score.quarter === currentPeriod)
-      );
+        const lastScore = getLatestByCreatedAt(
+          scores.filter(score => score.quarter === currentPeriod)
+        );
 
-      const lastFoul = getLatestByCreatedAt(
-        fouls.filter(foul => foul.quarter === currentPeriod)
-      );
+        const lastFoul = getLatestByCreatedAt(
+          fouls.filter(foul => foul.quarter === currentPeriod)
+        );
 
-      if (!lastScore && !lastFoul) {
-        throw new Error('No hay acciones para deshacer en este periodo.');
-      }
+        if (!lastScore && !lastFoul) {
+          throw new Error('No hay acciones para deshacer en este periodo.');
+        }
 
-      const lastScoreTime = lastScore?.createdAt.getTime() || 0;
-      const lastFoulTime = lastFoul?.createdAt.getTime() || 0;
+        const lastScoreTime = lastScore?.createdAt.getTime() || 0;
+        const lastFoulTime = lastFoul?.createdAt.getTime() || 0;
 
-      if (lastScore && lastScoreTime >= lastFoulTime) {
-        await db.scores.delete(lastScore.id!);
+        if (lastScore && lastScoreTime >= lastFoulTime) {
+          await db.scores.delete(lastScore.id!);
 
-        const side = getTeamSide(currentMatch, lastScore.teamId);
-        const updateData = side === 'local'
-          ? { localScore: Math.max(0, (currentMatch.localScore || 0) - lastScore.points) }
-          : { visitorScore: Math.max(0, (currentMatch.visitorScore || 0) - lastScore.points) };
-          
-        await db.matches.update(currentMatch.id!, updateData);
-        return;
-      }
+          const side = getTeamSide(currentMatch, lastScore.teamId);
+          const updateData = side === 'local'
+            ? { localScore: Math.max(0, (currentMatch.localScore || 0) - lastScore.points) }
+            : { visitorScore: Math.max(0, (currentMatch.visitorScore || 0) - lastScore.points) };
+            
+          await db.matches.update(currentMatch.id!, updateData);
+          return;
+        }
 
-      if (lastFoul) {
-        await db.fouls.delete(lastFoul.id!);
+        if (lastFoul) {
+          await db.fouls.delete(lastFoul.id!);
 
-        const side = getTeamSide(currentMatch, lastFoul.teamId);
-        const updateData = side === 'local'
-          ? { localFouls: Math.max(0, (currentMatch.localFouls || 0) - 1) }
-          : { visitorFouls: Math.max(0, (currentMatch.visitorFouls || 0) - 1) };
+          const side = getTeamSide(currentMatch, lastFoul.teamId);
+          const updateData = side === 'local'
+            ? { localFouls: Math.max(0, (currentMatch.localFouls || 0) - 1) }
+            : { visitorFouls: Math.max(0, (currentMatch.visitorFouls || 0) - 1) };
 
-        await db.matches.update(currentMatch.id!, updateData);
-      }
-    });
+          await db.matches.update(currentMatch.id!, updateData);
+        }
+      });
+    } catch (error) {
+      notifyActionError(error, 'No se pudo deshacer la última acción.');
+    }
   }, [match?.id]);
 
   return {

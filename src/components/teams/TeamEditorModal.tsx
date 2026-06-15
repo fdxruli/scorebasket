@@ -9,6 +9,8 @@ interface TeamEditorModalProps {
     onClose: () => void;
 }
 
+const isActivePlayer = (player: Player) => !player.isArchived;
+
 export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const [teamName, setTeamName] = useState('');
     const [players, setPlayers] = useState<Player[]>([]);
@@ -28,11 +30,13 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
         const loadData = async () => {
             try {
                 const team = await db.teams.get(teamId);
-                const teamPlayers = await db.players.where({ teamId }).sortBy('number'); // Ordenar por número
+                const teamPlayers = await db.players
+                    .where({ teamId })
+                    .sortBy('number');
 
                 if (team) {
                     setTeamName(team.name);
-                    setPlayers(teamPlayers);
+                    setPlayers(teamPlayers.filter(isActivePlayer));
                 }
             } catch (err) {
                 console.error("Error cargando equipo", err);
@@ -45,7 +49,6 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
     const handlePlayerChange = (index: number, field: 'name' | 'number', value: string) => {
         setPlayers(prev => prev.map((p, i) => {
-            // Simplemente comparamos el índice del map (i) con el índice que recibimos (index)
             if (i === index) {
                 return {
                     ...p,
@@ -67,7 +70,8 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
             name: newPlayerName.trim(),
             number: newPlayerNumber ? parseInt(newPlayerNumber) : undefined,
             teamId: teamId,
-            createdAt: new Date()
+            createdAt: new Date(),
+            isArchived: false
         };
 
         setPlayers([...players, tempPlayer]);
@@ -84,20 +88,47 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
         try {
             await db.transaction('rw', db.teams, db.players, async () => {
-                await db.teams.update(teamId, { name: teamName });
+                await db.teams.update(teamId, { name: teamName.trim() });
 
                 const currentDbPlayers = await db.players.where({ teamId }).toArray();
-                const currentDbIds = currentDbPlayers.map(p => p.id);
-                const keptIds = players.filter(p => p.id !== undefined).map(p => p.id);
-                const idsToDelete = currentDbIds.filter(id => !keptIds.includes(id));
+                const activeDbIds = currentDbPlayers
+                    .filter(isActivePlayer)
+                    .map(p => p.id)
+                    .filter((id): id is number => id !== undefined);
 
-                if (idsToDelete.length > 0) await db.players.bulkDelete(idsToDelete as number[]);
+                const keptIds = players
+                    .filter(p => p.id !== undefined)
+                    .map(p => p.id)
+                    .filter((id): id is number => id !== undefined);
+
+                const idsToArchive = activeDbIds.filter(id => !keptIds.includes(id));
+
+                // No borramos jugadores existentes: se archivan para conservar box scores históricos.
+                for (const id of idsToArchive) {
+                    await db.players.update(id, {
+                        isArchived: true,
+                        archivedAt: new Date()
+                    });
+                }
 
                 const playersToUpdate = players.filter(p => p.id !== undefined);
-                for (const p of playersToUpdate) await db.players.update(p.id!, { name: p.name, number: p.number });
+                for (const p of playersToUpdate) {
+                    await db.players.update(p.id!, {
+                        name: p.name.trim(),
+                        number: p.number,
+                        isArchived: false,
+                        archivedAt: undefined
+                    });
+                }
 
                 const playersToAdd = players.filter(p => p.id === undefined);
-                if (playersToAdd.length > 0) await db.players.bulkAdd(playersToAdd);
+                if (playersToAdd.length > 0) {
+                    await db.players.bulkAdd(playersToAdd.map(p => ({
+                        ...p,
+                        name: p.name.trim(),
+                        isArchived: false
+                    })));
+                }
             });
             onClose();
         } catch (err) {
@@ -192,11 +223,11 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                         placeholder="Nombre del jugador"
                                     />
 
-                                    {/* Botón Borrar */}
+                                    {/* Botón Quitar de plantilla */}
                                     <button
                                         onClick={() => handleDeletePlayer(idx)}
                                         className="btn-icon danger hover:bg-red-500/10 p-1.5 rounded"
-                                        title="Quitar jugador"
+                                        title="Quitar de la plantilla activa sin borrar historial"
                                     >
                                         <Trash2 size={16} />
                                     </button>

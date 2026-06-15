@@ -64,17 +64,20 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handleNextQuarter = async () => {
-    if (currentQuarter >= totalQuarters) {
-      await endMatch();
-      return;
-    }
+    const isLastQuarter = currentQuarter >= totalQuarters;
 
     if (timeLeft > 0) {
+      const actionLabel = isLastQuarter ? 'finalizar el partido' : 'avanzar al siguiente periodo';
       const shouldContinue = window.confirm(
-        `Aún quedan ${formatTime(timeLeft)} en el Q${currentQuarter}. ¿Avanzar al siguiente periodo de todos modos?`
+        `Aún quedan ${formatTime(timeLeft)} en el Q${currentQuarter}. ¿Deseas ${actionLabel} de todos modos?`
       );
 
       if (!shouldContinue) return;
+    }
+
+    if (isLastQuarter) {
+      await endMatch();
+      return;
     }
 
     await nextQuarter();

@@ -28,6 +28,13 @@ interface LiveMatchProviderProps {
   children: ReactNode;
 }
 
+type LiveMatchQueryResult = {
+  match?: Match;
+  localTeam?: TeamWithPlayers;
+  visitorTeam?: TeamWithPlayers;
+  error?: string;
+} | null;
+
 const isActivePlayer = (player: Player) => !player.isArchived;
 
 // --- 2. Creación del Contexto ---
@@ -39,47 +46,55 @@ const LiveMatchContext = createContext<LiveMatchContextState | undefined>(undefi
 export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, children }) => {
 
   // --- Carga de Datos Atómica (Reactive) ---
-  const data = useLiveQuery(async () => {
-    // a. Obtener el partido
-    const matchData = await db.matches.get(matchId);
-    
-    // Si no existe el partido, retornamos null inmediatamente para manejarlo abajo
-    if (!matchData) return null;
+  const data = useLiveQuery<LiveMatchQueryResult>(async () => {
+    try {
+      // a. Obtener el partido
+      const matchData = await db.matches.get(matchId);
+      
+      // Si no existe el partido, retornamos null inmediatamente para manejarlo abajo
+      if (!matchData) return null;
 
-    // b. Obtener equipos y jugadores en paralelo (Promesas)
-    // Usamos Promise.all para maximizar la velocidad de E/S
-    const [localTeamData, visitorTeamData, localPlayersData, visitorPlayersData] = await Promise.all([
-      db.teams.get(matchData.localTeamId),
-      db.teams.get(matchData.visitorTeamId),
-      db.players.where('teamId').equals(matchData.localTeamId).sortBy('number'),
-      db.players.where('teamId').equals(matchData.visitorTeamId).sortBy('number')
-    ]);
+      // b. Obtener equipos y jugadores en paralelo (Promesas)
+      // Usamos Promise.all para maximizar la velocidad de E/S
+      const [localTeamData, visitorTeamData, localPlayersData, visitorPlayersData] = await Promise.all([
+        db.teams.get(matchData.localTeamId),
+        db.teams.get(matchData.visitorTeamId),
+        db.players.where('teamId').equals(matchData.localTeamId).sortBy('number'),
+        db.players.where('teamId').equals(matchData.visitorTeamId).sortBy('number')
+      ]);
 
-    // c. Validar integridad referencial básica
-    if (!localTeamData || !visitorTeamData) {
-      throw new Error("Integridad de datos corrupta: Faltan equipos asociados al partido.");
+      // c. Validar integridad referencial básica
+      if (!localTeamData || !visitorTeamData) {
+        return {
+          error: 'Integridad de datos corrupta: faltan equipos asociados al partido.'
+        };
+      }
+
+      // d. Construir objetos TeamWithPlayers
+      // Solo se muestran jugadores activos en el partido vivo.
+      // Los archivados permanecen en BD para reportes históricos.
+      const localTeamFull: TeamWithPlayers = {
+        ...localTeamData,
+        players: localPlayersData.filter(isActivePlayer)
+      };
+
+      const visitorTeamFull: TeamWithPlayers = {
+        ...visitorTeamData,
+        players: visitorPlayersData.filter(isActivePlayer)
+      };
+
+      // e. Retornar estructura completa
+      return {
+        match: matchData,
+        localTeam: localTeamFull,
+        visitorTeam: visitorTeamFull
+      };
+    } catch (err) {
+      console.error('Error cargando partido en vivo:', err);
+      return {
+        error: err instanceof Error ? err.message : 'No se pudo cargar el partido en vivo.'
+      };
     }
-
-    // d. Construir objetos TeamWithPlayers
-    // Solo se muestran jugadores activos en el partido vivo.
-    // Los archivados permanecen en BD para reportes históricos.
-    const localTeamFull: TeamWithPlayers = {
-      ...localTeamData,
-      players: localPlayersData.filter(isActivePlayer)
-    };
-
-    const visitorTeamFull: TeamWithPlayers = {
-      ...visitorTeamData,
-      players: visitorPlayersData.filter(isActivePlayer)
-    };
-
-    // e. Retornar estructura completa
-    return {
-      match: matchData,
-      localTeam: localTeamFull,
-      visitorTeam: visitorTeamFull
-    };
-
   }, [matchId]);
 
   // --- Lógica de Estado y Errores ---
@@ -90,11 +105,10 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
   // Si data es null (retornado explícitamente), el partido no existe
   const notFound = !isLoading && data === null;
 
-  // Manejo de error general (puede venir de la query o del estado null)
+  // Manejo de error general
   let error: string | null = null;
-  if (notFound) error = "El partido no fue encontrado.";
-  // Nota: useLiveQuery captura excepciones internas y devuelve undefined o error en consola, 
-  // para producción podrías agregar un estado de error explícito con try/catch dentro de la query si lo requieres.
+  if (notFound) error = 'El partido no fue encontrado.';
+  if (!isLoading && data && 'error' in data && data.error) error = data.error;
 
   const value: LiveMatchContextState = {
     match: data?.match,

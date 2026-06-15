@@ -1,12 +1,32 @@
 import { Link } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Play, Pause } from 'lucide-react';
 import { useMatchTimer } from '../../../../hooks/useMatchTimer';
+import { db } from '../../../../db/db';
 import type { Match } from '../../../../db/models/Match';
 
 interface Props { match: Match; localName: string; visitorName: string; }
 
 export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) => {
   const { timeLeft, isRunning } = useMatchTimer(match, false);
+  const currentQuarter = match.currentQuarter || 1;
+
+  const currentQuarterFouls = useLiveQuery(async () => {
+    if (!match.id) {
+      return {
+        local: match.localFouls || 0,
+        visitor: match.visitorFouls || 0
+      };
+    }
+
+    const fouls = await db.fouls.where('matchId').equals(match.id).toArray();
+    const quarterFouls = fouls.filter(foul => foul.quarter === currentQuarter);
+
+    return {
+      local: quarterFouls.filter(foul => foul.teamId === match.localTeamId).length,
+      visitor: quarterFouls.filter(foul => foul.teamId === match.visitorTeamId).length
+    };
+  }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
 
   const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);
@@ -24,7 +44,7 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
           {isRunning ? 'EN JUEGO' : 'PAUSADO'}
         </div>
         <div className="flex items-center gap-2 font-mono text-sm font-bold text-main">
-          <span className="text-muted text-xs uppercase tracking-widest mr-2">Q{match.currentQuarter}</span>
+          <span className="text-muted text-xs uppercase tracking-widest mr-2">Q{currentQuarter}</span>
           {isRunning ? <Play size={10} className="text-primary" fill="currentColor" /> : <Pause size={10} className="text-muted" fill="currentColor" />}
           {formatTime(timeLeft)}
         </div>
@@ -32,8 +52,8 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
       
       {/* Body: Marcador estándar */}
       <div className="live-card-body">
-        <TeamRow name={localName} score={match.localScore} fouls={match.localFouls} isWinning={match.localScore > match.visitorScore} />
-        <TeamRow name={visitorName} score={match.visitorScore} fouls={match.visitorFouls} isWinning={match.visitorScore > match.localScore} />
+        <TeamRow name={localName} score={match.localScore} fouls={currentQuarterFouls?.local ?? 0} isWinning={match.localScore > match.visitorScore} />
+        <TeamRow name={visitorName} score={match.visitorScore} fouls={currentQuarterFouls?.visitor ?? 0} isWinning={match.visitorScore > match.localScore} />
       </div>
     </Link>
   );

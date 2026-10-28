@@ -1,39 +1,44 @@
 /* src/styles/components/toast.css */
 .error-toast {
   position: fixed;
-  top: 1rem;
+  top: 1.25rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-toast, 9999);
-  width: 90vw;
-  max-width: 400px;
-  animation: toastSlideDown 0.3s ease-out;
+  width: 92vw;
+  max-width: 440px;
+  animation: toastSlideDown 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .error-toast-content {
-  background-color: rgba(239, 68, 68, 0.95); /* Red/Danger */
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.95), rgba(190, 18, 60, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
-  padding: 1rem;
+  padding: 0.95rem 1.15rem;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-size: 0.95rem;
-  font-weight: 500;
-  backdrop-filter: blur(8px);
+  font-size: 0.9rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
 }
 
 .error-toast-close {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.2);
   border: none;
   color: white;
   cursor: pointer;
-  padding: 4px;
+  padding: 5px;
   border-radius: 50%;
   display: flex;
+  transition: background-color 0.2s;
 }
-.error-toast-close:hover { background-color: rgba(255,255,255,0.2); }
+
+.error-toast-close:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+}
 
 @keyframes toastSlideDown {
   from { opacity: 0; transform: translate(-50%, -20px); }

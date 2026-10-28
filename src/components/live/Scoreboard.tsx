@@ -1,3 +1,4 @@
+// src/components/live/Scoreboard.tsx
 interface ScoreboardProps {
     localName: string;
     visitorName: string;
@@ -7,8 +8,8 @@ interface ScoreboardProps {
     visitorFouls: number;
     timeLeft: number;
     isTimerRunning: boolean;
-    showTimer?: boolean; // Nuevo prop opcional
-    showFouls?: boolean; // Nuevo prop opcional
+    showTimer?: boolean;
+    showFouls?: boolean;
 }
 
 const formatTime = (seconds: number) => {
@@ -23,13 +24,13 @@ export function Scoreboard({
     localScore, visitorScore,
     localFouls, visitorFouls,
     timeLeft, isTimerRunning,
-    showTimer = true, // Por defecto se muestra
-    showFouls = true  // Por defecto se muestra
+    showTimer = true,
+    showFouls = true
 }: ScoreboardProps) {
 
     return (
         <section className="scoreboard-container">
-            {/* Reloj Flotante (Píldora) - Solo si showTimer es true */}
+            {/* Reloj Central (Píldora Digital) */}
             {showTimer && (
                 <div className={`timer-pill ${isTimerRunning ? 'running' : ''}`}>
                     {formatTime(timeLeft)}
@@ -38,10 +39,10 @@ export function Scoreboard({
 
             {/* Card Local */}
             <div className="score-card local">
+                <span className="score-card-role">HOME // LOCAL</span>
                 <h2 className="team-name">{localName}</h2>
                 <div className="score-big">{localScore}</div>
                 
-                {/* Indicador de Faltas - Solo si showFouls es true */}
                 {showFouls && (
                     <div className="fouls-dots" title={`${localFouls} faltas de equipo`}>
                         {[...Array(5)].map((_, i) => (
@@ -56,6 +57,7 @@ export function Scoreboard({
 
             {/* Card Visitante */}
             <div className="score-card visitor">
+                <span className="score-card-role">AWAY // VISITA</span>
                 <h2 className="team-name">{visitorName}</h2>
                 <div className="score-big">{visitorScore}</div>
                 

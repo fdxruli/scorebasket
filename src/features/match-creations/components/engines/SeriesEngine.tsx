@@ -37,7 +37,6 @@ export const SeriesEngine: React.FC = () => {
         }
     }, [match.status, navigate]);
 
-    // Estado para selección de jugador
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
         teamName: string;
@@ -48,8 +47,6 @@ export const SeriesEngine: React.FC = () => {
     const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
         if (showSetEndModal || showSeriesEndModal) return;
 
-        // 1-Tap Scoring: si el seguimiento de jugadores está apagado o el equipo no tiene jugadores,
-        // registramos directo sin abrir el modal.
         if (!trackPlayers || !players || players.length === 0) {
             if (action.type === 'score') {
                 addScore(teamId, action.points, undefined);
@@ -84,68 +81,60 @@ export const SeriesEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            {/* CONTENEDOR PRINCIPAL FLEXIBLE */}
             <div className="series-stage-container">
-
                 {/* 1. INFORMACIÓN DE LA SERIE (Sets) */}
                 <div className="series-info-pill">
                     <div className="series-info-main">
-                        <Layers size={16} color="var(--secondary)" />
+                        <Layers size={16} color="var(--secondary-light)" />
                         SET {currentSet}
                     </div>
                     <div className="series-info-sub">
-                        A {pointsPerSet} Puntos • Gana {setsToWin} de {((setsToWin * 2) - 1)}
+                        A {pointsPerSet} Pts • Gana {setsToWin} de {((setsToWin * 2) - 1)}
                     </div>
                 </div>
 
                 {/* 2. SCOREBOARD DE SETS */}
-                <div className="w-full" style={{ padding: '0 1rem' }}>
+                <div className="w-full">
                     <Scoreboard
                         localName={localTeam.name}
                         visitorName={visitorTeam.name}
-                        localScore={localSetsWon}      
-                        visitorScore={visitorSetsWon}  
-                        localFouls={0} 
+                        localScore={localSetsWon}
+                        visitorScore={visitorSetsWon}
+                        localFouls={0}
                         visitorFouls={0}
                         timeLeft={0}
                         isTimerRunning={false}
-                        showTimer={false} 
-                        showFouls={false} 
+                        showTimer={false}
+                        showFouls={false}
                     />
                     <div className="series-sets-caption">
-                        Sets Ganados
+                        Sets Ganados en la Serie
                     </div>
                 </div>
 
                 {/* 3. PUNTOS DEL SET ACTUAL */}
                 <div className="series-points-container">
-                    {/* Puntos Local */}
                     <div className="series-point-box local">
-                        <div className="series-point-label">Puntos Set</div>
+                        <div className="series-point-label">Puntos Set Actual</div>
                         <div className="series-point-value">{match.localScore}</div>
                     </div>
 
-                    {/* VS central decorativo */}
-                    <div className="series-vs-badge">
-                        VS
-                    </div>
+                    <div className="series-vs-badge">VS</div>
 
-                    {/* Puntos Visitante */}
                     <div className="series-point-box visitor">
-                        <div className="series-point-label">Puntos Set</div>
+                        <div className="series-point-label">Puntos Set Actual</div>
                         <div className="series-point-value">{match.visitorScore}</div>
                     </div>
                 </div>
-
             </div>
 
-            {/* Controles (Fixed Bottom) */}
+            {/* Controles */}
             <section className="controls-panel">
                 <div className="action-grid">
                     <div className="team-column">
                         <GameActionControls
                             variant="local"
-                            balancedLayout={true}
+                            simpleScoring={true}
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
                         />
@@ -154,14 +143,14 @@ export const SeriesEngine: React.FC = () => {
                     <div className="team-column">
                         <GameActionControls
                             variant="visitor"
-                            balancedLayout={true}
+                            simpleScoring={true}
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
                         />
                     </div>
                 </div>
 
-                <div className="bottom-bar" style={{ gap: '0.5rem' }}>
+                <div className="bottom-bar" style={{ gap: '0.65rem' }}>
                     <button
                         type="button"
                         onClick={() => setTrackPlayers(prev => !prev)}
@@ -169,10 +158,10 @@ export const SeriesEngine: React.FC = () => {
                         style={{
                             flex: 1,
                             fontSize: '0.8rem',
-                            padding: '0.65rem 0.75rem',
+                            padding: '0.7rem 0.75rem',
                             borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
-                            color: trackPlayers ? 'var(--primary)' : 'var(--text-muted)',
-                            backgroundColor: trackPlayers ? 'rgba(249, 115, 22, 0.12)' : undefined
+                            color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
+                            backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : undefined
                         }}
                     >
                         <Users size={15} />
@@ -186,7 +175,7 @@ export const SeriesEngine: React.FC = () => {
                         style={{
                             flex: 1,
                             fontSize: '0.8rem',
-                            padding: '0.65rem 0.75rem'
+                            padding: '0.7rem 0.75rem'
                         }}
                     >
                         <Flag size={15} />
@@ -209,20 +198,22 @@ export const SeriesEngine: React.FC = () => {
 
             {showSetEndModal && (
                 <div className="game-modal-overlay">
-                    <div className="game-modal-card">
+                    <div className="game-modal-card is-exit">
                         <div className="modal-icon-wrapper">
-                            <Trophy size={40} color="#60a5fa" />
+                            <Trophy size={40} color="var(--secondary-light)" />
                         </div>
                         <h3>Fin del Set {currentSet}</h3>
-                        <p style={{ color: '#fff', marginBottom: '1rem' }}>
+                        <p style={{ color: '#fff', marginBottom: '0.75rem' }}>
                             Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong>
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                             El marcador de puntos se reiniciará para el siguiente set.
                         </p>
-                        <button onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
-                            Confirmar y Siguiente Set
-                        </button>
+                        <div className="modal-actions">
+                            <button onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
+                                Confirmar y Siguiente Set
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -234,24 +225,27 @@ export const SeriesEngine: React.FC = () => {
                             <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Serie Finalizada!</h3>
-                        <p style={{ fontSize: '1.125rem', color: '#fff', fontWeight: 700, margin: '1rem 0' }}>
+                        <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
                             Ganador: {localSetsWon > visitorSetsWon ? localTeam.name : visitorTeam.name}
                         </p>
                         <div
                             style={{
-                                fontSize: '1.5rem',
+                                fontSize: '1.65rem',
                                 fontFamily: 'var(--font-mono)',
+                                fontWeight: 800,
                                 marginBottom: '1.5rem',
-                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                backgroundColor: 'rgba(255, 255, 255, 0.06)',
                                 padding: '0.5rem 1.5rem',
                                 borderRadius: '0.5rem'
                             }}
                         >
                             {localSetsWon} - {visitorSetsWon}
                         </div>
-                        <button onClick={endSeries} className="btn-modal-primary btn-finish">
-                            Finalizar Partido
-                        </button>
+                        <div className="modal-actions">
+                            <button onClick={endSeries} className="btn-modal-primary btn-finish">
+                                Finalizar Partido
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

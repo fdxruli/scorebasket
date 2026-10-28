@@ -1,55 +1,86 @@
+/* src/styles/variables.css */
 :root {
-  /* --- 1. PALETA DE COLORES (Zinc & Orange Theme) --- */
-  /* Fondos */
-  --bg-app: #09090b;       /* Zinc 950 - Fondo principal */
-  --bg-surface: #18181b;   /* Zinc 900 - Tarjetas */
-  --bg-surface-hover: #27272a; /* Zinc 800 */
-  --bg-overlay: rgba(0, 0, 0, 0.7); /* Para modales */
+  /* --- 1. PALETA COURTSIDE PRO (Hardwood Obsidian, Hoops Orange & Electric Blue) --- */
+  --bg-app: #07080c;
+  --bg-elevated: #0c0e14;
+  --bg-surface: #12151f;
+  --bg-surface-2: #181c29;
+  --bg-surface-hover: #1f2436;
+  --bg-glass: rgba(18, 21, 31, 0.82);
+  --bg-overlay: rgba(4, 5, 10, 0.82);
 
-  /* Acentos (Brand) */
-  --primary: #f97316;      /* Orange 500 */
-  --primary-hover: #ea580c; /* Orange 600 */
-  --primary-glow: rgba(249, 115, 22, 0.3); /* Brillo para efectos */
-  
-  --secondary: #3b82f6;    /* Blue 500 */
-  --secondary-bg: rgba(59, 130, 246, 0.1);
-  
-  /* Estados */
-  --danger: #ef4444;       /* Red 500 */
-  --danger-bg: rgba(239, 68, 68, 0.15);
-  --success: #22c55e;      /* Green 500 */
-  --warning: #eab308;      /* Yellow 500 */
+  /* Brand & Visitor Accent (Hoops Orange) */
+  --primary: #ff5f1f;
+  --primary-hover: #e04809;
+  --primary-light: #ff8c5a;
+  --primary-rgb: 255, 95, 31;
+  --primary-glow: rgba(255, 95, 31, 0.32);
+  --primary-subtle: rgba(255, 95, 31, 0.12);
+
+  /* Local Team & Tactical Accent (Courtside Cyan/Blue) */
+  --secondary: #0ea5e9;
+  --secondary-hover: #0284c7;
+  --secondary-light: #38bdf8;
+  --secondary-rgb: 14, 165, 233;
+  --secondary-bg: rgba(14, 165, 233, 0.12);
+  --secondary-glow: rgba(14, 165, 233, 0.3);
+
+  /* Estados de Juego */
+  --danger: #f43f5e;
+  --danger-rgb: 244, 63, 94;
+  --danger-bg: rgba(244, 63, 94, 0.14);
+
+  --success: #10b981;
+  --success-rgb: 16, 185, 129;
+  --success-bg: rgba(16, 185, 129, 0.14);
+
+  --warning: #f59e0b;
+  --warning-rgb: 245, 158, 11;
+  --warning-bg: rgba(245, 158, 11, 0.14);
 
   /* Textos */
-  --text-main: #fafafa;    /* Zinc 50 */
-  --text-muted: #a1a1aa;   /* Zinc 400 */
+  --text-main: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #8b95a9;
+  --text-dim: #556075;
   --text-inverse: #ffffff;
+  --foreground: #f8fafc;
+  --muted-foreground: #8b95a9;
 
-  /* Bordes */
-  --border-color: #27272a; /* Zinc 800 */
-  --border-light: #3f3f46; /* Zinc 700 */
+  /* Bordes e Iluminación Especular */
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.24);
+  --border-focus: var(--primary);
 
   /* --- 2. ESPACIADO Y FORMAS --- */
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 20px; /* Más moderno */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
   --radius-full: 9999px;
 
-  /* --- 3. EFECTOS VISUALES --- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 20px var(--primary-glow);
-  
-  --backdrop-blur: blur(12px);
+  /* --- 3. SOMBRAS Y EFECTOS --- */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-lg: 0 18px 40px -8px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-glow: 0 8px 28px -4px var(--primary-glow);
+  --shadow-glow-blue: 0 8px 28px -4px var(--secondary-glow);
+  --backdrop-blur: blur(16px);
 
   /* --- 4. CAPAS (Z-Index) --- */
-  --z-navbar: 50;
+  --z-navbar: 60;
   --z-overlay: 1000;
-  --z-modal: 1001;
+  --z-modal: 1050;
   --z-toast: 9999;
 
   /* --- 5. TIPOGRAFÍA --- */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Menlo', monospace;
+  --font-display: 'Barlow Condensed', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* --- 6. DIMENSIONES DE LAYOUT --- */
+  --sidebar-width: 270px;
+  --mobile-nav-height: 4.5rem;
 }

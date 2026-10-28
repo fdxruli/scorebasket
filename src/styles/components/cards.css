@@ -1,19 +1,33 @@
 /* src/styles/components/cards.css */
+
 .card {
-  background-color: var(--bg-surface);
-  /* Borde sutil */
+  background: linear-gradient(160deg, rgba(24, 28, 41, 0.88) 0%, rgba(15, 18, 27, 0.96) 100%);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  padding: 1.25rem;
   box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
-  /* Gradiente sutil para dar profundidad */
-  background-image: linear-gradient(to bottom right, rgba(255,255,255,0.03), transparent);
+  backdrop-filter: blur(12px);
 }
 
-/* Estado Interactivo */
+@media (min-width: 768px) {
+  .card {
+    padding: 1.5rem;
+  }
+}
+
+.card-interactive {
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
 .card-interactive:active {
-  transform: scale(0.98);
-  transition: transform 0.1s;
+  transform: scale(0.985);
 }

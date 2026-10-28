@@ -5,20 +5,22 @@ import { db } from '../../../db/db';
 
 interface UseTraditionalLogicProps {
   match: Match;
+  /** Cuando hay un modal de acción/jugadores/historial abierto, diferimos el modal de fin de cuarto/partido */
+  isActionModalOpen?: boolean;
 }
 
-export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
+export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTraditionalLogicProps) => {
   // 1. Extraer configuración con fallbacks seguros para partidos legacy
   const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
   const minutesPerQuarter = match.config?.traditional?.minutesPerQuarter || match.quarterDuration || 10;
-  
+
   // 2. Estado local para modales
   const [showQuarterEndModal, setShowQuarterEndModal] = useState(false);
   const [showMatchEndModal, setShowMatchEndModal] = useState(false);
   const zeroHandledQuarterRef = useRef<number | null>(null);
 
   // 3. Timer Hook: Pasamos el OBJETO match, no los segundos.
-  // El hook se encarga de calcular el tiempo restante basado en la BD.
+  // El hook se encarga de calcular el tiempo restante basado en la BD y sonar la chicharra en 00:00.
   const { timeLeft, isRunning, toggleTimer, resetTimer, adjustTime } = useMatchTimer(match);
 
   // Helper para formato de tiempo (MM:SS)
@@ -40,7 +42,7 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     }
   }, [match.currentQuarter, quartersConfig]);
 
-  // 4. Efecto: Detectar cuando el reloj llega a cero
+  // 4. Efecto: Detectar cuando el reloj llega a cero (diferido si hay un modal de acción en curso)
   useEffect(() => {
     const currentQ = match.currentQuarter || 1;
 
@@ -51,17 +53,32 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
 
     // Si el tiempo se acabó, no está corriendo y el partido no ha terminado...
     if (timeLeft <= 0 && !isRunning && match.status !== 'finished') {
+      // Si el usuario tiene abierto PlayerSelectModal, LivePlayersModal o LiveMatchHistoryModal,
+      // NO abrimos el modal de fin de periodo todavía; esperamos a que termine su acción.
+      if (isActionModalOpen) {
+        return;
+      }
+
       if (zeroHandledQuarterRef.current !== currentQ && !showQuarterEndModal && !showMatchEndModal) {
         zeroHandledQuarterRef.current = currentQ;
         handleTimerZero();
       }
     }
-  }, [timeLeft, isRunning, match.status, match.currentQuarter, showQuarterEndModal, showMatchEndModal, handleTimerZero]);
+  }, [
+    timeLeft,
+    isRunning,
+    match.status,
+    match.currentQuarter,
+    showQuarterEndModal,
+    showMatchEndModal,
+    handleTimerZero,
+    isActionModalOpen
+  ]);
 
   // 5. Acción: Siguiente Cuarto
   const nextQuarter = useCallback(async () => {
     const currentQ = match.currentQuarter || 1;
-    
+
     if (currentQ < quartersConfig) {
       const nextQ = currentQ + 1;
       const isNewHalf = currentQ === 2 && nextQ === 3;
@@ -109,14 +126,14 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     toggleTimer,
     resetCurrentQuarter: resetTimer,
     adjustTime,
-    
+
     currentQuarter: match.currentQuarter || 1,
     totalQuarters: quartersConfig,
     nextQuarter,
     endMatch,
     startOvertime,
     isTied,
-    
+
     showQuarterEndModal,
     setShowQuarterEndModal,
     showMatchEndModal,

@@ -1,5 +1,5 @@
 // src/features/match-creations/components/shared/LiveHeader.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ChevronLeft, RotateCcw, History, Users, Trophy, AlertCircle, Volume2, VolumeX, Bell } from 'lucide-react';
@@ -14,10 +14,20 @@ import { db } from '../../../../db/db';
 export const LiveHeader: React.FC = () => {
   const navigate = useNavigate();
   const { undoLastAction } = useGameActions();
-  const { match, localTeam, visitorTeam } = useLiveMatch();
+  const { match, localTeam, visitorTeam, setActionModalOpen } = useLiveMatch();
   const [showHistory, setShowHistory] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
   const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
+
+  useEffect(() => {
+    setActionModalOpen('live-header-history', showHistory);
+    return () => setActionModalOpen('live-header-history', false);
+  }, [showHistory, setActionModalOpen]);
+
+  useEffect(() => {
+    setActionModalOpen('live-header-players', showPlayers);
+    return () => setActionModalOpen('live-header-players', false);
+  }, [showPlayers, setActionModalOpen]);
 
   const handleToggleMute = () => {
     const nextMuted = toggleSoundMute();

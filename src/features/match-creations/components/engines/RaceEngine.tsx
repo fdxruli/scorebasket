@@ -8,6 +8,7 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
+import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
 import { Target, Trophy, RotateCcw, Flag, Users, Share2 } from 'lucide-react';
 import type { Player } from '../../../../db/models';
@@ -85,13 +86,14 @@ export const RaceEngine: React.FC = () => {
         setCurrentAction({ teamId, teamSide, teamName, players, action });
     };
 
-    const confirmAction = (playerId: number | null, overrideAction?: GameAction) => {
+    const confirmAction = async (playerId: number | null, overrideAction?: GameAction) => {
         if (!currentAction) return;
         const finalAction = overrideAction || currentAction.action;
+        const targetTeamId = currentAction.teamId;
         if (finalAction.type === 'score') {
-            addScore(currentAction.teamId, finalAction.points, playerId ?? undefined);
+            await addScore(targetTeamId, finalAction.points, playerId ?? undefined);
         } else {
-            addFoul(currentAction.teamId, playerId ?? undefined);
+            await addFoul(targetTeamId, playerId ?? undefined);
         }
         setCurrentAction(null);
     };
@@ -235,6 +237,9 @@ export const RaceEngine: React.FC = () => {
             {showEarlyFinishConfirm && (
                 <div className="game-modal-overlay" onClick={() => setShowEarlyFinishConfirm(false)}>
                     <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
+                        <div className="game-modal-status-header">
+                            <ModalLiveStatusPill />
+                        </div>
                         <div className="modal-icon-wrapper">
                             <Flag size={34} color="var(--danger)" />
                         </div>
@@ -268,6 +273,9 @@ export const RaceEngine: React.FC = () => {
             {showMatchEndModal && (
                 <div className="game-modal-overlay">
                     <div className="game-modal-card is-end">
+                        <div className="game-modal-status-header">
+                            <ModalLiveStatusPill />
+                        </div>
                         <div className="modal-icon-wrapper">
                             <Trophy size={40} color="var(--warning)" />
                         </div>

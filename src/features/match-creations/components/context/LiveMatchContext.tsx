@@ -1,4 +1,4 @@
-import React, { createContext, useContext, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../../db/db';
 import type { Match } from '../../../../db/models/Match';
@@ -21,6 +21,11 @@ interface LiveMatchContextState {
   visitorTeam: TeamWithPlayers | undefined;
   isLoading: boolean;
   error: string | null;
+  /** Indica si hay algún modal de acción/jugadores/historial abierto que deba diferir modales de fin de cuarto/partido */
+  isActionModalOpen: boolean;
+  hasActiveOverlay: boolean;
+  setActionModalOpen: (modalKey: string, isOpen: boolean) => void;
+  registerOpenModal: (modalKey: string) => () => void;
 }
 
 interface LiveMatchProviderProps {
@@ -39,18 +44,42 @@ const isActivePlayer = (player: Player) => !player.isArchived;
 
 // --- 2. Creación del Contexto ---
 
-const LiveMatchContext = createContext<LiveMatchContextState | undefined>(undefined);
+export const LiveMatchContext = createContext<LiveMatchContextState | undefined>(undefined);
 
 // --- 3. Provider Component ---
 
 export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, children }) => {
+  const [openModals, setOpenModals] = useState<Record<string, boolean>>({});
+
+  const setActionModalOpen = useCallback((modalKey: string, isOpen: boolean) => {
+    setOpenModals(prev => {
+      if (Boolean(prev[modalKey]) === isOpen) return prev;
+      const next = { ...prev };
+      if (isOpen) {
+        next[modalKey] = true;
+      } else {
+        delete next[modalKey];
+      }
+      return next;
+    });
+  }, []);
+
+  const registerOpenModal = useCallback(
+    (modalKey: string) => {
+      setActionModalOpen(modalKey, true);
+      return () => setActionModalOpen(modalKey, false);
+    },
+    [setActionModalOpen]
+  );
+
+  const isActionModalOpen = Object.keys(openModals).length > 0;
 
   // --- Carga de Datos Atómica (Reactive) ---
   const data = useLiveQuery<LiveMatchQueryResult>(async () => {
     try {
       // a. Obtener el partido
       const matchData = await db.matches.get(matchId);
-      
+
       // Si no existe el partido, retornamos null inmediatamente para manejarlo abajo
       if (!matchData) return null;
 
@@ -101,7 +130,7 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
 
   // Si data es undefined, Dexie está cargando inicialmente
   const isLoading = data === undefined;
-  
+
   // Si data es null (retornado explícitamente), el partido no existe
   const notFound = !isLoading && data === null;
 
@@ -115,7 +144,11 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
     localTeam: data?.localTeam,
     visitorTeam: data?.visitorTeam,
     isLoading,
-    error
+    error,
+    isActionModalOpen,
+    hasActiveOverlay: isActionModalOpen,
+    setActionModalOpen,
+    registerOpenModal
   };
 
   return (
@@ -129,10 +162,10 @@ export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, c
 
 export const useLiveMatch = (): LiveMatchContextState => {
   const context = useContext(LiveMatchContext);
-  
+
   if (context === undefined) {
     throw new Error('useLiveMatch debe ser usado dentro de un LiveMatchProvider');
   }
-  
+
   return context;
 };

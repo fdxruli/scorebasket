@@ -1086,11 +1086,6 @@ export async function buildShareMatchCardInputFromDb(
   let mainLocalScore = localPointsTotal || match.localScore || 0;
   let mainVisitorScore = visitorPointsTotal || match.visitorScore || 0;
 
-  if (mode === 'best-of-series') {
-    mainLocalScore = match.config.bestOf?.wins?.local || 0;
-    mainVisitorScore = match.config.bestOf?.wins?.visitor || 0;
-  }
-
   const quartersSet = new Set([
     ...safeScores.map(s => s.quarter),
     ...safeFouls.map(f => f.quarter)
@@ -1113,17 +1108,15 @@ export async function buildShareMatchCardInputFromDb(
     });
   }
 
-  // En modo race en vivo (cuando el modal de fin de partido está abierto antes de guardar gameHistory),
-  // incluimos el juego actual si tiene puntaje y aún no figura en gameHistory.
-  const storedHistory = [...(match.gameHistory || [])];
+  // Construir effectiveHistory para modo race (incluyendo juego en vivo si aún no se guardó en gameHistory)
+  const effectiveHistory = [...(match.gameHistory || [])];
   const currentRaceGame = match.config?.race?.currentGame || 1;
   if (
     mode === 'race' &&
-    match.status !== 'finished' &&
     ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
-    !storedHistory.some(g => g.gameNumber === currentRaceGame)
+    !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
   ) {
-    storedHistory.push({
+    effectiveHistory.push({
       gameNumber: currentRaceGame,
       localScore: match.localScore || 0,
       visitorScore: match.visitorScore || 0,
@@ -1132,50 +1125,106 @@ export async function buildShareMatchCardInputFromDb(
     });
   }
 
-  const hasRematchesPlayed = currentRaceGame > 1 || storedHistory.length > 1;
-  const isCurrentScoreZero = (match.localScore || 0) === 0 && (match.visitorScore || 0) === 0;
-  const isRaceWithGames =
-    mode === 'race' && storedHistory.length >= 1 && (hasRematchesPlayed || isCurrentScoreZero);
+  // REGLA ESTRICTA RACE:
+  // 1 solo juego = Muestra Puntos (FINAL)
+  // 2 o más juegos (revanchas) = Muestra Juegos Ganados (JUEGOS) y desglose por juego en la tabla
+  const isRaceWithGames = mode === 'race' && effectiveHistory.length > 1;
 
-  let localTotalCell = localPointsTotal || match.localScore || 0;
-  let visitorTotalCell = visitorPointsTotal || match.visitorScore || 0;
+  let localTotalCell = mainLocalScore;
+  let visitorTotalCell = mainVisitorScore;
   let totalHeader = 'Total';
 
-  if (isRaceWithGames) {
-    const sortedGames = [...storedHistory].sort((a, b) => a.gameNumber - b.gameNumber);
-    mainLocalScore = sortedGames.filter(g => g.winner === 'local').length;
-    mainVisitorScore = sortedGames.filter(g => g.winner === 'visitor').length;
-    rawPeriods = sortedGames.map(g => ({
-      period: g.gameNumber,
-      local: g.localScore,
-      visitor: g.visitorScore
-    }));
-    localTotalCell = mainLocalScore;
-    visitorTotalCell = mainVisitorScore;
-    totalHeader = 'Ganados';
-  } else if (mode === 'race' && storedHistory.length === 1 && rawPeriods.length === 0) {
-    mainLocalScore = storedHistory[0].localScore;
-    mainVisitorScore = storedHistory[0].visitorScore;
-    rawPeriods = [
-      {
-        period: storedHistory[0].gameNumber,
-        local: storedHistory[0].localScore,
-        visitor: storedHistory[0].visitorScore
-      }
-    ];
-    localTotalCell = mainLocalScore;
-    visitorTotalCell = mainVisitorScore;
-  }
-
-  if (mode === 'best-of-series') {
-    if (storedHistory.length > 0 && rawPeriods.length === 0) {
-      const sortedSets = [...storedHistory].sort((a, b) => a.gameNumber - b.gameNumber);
-      rawPeriods = sortedSets.map(g => ({
+  if (mode === 'race') {
+    if (isRaceWithGames) {
+      const sortedGames = [...effectiveHistory].sort((a, b) => a.gameNumber - b.gameNumber);
+      mainLocalScore = sortedGames.filter(g => g.winner === 'local').length;
+      mainVisitorScore = sortedGames.filter(g => g.winner === 'visitor').length;
+      rawPeriods = sortedGames.map(g => ({
         period: g.gameNumber,
         local: g.localScore,
         visitor: g.visitorScore
       }));
+      localTotalCell = mainLocalScore;
+      visitorTotalCell = mainVisitorScore;
+      totalHeader = 'Ganados';
+    } else {
+      const singleGameLocal =
+        effectiveHistory[0]?.localScore || localPointsTotal || match.localScore || 0;
+      const singleGameVisitor =
+        effectiveHistory[0]?.visitorScore || visitorPointsTotal || match.visitorScore || 0;
+      mainLocalScore = singleGameLocal;
+      mainVisitorScore = singleGameVisitor;
+      rawPeriods = [
+        {
+          period: 1,
+          local: singleGameLocal,
+          visitor: singleGameVisitor
+        }
+      ];
+      localTotalCell = singleGameLocal;
+      visitorTotalCell = singleGameVisitor;
+      totalHeader = 'Total';
     }
+  }
+
+  if (mode === 'best-of-series') {
+    const storedSets = [...(match.gameHistory || [])];
+    const historyBySet = new Map<number, { local: number; visitor: number }>();
+    for (const g of storedSets) {
+      historyBySet.set(g.gameNumber, { local: g.localScore, visitor: g.visitorScore });
+    }
+
+    const currentSetNum = match.currentQuarter || match.config?.bestOf?.currentGame || 1;
+    const hasLiveSetScore = (match.localScore || 0) > 0 || (match.visitorScore || 0) > 0;
+    const maxSetNum = Math.max(
+      maxDataQuarter,
+      ...storedSets.map(g => g.gameNumber),
+      hasLiveSetScore ? currentSetNum : 0
+    );
+
+    const mergedSets: { period: number; local: number; visitor: number }[] = [];
+    for (let sNum = 1; sNum <= maxSetNum; sNum++) {
+      const fromHist = historyBySet.get(sNum);
+      const fromScoresLocal = safeScores
+        .filter(s => s.teamId === match.localTeamId && s.quarter === sNum)
+        .reduce((a, b) => a + b.points, 0);
+      const fromScoresVisitor = safeScores
+        .filter(s => s.teamId === match.visitorTeamId && s.quarter === sNum)
+        .reduce((a, b) => a + b.points, 0);
+
+      let setLocal = fromHist ? fromHist.local : fromScoresLocal;
+      let setVisitor = fromHist ? fromHist.visitor : fromScoresVisitor;
+
+      if (setLocal === 0 && setVisitor === 0 && (fromScoresLocal > 0 || fromScoresVisitor > 0)) {
+        setLocal = fromScoresLocal;
+        setVisitor = fromScoresVisitor;
+      }
+
+      if (
+        sNum === currentSetNum &&
+        !fromHist &&
+        setLocal === 0 &&
+        setVisitor === 0 &&
+        hasLiveSetScore
+      ) {
+        setLocal = match.localScore || 0;
+        setVisitor = match.visitorScore || 0;
+      }
+
+      if (setLocal > 0 || setVisitor > 0 || fromHist) {
+        mergedSets.push({
+          period: sNum,
+          local: setLocal,
+          visitor: setVisitor
+        });
+      }
+    }
+
+    rawPeriods = mergedSets;
+    const histLocalWins = storedSets.filter(g => g.winner === 'local').length;
+    const histVisitorWins = storedSets.filter(g => g.winner === 'visitor').length;
+    mainLocalScore = Math.max(match.config.bestOf?.wins?.local || 0, histLocalWins);
+    mainVisitorScore = Math.max(match.config.bestOf?.wins?.visitor || 0, histVisitorWins);
     totalHeader = 'Sets';
     localTotalCell = mainLocalScore;
     visitorTotalCell = mainVisitorScore;

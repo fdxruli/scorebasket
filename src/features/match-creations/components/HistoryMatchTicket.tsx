@@ -10,11 +10,13 @@ interface Props {
 
 export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: Props) => {
     const mode = match.config?.mode || 'traditional';
-    
+
     const formatDate = (date: Date) => {
         try {
-            return new Intl.DateTimeFormat('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' }).format(date);
-        } catch { return ""; }
+            return new Intl.DateTimeFormat('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+        } catch {
+            return '';
+        }
     };
 
     // Lógica para determinar el score a mostrar
@@ -22,24 +24,43 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
     let visitorDisplayScore = match.visitorScore;
     let modeIcon = <Clock size={12} />;
     let isRaceWithGames = false;
-    
+
     if (mode === 'best-of-series') {
-        // En series, mostramos SETS ganados
-        localDisplayScore = match.config.bestOf?.wins?.local || 0;
-        visitorDisplayScore = match.config.bestOf?.wins?.visitor || 0;
+        const storedSets = match.gameHistory || [];
+        const histLocalWins = storedSets.filter(g => g.winner === 'local').length;
+        const histVisitorWins = storedSets.filter(g => g.winner === 'visitor').length;
+        localDisplayScore = Math.max(match.config.bestOf?.wins?.local || 0, histLocalWins);
+        visitorDisplayScore = Math.max(match.config.bestOf?.wins?.visitor || 0, histVisitorWins);
         modeIcon = <Trophy size={12} color="var(--success)" />;
     } else if (mode === 'race') {
         modeIcon = <Target size={12} color="var(--primary)" />;
 
-        const gameHistory = match.gameHistory || [];
-        const hasRematchesPlayed = (match.config?.race?.currentGame || 1) > 1 || gameHistory.length > 1;
-        const isCurrentScoreZero = (match.localScore || 0) === 0 && (match.visitorScore || 0) === 0;
+        const effectiveHistory = [...(match.gameHistory || [])];
+        const currentRaceGame = match.config?.race?.currentGame || 1;
+        if (
+            ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
+            !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
+        ) {
+            effectiveHistory.push({
+                gameNumber: currentRaceGame,
+                localScore: match.localScore || 0,
+                visitorScore: match.visitorScore || 0,
+                winner: (match.localScore || 0) >= (match.visitorScore || 0) ? 'local' : 'visitor',
+                finishedAt: new Date()
+            });
+        }
 
-        // Con revanchas o si el marcador actual quedó en 0-0 tras cerrar: mostramos JUEGOS ganados
-        if (gameHistory.length >= 1 && (hasRematchesPlayed || isCurrentScoreZero)) {
-            localDisplayScore = gameHistory.filter(g => g.winner === 'local').length;
-            visitorDisplayScore = gameHistory.filter(g => g.winner === 'visitor').length;
+        // REGLA ESTRICTA RACE:
+        // 1 solo juego = Muestra Puntos (21 - 18)
+        // 2 o más juegos (revanchas) = Muestra Juegos Ganados (2 - 0)
+        if (effectiveHistory.length > 1) {
+            localDisplayScore = effectiveHistory.filter(g => g.winner === 'local').length;
+            visitorDisplayScore = effectiveHistory.filter(g => g.winner === 'visitor').length;
             isRaceWithGames = true;
+        } else {
+            localDisplayScore = effectiveHistory[0]?.localScore || match.localScore || 0;
+            visitorDisplayScore = effectiveHistory[0]?.visitorScore || match.visitorScore || 0;
+            isRaceWithGames = false;
         }
     }
 

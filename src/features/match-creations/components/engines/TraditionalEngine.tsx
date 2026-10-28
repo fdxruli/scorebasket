@@ -14,13 +14,14 @@ import { Trophy, Clock, RotateCcw, X, Flag, FastForward, Share2 } from 'lucide-r
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { MatchControls } from '../../../../components/live/MatchControls';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
+import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 
 // Components compartidos
 import { LiveHeader } from '../shared/LiveHeader';
 
 export const TraditionalEngine: React.FC = () => {
   const navigate = useNavigate();
-  const { match, localTeam, visitorTeam } = useLiveMatch();
+  const { match, localTeam, visitorTeam, isActionModalOpen, setActionModalOpen } = useLiveMatch();
   const { addScore, addFoul, undoLastAction } = useGameActions();
 
   const hasAnyPlayers = Boolean(
@@ -33,6 +34,24 @@ export const TraditionalEngine: React.FC = () => {
   const [customSeconds, setCustomSeconds] = useState('00');
   const [confirmDialog, setConfirmDialog] = useState<'end-match' | 'next-quarter' | null>(null);
   const [isSharingCard, setIsSharingCard] = useState(false);
+
+  const [playerModal, setPlayerModal] = useState<{
+    isOpen: boolean;
+    teamId: number;
+    action: GameAction;
+  }>({ isOpen: false, teamId: 0, action: { type: 'score', points: 2 } });
+
+  // Sincronizar estado de modales locales con el contexto de prioridad
+  useEffect(() => {
+    setActionModalOpen('engine-player-modal', playerModal.isOpen);
+    return () => setActionModalOpen('engine-player-modal', false);
+  }, [playerModal.isOpen, setActionModalOpen]);
+
+  useEffect(() => {
+    const hasDialog = showTimerModal || confirmDialog !== null;
+    setActionModalOpen('engine-dialog-modal', hasDialog);
+    return () => setActionModalOpen('engine-dialog-modal', false);
+  }, [showTimerModal, confirmDialog, setActionModalOpen]);
 
   // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
   // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
@@ -52,6 +71,9 @@ export const TraditionalEngine: React.FC = () => {
 
   if (!match || !localTeam || !visitorTeam) return null;
 
+  const isOverlayBlocking =
+    isActionModalOpen || playerModal.isOpen || showTimerModal || confirmDialog !== null;
+
   const {
     timeLeft,
     isTimerRunning,
@@ -68,7 +90,7 @@ export const TraditionalEngine: React.FC = () => {
     endMatch,
     startOvertime,
     isTied
-  } = useTraditionalLogic({ match });
+  } = useTraditionalLogic({ match, isActionModalOpen: isOverlayBlocking });
 
   useEffect(() => {
     if (!showTimerModal) return;
@@ -98,12 +120,6 @@ export const TraditionalEngine: React.FC = () => {
     };
   }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
 
-  const [playerModal, setPlayerModal] = useState<{
-    isOpen: boolean;
-    teamId: number;
-    action: GameAction;
-  }>({ isOpen: false, teamId: 0, action: { type: 'score', points: 2 } });
-
   const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
@@ -123,21 +139,23 @@ export const TraditionalEngine: React.FC = () => {
     setPlayerModal({ isOpen: true, teamId, action });
   };
 
-  const handlePlayerSelect = (playerId: number | null, overrideAction?: GameAction) => {
+  const handlePlayerSelect = async (playerId: number | null, overrideAction?: GameAction) => {
     const finalAction = overrideAction || playerModal.action;
+    const targetTeamId = playerModal.teamId;
+
     if (finalAction.type === 'score') {
-      addScore(playerModal.teamId, finalAction.points, playerId ?? undefined);
+      await addScore(targetTeamId, finalAction.points, playerId ?? undefined);
     } else {
-      addFoul(playerModal.teamId, playerId ?? undefined);
+      await addFoul(targetTeamId, playerId ?? undefined);
     }
 
-    setPlayerModal({ ...playerModal, isOpen: false });
+    setPlayerModal(prev => ({ ...prev, isOpen: false }));
   };
 
   const executeNextQuarter = async () => {
     setConfirmDialog(null);
     if (isLastQuarter) {
-      if (isTied) {
+      if (isTied || timeLeft <= 0) {
         setShowMatchEndModal(true);
         return;
       }
@@ -247,6 +265,9 @@ export const TraditionalEngine: React.FC = () => {
       {confirmDialog && (
         <div className="game-modal-overlay" onClick={() => setConfirmDialog(null)}>
           <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
+            <div className="game-modal-status-header">
+              <ModalLiveStatusPill />
+            </div>
             <div className="modal-icon-wrapper">
               {confirmDialog === 'end-match' ? (
                 <Flag size={34} color="var(--danger)" />
@@ -311,6 +332,10 @@ export const TraditionalEngine: React.FC = () => {
             >
               <X size={20} />
             </button>
+
+            <div className="game-modal-status-header" style={{ paddingRight: '2rem' }}>
+              <ModalLiveStatusPill />
+            </div>
 
             <div className="modal-icon-wrapper">
               <Clock size={32} color="var(--secondary-light)" />
@@ -402,9 +427,12 @@ export const TraditionalEngine: React.FC = () => {
         </div>
       )}
 
-      {showQuarterEndModal && (
+      {showQuarterEndModal && !isOverlayBlocking && (
         <div className="game-modal-overlay">
           <div className="game-modal-card is-exit">
+            <div className="game-modal-status-header">
+              <ModalLiveStatusPill />
+            </div>
             <div className="modal-icon-wrapper">
               <Clock size={36} color="var(--secondary-light)" />
             </div>
@@ -416,6 +444,13 @@ export const TraditionalEngine: React.FC = () => {
               <button type="button" onClick={nextQuarter} className="btn-modal-primary btn-next-q">
                 Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowQuarterEndModal(false)}
+                className="btn-modal-secondary"
+              >
+                Seguir en {periodLabel} (Anotar jugada en 00:00)
+              </button>
               <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                 Deshacer última acción / Corregir
               </button>
@@ -424,9 +459,12 @@ export const TraditionalEngine: React.FC = () => {
         </div>
       )}
 
-      {showMatchEndModal && (
+      {showMatchEndModal && !isOverlayBlocking && (
         <div className="game-modal-overlay">
           <div className={`game-modal-card ${isTied ? 'is-overtime' : 'is-end'}`}>
+            <div className="game-modal-status-header">
+              <ModalLiveStatusPill />
+            </div>
             <div className="modal-icon-wrapper">
               <Trophy size={38} color="var(--warning)" />
             </div>
@@ -452,6 +490,13 @@ export const TraditionalEngine: React.FC = () => {
                 </button>
                 <button type="button" onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
                   Iniciar OT (+5 min)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMatchEndModal(false)}
+                  className="btn-modal-secondary"
+                >
+                  Seguir en {periodLabel} (Anotar jugada en 00:00)
                 </button>
                 <button
                   type="button"
@@ -490,6 +535,13 @@ export const TraditionalEngine: React.FC = () => {
                 >
                   <Share2 size={18} />
                   {isSharingCard ? 'Generando imagen...' : 'Compartir Resultado (Imagen)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMatchEndModal(false)}
+                  className="btn-modal-secondary"
+                >
+                  Seguir en {periodLabel} (Anotar jugada en 00:00)
                 </button>
                 <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                   Deshacer última acción / Corregir

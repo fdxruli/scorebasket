@@ -1329,3 +1329,9 @@
   background: rgba(255, 255, 255, 0.09);
   color: white;
 }
+
+
+/* Jerarquía unificada: .modal-overlay (2100) siempre por encima de .game-modal-overlay (2000) */
+.game-modal-overlay {
+  z-index: var(--z-game-modal, 2000);
+}

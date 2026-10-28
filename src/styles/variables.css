@@ -69,10 +69,11 @@
   --shadow-glow-blue: 0 8px 28px -4px var(--secondary-glow);
   --backdrop-blur: blur(16px);
 
-  /* --- 4. CAPAS (Z-Index) --- */
+  /* --- 4. CAPAS (Z-Index Unificado: Modales de Acción siempre sobre Modales de Evento) --- */
   --z-navbar: 60;
   --z-overlay: 1000;
-  --z-modal: 1050;
+  --z-game-modal: 2000;
+  --z-modal: 2100;
   --z-toast: 9999;
 
   /* --- 5. TIPOGRAFÍA --- */

@@ -1,8 +1,10 @@
 // src/components/live/LiveMatchHistoryModal.tsx
-import { useState } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../db/db';
+import { LiveMatchContext } from '../../features/match-creations/components/context/LiveMatchContext';
+import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { X, Trash2, Clock, AlertCircle, Trophy, History, Lock, UserCheck } from 'lucide-react';
 import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
 
@@ -23,6 +25,14 @@ type HistoryItem = {
 
 export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModalProps) {
   const navigate = useNavigate();
+  const liveContext = useContext(LiveMatchContext);
+  const registerOpenModal = liveContext?.registerOpenModal;
+
+  useEffect(() => {
+    if (!registerOpenModal) return;
+    return registerOpenModal('live-history-modal');
+  }, [registerOpenModal]);
+
   const [filterType, setFilterType] = useState<'all' | 'score' | 'foul'>('all');
   const [reassigningKey, setReassigningKey] = useState<string | null>(null);
   const [confirmDeleteMatch, setConfirmDeleteMatch] = useState(false);
@@ -78,7 +88,8 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       foulsByPlayer.set(f.playerId, (foulsByPlayer.get(f.playerId) || 0) + 1);
     }
 
-    const mode = matchData?.config?.mode || 'traditional';    const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
+    const mode = matchData?.config?.mode || 'traditional';
+    const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
 
     let currentPeriod = matchData?.currentQuarter || 1;
     if (mode === 'race') {
@@ -200,19 +211,22 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="modal-header">
-          <div>
-            <h3 className="modal-title flex-gap">
-              <History size={22} color="var(--primary)" />
-              Historial y Corrección de Jugadas
-            </h3>
-            <p className="modal-subtitle">
-              Elimina una jugada con el basurero o toca el jugador para reasignarlo.
-            </p>
+        <div className="modal-header modal-header-with-status">
+          <div className="modal-header-top-row">
+            <div>
+              <h3 className="modal-title flex-gap">
+                <History size={22} color="var(--primary)" />
+                Historial y Corrección de Jugadas
+              </h3>
+              <p className="modal-subtitle">
+                Elimina una jugada con el basurero o toca el jugador para reasignarlo.
+              </p>
+            </div>
+            <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
+              <X size={24} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
-            <X size={24} />
-          </button>
+          <ModalLiveStatusPill />
         </div>
 
         {/* Barra de Filtros */}

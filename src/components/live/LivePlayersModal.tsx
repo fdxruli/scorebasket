@@ -1,10 +1,11 @@
 // src/components/live/LivePlayersModal.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch, type TeamWithPlayers } from '../../features/match-creations/components/context/LiveMatchContext';
 import { useGameActions } from '../../features/match-creations/hooks/useGameActions';
+import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { X, Users, UserPlus, AlertCircle, Check, Pencil } from 'lucide-react';
 
 interface LivePlayersModalProps {
@@ -18,8 +19,12 @@ export function LivePlayersModal({
   foulLimit = 5,
   scoringOptions = [1, 2, 3]
 }: LivePlayersModalProps) {
-  const { match, localTeam, visitorTeam } = useLiveMatch();
+  const { match, localTeam, visitorTeam, registerOpenModal } = useLiveMatch();
   const { addScore, addFoul } = useGameActions();
+
+  useEffect(() => {
+    return registerOpenModal('live-players-modal');
+  }, [registerOpenModal]);
 
   const [activeTab, setActiveTab] = useState<'local' | 'visitor'>('local');
   const [addingForTeamId, setAddingForTeamId] = useState<number | null>(null);
@@ -313,19 +318,22 @@ export function LivePlayersModal({
         onClick={e => e.stopPropagation()}
       >
         {/* HEADER */}
-        <div className="modal-header">
-          <div>
-            <h3 className="modal-title flex-gap">
-              <Users size={22} color="var(--primary)" />
-              Jugadores en Cancha y Estadísticas
-            </h3>
-            <p className="modal-subtitle">
-              Anota directo por jugador, revisa faltas/puntos o agrega jugadores al partido.
-            </p>
+        <div className="modal-header modal-header-with-status">
+          <div className="modal-header-top-row">
+            <div>
+              <h3 className="modal-title flex-gap">
+                <Users size={22} color="var(--primary)" />
+                Jugadores en Cancha y Estadísticas
+              </h3>
+              <p className="modal-subtitle">
+                Anota directo por jugador, revisa faltas/puntos o agrega jugadores al partido.
+              </p>
+            </div>
+            <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
+              <X size={22} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
-            <X size={22} />
-          </button>
+          <ModalLiveStatusPill />
         </div>
 
         {/* TABS MÓVILES PARA ALTERNAR EQUIPO (En Desktop se ven ambos lado a lado) */}

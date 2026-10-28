@@ -1,8 +1,10 @@
 // src/components/live/PlayerSelectModal.tsx
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useContext } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
+import { LiveMatchContext } from '../../features/match-creations/components/context/LiveMatchContext';
+import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { Trophy, AlertCircle, UserX, Shirt, Plus, X, Check, UserPlus } from 'lucide-react';
 
 export type GameAction =
@@ -36,6 +38,14 @@ export function PlayerSelectModal({
     matchId,
     foulLimit
 }: PlayerSelectModalProps) {
+    const liveContext = useContext(LiveMatchContext);
+    const registerOpenModal = liveContext?.registerOpenModal;
+
+    useEffect(() => {
+        if (!registerOpenModal) return;
+        return registerOpenModal('player-select-modal');
+    }, [registerOpenModal]);
+
     // Permite cambiar rápido entre +1, +2, +3 o Falta sin cerrar el modal si se tocó el botón equivocado
     const [activeAction, setActiveAction] = useState<GameAction>(action);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -126,7 +136,7 @@ export function PlayerSelectModal({
                 className={`modal-content variant-game ${isFoul ? 'is-foul' : 'is-score'} team-${teamSide}`}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* CABECERA COMPACTA Y CLARA CON SELECTOR RÁPIDO DE ACCIÓN */}
+                {/* CABECERA COMPACTA Y CLARA CON SELECTOR RÁPIDO DE ACCIÓN + RELOJ/MARCADOR EN VIVO */}
                 <div className="modal-header pm-header">
                     <div className="pm-header-top">
                         <div className="pm-team-pill" style={{ borderColor: `${teamColor}55`, color: teamColor }}>
@@ -143,6 +153,8 @@ export function PlayerSelectModal({
                             <X size={22} />
                         </button>
                     </div>
+
+                    <ModalLiveStatusPill />
 
                     <div className="pm-title-row">
                         <div className="pm-action-badge" style={{ color: accentColor }}>

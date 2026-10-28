@@ -1,7 +1,8 @@
 // src/components/live/MatchControls.tsx
-import { Play, Pause, FastForward, X, AlertCircle, Users } from 'lucide-react';
+import { Play, Pause, FastForward, Flag, Users } from 'lucide-react';
 import type { Player, Team } from '../../db/models';
 import type { GameAction } from './PlayerSelectModal';
+import { GameActionControls } from '../../features/match-creations/components/shared/GameActionControls';
 
 interface MatchControlsProps {
   localTeam: Team;
@@ -15,6 +16,7 @@ interface MatchControlsProps {
   onToggleTimer: () => void;
   onNextQuarter: () => void;
   onEndMatch: () => void;
+  nextPeriodLabel?: string;
 }
 
 export function MatchControls({
@@ -26,120 +28,76 @@ export function MatchControls({
   onActionRequest,
   onToggleTimer,
   onNextQuarter,
-  onEndMatch
+  onEndMatch,
+  nextPeriodLabel = 'Sig. Periodo'
 }: MatchControlsProps) {
 
   return (
     <section className="controls-panel">
-      
+
       {/* GRILLA DE ACCIONES PRINCIPALES */}
       <div className="action-grid">
-        
+
         {/* LADO LOCAL (IZQUIERDA) */}
         <div className="team-column">
-          <div className="btn-score-group">
-             <button 
-               onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:1})} 
-               className="btn-action btn-local-sm"
-             >
-               +1
-             </button>
-             <button 
-               onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:2})} 
-               className="btn-action btn-local-sm"
-             >
-               +2
-             </button>
-          </div>
-          <button 
-             onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'score', points:3})} 
-             className="btn-action btn-local-lg"
-          >
-             +3
-          </button>
-          <button 
-             onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'foul'})} 
-             className="btn-action btn-local-foul"
-          >
-             <AlertCircle size={14} />
-             Falta {localTeam.name.substring(0,3)}
-          </button>
+          <GameActionControls
+            teamName={localTeam.name}
+            variant="local"
+            scoringOptions={[1, 2, 3]}
+            onScore={(pts) => onActionRequest(localTeam.id!, localTeam.name, localPlayers, { type: 'score', points: pts })}
+            onFoul={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, { type: 'foul' })}
+          />
         </div>
 
         {/* LADO VISITANTE (DERECHA) */}
         <div className="team-column">
-          <div className="btn-score-group">
-             <button 
-               onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:1})} 
-               className="btn-action btn-visitor-sm"
-             >
-               +1
-             </button>
-             <button 
-               onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:2})} 
-               className="btn-action btn-visitor-sm"
-             >
-               +2
-             </button>
-          </div>
-          <button 
-             onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'score', points:3})} 
-             className="btn-action btn-visitor-lg"
-          >
-             +3
-          </button>
-          <button 
-             onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'foul'})} 
-             className="btn-action btn-visitor-foul"
-          >
-             <AlertCircle size={14} />
-             Falta {visitorTeam.name.substring(0,3)}
-          </button>
+          <GameActionControls
+            teamName={visitorTeam.name}
+            variant="visitor"
+            scoringOptions={[1, 2, 3]}
+            onScore={(pts) => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, { type: 'score', points: pts })}
+            onFoul={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, { type: 'foul' })}
+          />
         </div>
 
       </div>
 
-      {/* CHIP TOGGLE JUGADORES ON / OFF */}
-      {onToggleTrackPlayers && (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+      {/* BARRA INFERIOR DE RELOJ Y UTILIDADES */}
+      <div className="bottom-bar">
+        <button type="button" onClick={onEndMatch} className="btn-utility danger-subtle" title="Finalizar y cerrar partido">
+          <Flag size={18} />
+          <span>Finalizar</span>
+        </button>
+
+        {onToggleTrackPlayers && (
           <button
             type="button"
             onClick={onToggleTrackPlayers}
-            className="btn btn-secondary"
-            style={{
-              fontSize: '0.75rem',
-              padding: '0.4rem 0.9rem',
-              borderRadius: '999px',
-              borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
-              color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
-              backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : 'rgba(255, 255, 255, 0.03)'
-            }}
+            className={`btn-utility ${trackPlayers ? 'active-toggle' : ''}`}
+            title="Activar o desactivar selección de jugador al anotar"
           >
-            <Users size={14} />
-            Jugadores: {trackPlayers ? 'ON' : 'OFF'}
+            <Users size={18} />
+            <span>Jugadores: {trackPlayers ? 'ON' : 'OFF'}</span>
           </button>
-        </div>
-      )}
+        )}
 
-      {/* BARRA DE UTILIDADES E INICIO */}
-      <div className="bottom-bar">
-        <button onClick={onEndMatch} className="btn-utility">
-            <X size={20} />
-            <span>Fin</span>
-        </button>
-
-        {/* BOTÓN GIGANTE PLAY/PAUSE */}
-        <button onClick={onToggleTimer} className={`btn-main-play ${isTimerRunning ? 'play' : 'pause'}`}>
+        {/* BOTÓN PRINCIPAL PLAY/PAUSE */}
+        <button
+          type="button"
+          onClick={onToggleTimer}
+          className={`btn-main-play ${isTimerRunning ? 'play' : 'pause'}`}
+          title={isTimerRunning ? 'Pausar reloj' : 'Iniciar reloj'}
+        >
           {isTimerRunning ? (
-             <Pause fill="currentColor" size={36} />
+            <Pause fill="currentColor" size={32} />
           ) : (
-             <Play fill="currentColor" size={36} style={{ marginLeft: '0.25rem' }} />
+            <Play fill="currentColor" size={32} style={{ marginLeft: '0.2rem' }} />
           )}
         </button>
 
-        <button onClick={onNextQuarter} className="btn-utility">
-            <FastForward size={20} />
-            <span>Sig Q</span>
+        <button type="button" onClick={onNextQuarter} className="btn-utility" title="Avanzar al siguiente periodo">
+          <FastForward size={18} />
+          <span>{nextPeriodLabel}</span>
         </button>
       </div>
 

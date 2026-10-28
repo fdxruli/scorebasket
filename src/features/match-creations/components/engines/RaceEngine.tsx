@@ -9,12 +9,25 @@ import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { Target, Trophy, RotateCcw, Flag, Users } from 'lucide-react';
+import type { Player } from '../../../../db/models';
 
 export const RaceEngine: React.FC = () => {
     const navigate = useNavigate();
     const { match, localTeam, visitorTeam } = useLiveMatch();
     const { addScore, addFoul, undoLastAction } = useGameActions();
-    const [trackPlayers, setTrackPlayers] = useState(false);
+
+    const hasAnyPlayers = Boolean(
+        (localTeam?.players && localTeam.players.length > 0) ||
+        (visitorTeam?.players && visitorTeam.players.length > 0)
+    );
+    const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
+    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
+
+    useEffect(() => {
+        if (hasAnyPlayers) {
+            setTrackPlayers(true);
+        }
+    }, [hasAnyPlayers]);
 
     if (!match || !localTeam || !visitorTeam) return null;
 
@@ -39,15 +52,22 @@ export const RaceEngine: React.FC = () => {
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
+        teamSide: 'local' | 'visitor';
         teamName: string;
-        players: any[];
+        players: Player[];
         action: GameAction;
     } | null>(null);
 
-    const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
+    const requestAction = (
+        teamId: number,
+        teamSide: 'local' | 'visitor',
+        teamName: string,
+        players: Player[],
+        action: GameAction
+    ) => {
         if (showMatchEndModal) return;
 
-        if (!trackPlayers || !players || players.length === 0) {
+        if (!trackPlayers) {
             if (action.type === 'score') {
                 addScore(teamId, action.points, undefined);
             } else {
@@ -56,26 +76,24 @@ export const RaceEngine: React.FC = () => {
             return;
         }
 
-        setCurrentAction({ teamId, teamName, players, action });
+        setCurrentAction({ teamId, teamSide, teamName, players, action });
     };
 
-    const confirmAction = (playerId: number | null) => {
+    const confirmAction = (playerId: number | null, overrideAction?: GameAction) => {
         if (!currentAction) return;
-        if (currentAction.action.type === 'score') {
-            addScore(currentAction.teamId, currentAction.action.points, playerId || undefined);
+        const finalAction = overrideAction || currentAction.action;
+        if (finalAction.type === 'score') {
+            addScore(currentAction.teamId, finalAction.points, playerId ?? undefined);
         } else {
-            addFoul(currentAction.teamId, playerId || undefined);
+            addFoul(currentAction.teamId, playerId ?? undefined);
         }
         setCurrentAction(null);
     };
 
-    const handleEarlyFinish = async () => {
-        const confirmed = window.confirm(
-            'La reta aún no llega a la meta. ¿Deseas finalizar y cerrar el partido de todos modos?'
-        );
-        if (!confirmed) return;
-        await endMatch();
-    };
+    const gameHistory = match.gameHistory || [];
+    const localGamesWon = gameHistory.filter(g => g.winner === 'local').length;
+    const visitorGamesWon = gameHistory.filter(g => g.winner === 'visitor').length;
+    const currentGameNum = match.config?.race?.currentGame || 1;
 
     return (
         <div className="live-layout">
@@ -85,11 +103,16 @@ export const RaceEngine: React.FC = () => {
                 <div className="race-info-pill">
                     <span className="race-info-label">
                         <Target size={16} color="var(--primary)" />
-                        Meta del Juego
+                        Meta Reta #{currentGameNum}
                     </span>
                     <span className="race-info-value">
                         {targetScore} PTS {winByTwo ? '• DIF +2' : ''}
                     </span>
+                    {gameHistory.length > 0 && (
+                        <span className="race-games-record">
+                            Juegos: {localGamesWon} - {visitorGamesWon}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -110,11 +133,20 @@ export const RaceEngine: React.FC = () => {
                     {/* COLUMNA LOCAL */}
                     <div className="team-column">
                         <GameActionControls
-                            simpleScoring={true}
+                            teamName={localTeam.name}
                             scoringOptions={scoringOptions}
                             variant="local"
-                            onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
+                            onScore={(pts) =>
+                                requestAction(localTeam.id!, 'local', localTeam.name, localTeam.players, {
+                                    type: 'score',
+                                    points: pts
+                                })
+                            }
+                            onFoul={() =>
+                                requestAction(localTeam.id!, 'local', localTeam.name, localTeam.players, {
+                                    type: 'foul'
+                                })
+                            }
                             disabled={showMatchEndModal}
                         />
                     </div>
@@ -122,11 +154,20 @@ export const RaceEngine: React.FC = () => {
                     {/* COLUMNA VISITANTE */}
                     <div className="team-column">
                         <GameActionControls
-                            simpleScoring={true}
+                            teamName={visitorTeam.name}
                             scoringOptions={scoringOptions}
                             variant="visitor"
-                            onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            onScore={(pts) =>
+                                requestAction(visitorTeam.id!, 'visitor', visitorTeam.name, visitorTeam.players, {
+                                    type: 'score',
+                                    points: pts
+                                })
+                            }
+                            onFoul={() =>
+                                requestAction(visitorTeam.id!, 'visitor', visitorTeam.name, visitorTeam.players, {
+                                    type: 'foul'
+                                })
+                            }
                             disabled={showMatchEndModal}
                         />
                     </div>
@@ -136,32 +177,21 @@ export const RaceEngine: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => setTrackPlayers(prev => !prev)}
-                        className="btn btn-secondary"
-                        style={{
-                            flex: 1,
-                            fontSize: '0.8rem',
-                            padding: '0.7rem 0.75rem',
-                            borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
-                            color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
-                            backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : undefined
-                        }}
+                        className={`btn-utility ${trackPlayers ? 'active-toggle' : ''}`}
+                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
                     >
-                        <Users size={15} />
-                        Jugadores: {trackPlayers ? 'ON' : 'OFF'}
+                        <Users size={17} />
+                        <span>Jugadores: {trackPlayers ? 'ON' : 'OFF'}</span>
                     </button>
 
                     <button
                         type="button"
-                        onClick={handleEarlyFinish}
-                        className="btn btn-secondary"
-                        style={{
-                            flex: 1,
-                            fontSize: '0.8rem',
-                            padding: '0.7rem 0.75rem'
-                        }}
+                        onClick={() => setShowEarlyFinishConfirm(true)}
+                        className="btn-utility danger-subtle"
+                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
                     >
-                        <Flag size={15} />
-                        Finalizar / Cerrar Partido
+                        <Flag size={17} />
+                        <span>Finalizar Partido</span>
                     </button>
                 </div>
             </section>
@@ -169,12 +199,48 @@ export const RaceEngine: React.FC = () => {
             {currentAction && (
                 <PlayerSelectModal
                     matchId={match.id}
+                    teamId={currentAction.teamId}
+                    teamSide={currentAction.teamSide}
                     teamName={currentAction.teamName}
-                    players={currentAction.players}
+                    players={currentAction.teamSide === 'local' ? localTeam.players : visitorTeam.players}
                     action={currentAction.action}
+                    scoringOptions={scoringOptions}
                     onSelect={confirmAction}
                     onCancel={() => setCurrentAction(null)}
                 />
+            )}
+
+            {showEarlyFinishConfirm && (
+                <div className="game-modal-overlay" onClick={() => setShowEarlyFinishConfirm(false)}>
+                    <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
+                        <div className="modal-icon-wrapper">
+                            <Flag size={34} color="var(--danger)" />
+                        </div>
+                        <h3>¿Finalizar la Reta?</h3>
+                        <p>
+                            Aún no se alcanza la meta de {targetScore} puntos ({match.localScore} - {match.visitorScore}).
+                        </p>
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setShowEarlyFinishConfirm(false);
+                                    await endMatch();
+                                }}
+                                className="btn-modal-primary btn-finish"
+                            >
+                                Sí, Guardar y Cerrar Partido
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowEarlyFinishConfirm(false)}
+                                className="btn-modal-secondary"
+                            >
+                                Seguir Jugando
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showMatchEndModal && (
@@ -184,16 +250,17 @@ export const RaceEngine: React.FC = () => {
                             <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Tenemos un Ganador!</h3>
-                        <p style={{ fontSize: '1.35rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
+                        <p style={{ fontSize: '1.45rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
                             {winnerTeamId === localTeam.id ? localTeam.name : visitorTeam.name}
                         </p>
-                        <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>
                             Ha alcanzado la meta de {targetScore} puntos ({match.localScore} - {match.visitorScore}).
                         </p>
 
                         <div className="modal-actions">
                             {hasRematches && (
                                 <button
+                                    type="button"
                                     onClick={handleRematch}
                                     className="btn-modal-primary"
                                     style={{ background: 'var(--secondary)', marginBottom: '0.35rem' }}
@@ -203,11 +270,11 @@ export const RaceEngine: React.FC = () => {
                                 </button>
                             )}
 
-                            <button onClick={endMatch} className="btn-modal-primary btn-finish">
+                            <button type="button" onClick={endMatch} className="btn-modal-primary btn-finish">
                                 Finalizar Partido
                             </button>
 
-                            <button onClick={undoLastAction} className="btn-modal-secondary">
+                            <button type="button" onClick={undoLastAction} className="btn-modal-secondary">
                                 Deshacer último punto (Corregir)
                             </button>
                         </div>

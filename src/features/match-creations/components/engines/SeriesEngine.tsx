@@ -9,12 +9,25 @@ import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { Trophy, Layers, Flag, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import type { Player } from '../../../../db/models';
 
 export const SeriesEngine: React.FC = () => {
     const { match, localTeam, visitorTeam } = useLiveMatch();
     const { addScore, addFoul, undoLastAction } = useGameActions();
     const navigate = useNavigate();
-    const [trackPlayers, setTrackPlayers] = useState(false);
+
+    const hasAnyPlayers = Boolean(
+        (localTeam?.players && localTeam.players.length > 0) ||
+        (visitorTeam?.players && visitorTeam.players.length > 0)
+    );
+    const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
+    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
+
+    useEffect(() => {
+        if (hasAnyPlayers) {
+            setTrackPlayers(true);
+        }
+    }, [hasAnyPlayers]);
 
     if (!match || !localTeam || !visitorTeam) return null;
 
@@ -43,15 +56,22 @@ export const SeriesEngine: React.FC = () => {
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
+        teamSide: 'local' | 'visitor';
         teamName: string;
-        players: any[];
+        players: Player[];
         action: GameAction;
     } | null>(null);
 
-    const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
+    const requestAction = (
+        teamId: number,
+        teamSide: 'local' | 'visitor',
+        teamName: string,
+        players: Player[],
+        action: GameAction
+    ) => {
         if (showSetEndModal || showSeriesEndModal) return;
 
-        if (!trackPlayers || !players || players.length === 0) {
+        if (!trackPlayers) {
             if (action.type === 'score') {
                 addScore(teamId, action.points, undefined);
             } else {
@@ -60,25 +80,18 @@ export const SeriesEngine: React.FC = () => {
             return;
         }
 
-        setCurrentAction({ teamId, teamName, players, action });
+        setCurrentAction({ teamId, teamSide, teamName, players, action });
     };
 
-    const confirmAction = (playerId: number | null) => {
+    const confirmAction = (playerId: number | null, overrideAction?: GameAction) => {
         if (!currentAction) return;
-        if (currentAction.action.type === 'score') {
-            addScore(currentAction.teamId, currentAction.action.points, playerId || undefined);
+        const finalAction = overrideAction || currentAction.action;
+        if (finalAction.type === 'score') {
+            addScore(currentAction.teamId, finalAction.points, playerId ?? undefined);
         } else {
-            addFoul(currentAction.teamId, playerId || undefined);
+            addFoul(currentAction.teamId, playerId ?? undefined);
         }
         setCurrentAction(null);
-    };
-
-    const handleEarlyFinish = async () => {
-        const confirmed = window.confirm(
-            'La serie aún no termina. ¿Deseas finalizar y cerrar el partido de todos modos?'
-        );
-        if (!confirmed) return;
-        await endSeries();
     };
 
     return (
@@ -86,7 +99,7 @@ export const SeriesEngine: React.FC = () => {
             <LiveHeader />
 
             {/* 1. BANNER SUPERIOR COMPACTO DE SETS GANADOS (PLAYOFFS BAR) */}
-            <div className="race-stage-banner" style={{ paddingBottom: '0.25rem' }}>
+            <div className="race-stage-banner" style={{ paddingBottom: '0.2rem' }}>
                 <div
                     className="series-info-pill"
                     style={{
@@ -95,7 +108,7 @@ export const SeriesEngine: React.FC = () => {
                         justifyContent: 'space-between',
                         gap: '0.85rem',
                         width: '100%',
-                        maxWidth: '580px',
+                        maxWidth: '640px',
                         padding: '0.5rem 1.15rem'
                     }}
                 >
@@ -103,11 +116,11 @@ export const SeriesEngine: React.FC = () => {
                     <div className="flex-gap" style={{ gap: '0.45rem' }}>
                         <span
                             style={{
-                                fontSize: '0.72rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 800,
                                 textTransform: 'uppercase',
                                 color: 'var(--secondary-light)',
-                                maxWidth: '88px',
+                                maxWidth: '96px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
@@ -129,13 +142,13 @@ export const SeriesEngine: React.FC = () => {
                         >
                             {localSetsWon}
                         </span>
-                        <div className="flex-gap" style={{ gap: '3px' }}>
+                        <div className="flex-gap" style={{ gap: '4px' }}>
                             {[...Array(setsToWin)].map((_, i) => (
                                 <span
                                     key={`l-set-${i}`}
                                     style={{
-                                        width: '7px',
-                                        height: '7px',
+                                        width: '8px',
+                                        height: '8px',
                                         borderRadius: '50%',
                                         backgroundColor: i < localSetsWon ? 'var(--secondary-light)' : 'rgba(255,255,255,0.15)',
                                         boxShadow: i < localSetsWon ? '0 0 8px var(--secondary)' : 'none'
@@ -147,24 +160,24 @@ export const SeriesEngine: React.FC = () => {
 
                     {/* Info Set Actual */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                        <div className="series-info-main" style={{ fontSize: '0.88rem' }}>
+                        <div className="series-info-main" style={{ fontSize: '0.92rem' }}>
                             <Layers size={14} color="var(--secondary-light)" />
                             SET {currentSet} (A {pointsPerSet} PTS{winByTwo ? ' +2' : ''})
                         </div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                             Sets Ganados (Meta: {setsToWin})
                         </span>
                     </div>
 
                     {/* Sets Visita */}
                     <div className="flex-gap" style={{ gap: '0.45rem' }}>
-                        <div className="flex-gap" style={{ gap: '3px' }}>
+                        <div className="flex-gap" style={{ gap: '4px' }}>
                             {[...Array(setsToWin)].map((_, i) => (
                                 <span
                                     key={`v-set-${i}`}
                                     style={{
-                                        width: '7px',
-                                        height: '7px',
+                                        width: '8px',
+                                        height: '8px',
                                         borderRadius: '50%',
                                         backgroundColor: i < visitorSetsWon ? 'var(--primary-light)' : 'rgba(255,255,255,0.15)',
                                         boxShadow: i < visitorSetsWon ? '0 0 8px var(--primary)' : 'none'
@@ -188,11 +201,11 @@ export const SeriesEngine: React.FC = () => {
                         </span>
                         <span
                             style={{
-                                fontSize: '0.72rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 800,
                                 textTransform: 'uppercase',
                                 color: 'var(--primary-light)',
-                                maxWidth: '88px',
+                                maxWidth: '96px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
@@ -223,22 +236,40 @@ export const SeriesEngine: React.FC = () => {
                 <div className="action-grid">
                     <div className="team-column">
                         <GameActionControls
+                            teamName={localTeam.name}
                             variant="local"
-                            simpleScoring={true}
                             scoringOptions={scoringOptions}
-                            onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
+                            onScore={(pts) =>
+                                requestAction(localTeam.id!, 'local', localTeam.name, localTeam.players, {
+                                    type: 'score',
+                                    points: pts
+                                })
+                            }
+                            onFoul={() =>
+                                requestAction(localTeam.id!, 'local', localTeam.name, localTeam.players, {
+                                    type: 'foul'
+                                })
+                            }
                             disabled={showSetEndModal || showSeriesEndModal}
                         />
                     </div>
 
                     <div className="team-column">
                         <GameActionControls
+                            teamName={visitorTeam.name}
                             variant="visitor"
-                            simpleScoring={true}
                             scoringOptions={scoringOptions}
-                            onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            onScore={(pts) =>
+                                requestAction(visitorTeam.id!, 'visitor', visitorTeam.name, visitorTeam.players, {
+                                    type: 'score',
+                                    points: pts
+                                })
+                            }
+                            onFoul={() =>
+                                requestAction(visitorTeam.id!, 'visitor', visitorTeam.name, visitorTeam.players, {
+                                    type: 'foul'
+                                })
+                            }
                             disabled={showSetEndModal || showSeriesEndModal}
                         />
                     </div>
@@ -248,32 +279,21 @@ export const SeriesEngine: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => setTrackPlayers(prev => !prev)}
-                        className="btn btn-secondary"
-                        style={{
-                            flex: 1,
-                            fontSize: '0.8rem',
-                            padding: '0.7rem 0.75rem',
-                            borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
-                            color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
-                            backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : undefined
-                        }}
+                        className={`btn-utility ${trackPlayers ? 'active-toggle' : ''}`}
+                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
                     >
-                        <Users size={15} />
-                        Jugadores: {trackPlayers ? 'ON' : 'OFF'}
+                        <Users size={17} />
+                        <span>Jugadores: {trackPlayers ? 'ON' : 'OFF'}</span>
                     </button>
 
                     <button
                         type="button"
-                        onClick={handleEarlyFinish}
-                        className="btn btn-secondary"
-                        style={{
-                            flex: 1,
-                            fontSize: '0.8rem',
-                            padding: '0.7rem 0.75rem'
-                        }}
+                        onClick={() => setShowEarlyFinishConfirm(true)}
+                        className="btn-utility danger-subtle"
+                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
                     >
-                        <Flag size={15} />
-                        Finalizar / Cerrar Partido
+                        <Flag size={17} />
+                        <span>Finalizar Partido</span>
                     </button>
                 </div>
             </section>
@@ -282,12 +302,48 @@ export const SeriesEngine: React.FC = () => {
             {currentAction && (
                 <PlayerSelectModal
                     matchId={match.id}
+                    teamId={currentAction.teamId}
+                    teamSide={currentAction.teamSide}
                     teamName={currentAction.teamName}
-                    players={currentAction.players}
+                    players={currentAction.teamSide === 'local' ? localTeam.players : visitorTeam.players}
                     action={currentAction.action}
+                    scoringOptions={scoringOptions}
                     onSelect={confirmAction}
                     onCancel={() => setCurrentAction(null)}
                 />
+            )}
+
+            {showEarlyFinishConfirm && (
+                <div className="game-modal-overlay" onClick={() => setShowEarlyFinishConfirm(false)}>
+                    <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
+                        <div className="modal-icon-wrapper">
+                            <Flag size={34} color="var(--danger)" />
+                        </div>
+                        <h3>¿Finalizar la Serie?</h3>
+                        <p>
+                            La serie aún no concluye (Sets: {localSetsWon} - {visitorSetsWon} • Set actual: {match.localScore} - {match.visitorScore}).
+                        </p>
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setShowEarlyFinishConfirm(false);
+                                    await endSeries();
+                                }}
+                                className="btn-modal-primary btn-finish"
+                            >
+                                Sí, Guardar y Cerrar Serie
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowEarlyFinishConfirm(false)}
+                                className="btn-modal-secondary"
+                            >
+                                Seguir Jugando
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showSetEndModal && (
@@ -304,10 +360,10 @@ export const SeriesEngine: React.FC = () => {
                             El marcador de puntos se reiniciará para el siguiente set.
                         </p>
                         <div className="modal-actions">
-                            <button onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
+                            <button type="button" onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
                                 Confirmar y Siguiente Set
                             </button>
-                            <button onClick={undoLastAction} className="btn-modal-secondary">
+                            <button type="button" onClick={undoLastAction} className="btn-modal-secondary">
                                 Deshacer último punto (Corregir)
                             </button>
                         </div>
@@ -341,7 +397,7 @@ export const SeriesEngine: React.FC = () => {
                             {localSetsWon} - {visitorSetsWon}
                         </div>
                         <div className="modal-actions">
-                            <button onClick={endSeries} className="btn-modal-primary btn-finish">
+                            <button type="button" onClick={endSeries} className="btn-modal-primary btn-finish">
                                 Finalizar Partido
                             </button>
                         </div>

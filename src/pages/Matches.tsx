@@ -6,10 +6,8 @@ import { db } from '../db/db';
 import { Activity, Clock, Trophy } from 'lucide-react';
 import { MatchHistoryModal } from '../components/matches/MatchHistoryModal';
 
-// --- CORRECCIÓN DE IMPORTACIONES ---
-// Los archivos están en 'match-creations/componets' (nota el nombre de la carpeta 'componets')
-import { ActiveMatchCard } from '../features/match-creations/componets/ActiveMatchCard';
-import { HistoryMatchTicket } from '../features/match-creations/componets/HistoryMatchTicket';
+import { ActiveMatchCard } from '../features/match-creations/components/ActiveMatchCard';
+import { HistoryMatchTicket } from '../features/match-creations/components/HistoryMatchTicket';
 
 export function Matches() {
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);

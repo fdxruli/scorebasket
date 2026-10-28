@@ -4,12 +4,14 @@ import { Play, Pause } from 'lucide-react';
 import { useMatchTimer } from '../../../../hooks/useMatchTimer';
 import { db } from '../../../../db/db';
 import type { Match } from '../../../../db/models/Match';
+import { formatPeriodLabel } from '../../../../utils/matchHelpers';
 
 interface Props { match: Match; localName: string; visitorName: string; }
 
 export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) => {
   const { timeLeft, isRunning } = useMatchTimer(match, false);
   const currentQuarter = match.currentQuarter || 1;
+  const totalQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
 
   const currentQuarterFouls = useLiveQuery(async () => {
     if (!match.id) {
@@ -44,7 +46,7 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
           {isRunning ? 'EN JUEGO' : 'PAUSADO'}
         </div>
         <div className="flex items-center gap-2 font-mono text-sm font-bold text-main">
-          <span className="text-muted text-xs uppercase tracking-widest mr-2">Q{currentQuarter}</span>
+          <span className="text-muted text-xs uppercase tracking-widest mr-2">{formatPeriodLabel(currentQuarter, totalQuarters)}</span>
           {isRunning ? <Play size={10} className="text-primary" fill="currentColor" /> : <Pause size={10} className="text-muted" fill="currentColor" />}
           {formatTime(timeLeft)}
         </div>

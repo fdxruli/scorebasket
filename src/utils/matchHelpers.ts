@@ -35,3 +35,11 @@ export function getModeName(mode: MatchConfig['mode']): string {
   };
   return names[mode] ?? 'Desconocido';
 }
+/**
+ * Etiqueta del periodo: Q1..Qn en tiempo regular, OT1, OT2... en tiempo extra.
+ */
+export function formatPeriodLabel(currentQuarter: number, totalQuarters: number): string {
+  return currentQuarter <= totalQuarters
+    ? `Q${currentQuarter}`
+    : `OT${currentQuarter - totalQuarters}`;
+}

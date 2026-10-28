@@ -1,9 +1,20 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LiveMatchProvider, useLiveMatch } from '../features/match-creations/componets/context/LiveMatchContext';
-import { TraditionalEngine } from '../features/match-creations/componets/engines/TraditionalEngine';
-import { RaceEngine } from '../features/match-creations/componets/engines/RaceEngine';
-import { SeriesEngine } from '../features/match-creations/componets/engines/SeriesEngine';
+import { LiveMatchProvider, useLiveMatch } from '../features/match-creations/components/context/LiveMatchContext';
+import { TraditionalEngine } from '../features/match-creations/components/engines/TraditionalEngine';
+import { RaceEngine } from '../features/match-creations/components/engines/RaceEngine';
+import { SeriesEngine } from '../features/match-creations/components/engines/SeriesEngine';
+
+// Layout de pantalla completa centrado (sustituye clases utilitarias que no existen en src/styles)
+const fullScreenCenter: CSSProperties = {
+  minHeight: '100vh',
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: '#000',
+  textAlign: 'center'
+};
 
 type LiveMatchErrorBoundaryProps = {
   children: ReactNode;
@@ -35,9 +46,9 @@ class LiveMatchErrorBoundary extends Component<LiveMatchErrorBoundaryProps, Live
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-4 bg-black p-6 text-center">
-        <h2 className="text-2xl text-red-500 font-bold">No se pudo abrir el partido</h2>
-        <p className="text-gray-400 max-w-sm">{this.state.message}</p>
+      <div style={{ ...fullScreenCenter, flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.5rem', color: '#ef4444', fontWeight: 700 }}>No se pudo abrir el partido</h2>
+        <p style={{ color: '#9ca3af', maxWidth: '24rem' }}>{this.state.message}</p>
         <button
           className="btn btn-primary"
           onClick={() => window.location.reload()}
@@ -60,8 +71,8 @@ const EngineDispatcher = () => {
   // 1. Estado de Carga visible y con altura completa.
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-black p-6 text-center">
-        <div className="text-xl text-gray-400 animate-pulse">Cargando configuración del partido...</div>
+      <div style={{ ...fullScreenCenter, padding: '1.5rem' }}>
+        <div style={{ fontSize: '1.25rem', color: '#9ca3af' }}>Cargando configuración del partido...</div>
       </div>
     );
   }
@@ -69,9 +80,9 @@ const EngineDispatcher = () => {
   // 2. Estado de Error / No encontrado.
   if (error || !match || !localTeam || !visitorTeam) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-black p-6 text-center gap-4">
-        <h2 className="text-2xl text-red-500 font-bold">Partido no encontrado</h2>
-        <p className="text-gray-400 max-w-sm">
+      <div style={{ ...fullScreenCenter, flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.5rem', color: '#ef4444', fontWeight: 700 }}>Partido no encontrado</h2>
+        <p style={{ color: '#9ca3af', maxWidth: '24rem' }}>
           {error || 'No se pudieron cargar todos los datos del partido.'}
         </p>
         <button
@@ -112,7 +123,7 @@ export const LiveMatch = () => {
 
   if (isNaN(matchId)) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-black p-8 text-center text-red-400">
+      <div style={{ ...fullScreenCenter, color: '#f87171', padding: '2rem' }}>
         ID de partido inválido
       </div>
     );
@@ -121,7 +132,7 @@ export const LiveMatch = () => {
   return (
     <LiveMatchProvider matchId={matchId}>
       <LiveMatchErrorBoundary>
-        <div className="min-h-screen w-full bg-black">
+        <div style={{ minHeight: '100vh', width: '100%', background: '#000' }}>
           <EngineDispatcher />
         </div>
       </LiveMatchErrorBoundary>

@@ -75,6 +75,19 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     setShowQuarterEndModal(false);
   }, [match.id]);
 
+  // 7. Acción: Iniciar Tiempo Extra (OT). Cada OT es un periodo adicional (quartersConfig + n).
+  const startOvertime = useCallback(async (overtimeMinutes = 5) => {
+    await db.matches.update(match.id!, {
+      currentQuarter: (match.currentQuarter || quartersConfig) + 1,
+      timerSecondsRemaining: overtimeMinutes * 60,
+      timerLastStart: undefined // Inicia pausado
+    });
+    setShowMatchEndModal(false);
+    setShowQuarterEndModal(false);
+  }, [match.id, match.currentQuarter, quartersConfig]);
+
+  const isTied = (match.localScore || 0) === (match.visitorScore || 0);
+
   return {
     timerDisplay: formatTime(timeLeft),
     timeLeft,
@@ -86,6 +99,8 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     totalQuarters: quartersConfig,
     nextQuarter,
     endMatch,
+    startOvertime,
+    isTied,
     
     showQuarterEndModal,
     setShowQuarterEndModal,

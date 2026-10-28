@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Plus } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface Props {
   onScore: (points: number) => void;
@@ -31,21 +31,28 @@ export const GameActionControls: React.FC<Props> = ({
     <div className="flex flex-col gap-3 w-full">
       
       {simpleScoring ? (
-        /* --- MODO SIMPLE (RACE) --- */
-        <button
-          disabled={disabled}
-          onClick={() => onScore(1)}
-          className={`btn-action ${xlBtnClass}`}
-          style={{ 
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-            fontWeight: 800
-          }}
-        >
-          <Plus size={32} strokeWidth={4} /> 1
-        </button>
+        /* --- MODO SIMPLE (RACE): +1 / +2 / +3 en grilla de 3 columnas --- */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+          {[1, 2, 3].map((pts) => (
+            <button
+              key={pts}
+              disabled={disabled}
+              onClick={() => onScore(pts)}
+              className={`btn-action ${xlBtnClass}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0.5rem 0',
+                minWidth: 0,
+                fontSize: '1.5rem',
+                fontWeight: 800
+              }}
+            >
+              +{pts}
+            </button>
+          ))}
+        </div>
 
       ) : balancedLayout ? (
         /* --- MODO SERIES (MEJORADO: Jerarquía Vertical 1, 2, 3) --- */

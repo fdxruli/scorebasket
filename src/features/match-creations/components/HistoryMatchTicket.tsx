@@ -21,6 +21,7 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
     let localDisplayScore = match.localScore;
     let visitorDisplayScore = match.visitorScore;
     let modeIcon = <Clock size={12} />;
+    let isRaceWithGames = false;
     
     if (mode === 'best-of-series') {
         // En series, mostramos SETS ganados
@@ -29,6 +30,13 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
         modeIcon = <Trophy size={12} className="text-green-500" />;
     } else if (mode === 'race') {
         modeIcon = <Target size={12} className="text-orange-500" />;
+
+        // Con revanchas: mostramos JUEGOS ganados en lugar del marcador del último juego
+        if (match.gameHistory && match.gameHistory.length > 1) {
+            localDisplayScore = match.gameHistory.filter(g => g.winner === 'local').length;
+            visitorDisplayScore = match.gameHistory.filter(g => g.winner === 'visitor').length;
+            isRaceWithGames = true;
+        }
     }
 
     const localWon = localDisplayScore > visitorDisplayScore;
@@ -54,10 +62,12 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
                     <span className="ticket-score">{visitorDisplayScore}</span>
                 </div>
             </div>
-            {/* Si es serie, aclaramos que son Sets */}
-            {mode === 'best-of-series' && (
+            {/* Si es serie o reta con revanchas, aclaramos qué representa el marcador */}
+            {(mode === 'best-of-series' || isRaceWithGames) && (
                 <div className="bg-zinc-900/50 py-1 px-3 text-center border-t border-zinc-800">
-                    <span className="text-[10px] text-muted uppercase font-bold tracking-widest">Resultado en Sets</span>
+                    <span className="text-[10px] text-muted uppercase font-bold tracking-widest">
+                        {isRaceWithGames ? 'Juegos Ganados' : 'Resultado en Sets'}
+                    </span>
                 </div>
             )}
         </div>

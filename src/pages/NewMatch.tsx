@@ -4,11 +4,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
 import { Play, AlertCircle, Trophy } from 'lucide-react';
-import { GameModeSelector } from '../features/match-creations/componets/GameModeSelector';
-import { TraditionalConfigComponent } from '../features/match-creations/componets/TraditionalConfig';
-import { RaceConfigComponent } from '../features/match-creations/componets/RaceConfig';
-import { BestOfConfigComponent } from '../features/match-creations/componets/BestOfConfig';
-import { ConfigSummary } from '../features/match-creations/componets/ConfigSummary';
+import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
+import { TraditionalConfigComponent } from '../features/match-creations/components/TraditionalConfig';
+import { RaceConfigComponent } from '../features/match-creations/components/RaceConfig';
+import { BestOfConfigComponent } from '../features/match-creations/components/BestOfConfig';
+import { ConfigSummary } from '../features/match-creations/components/ConfigSummary';
 import { useMatchConfig } from '../features/match-creations/hooks/useMatchConfig';
 
 export function NewMatch() {

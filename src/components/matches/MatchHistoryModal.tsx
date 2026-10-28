@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { X, Calendar, BarChart2, Users, Target, Layers } from 'lucide-react';
+import { formatPeriodLabel } from '../../utils/matchHelpers';
 
 interface MatchHistoryModalProps {
     matchId: number;
@@ -73,24 +74,46 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         ]);
         const maxDataQuarter = Math.max(...Array.from(quartersSet), 0);
 
+        const totalQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
+
         // Definir límite visual de la tabla según el modo
         let maxDisplayPeriod = maxDataQuarter;
 
         if (mode === 'traditional') {
-            // En tradicional, mostramos al menos los configurados (ej: 4)
-            const configQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
-            maxDisplayPeriod = Math.max(maxDataQuarter, configQuarters);
+            // En tradicional, mostramos al menos los configurados (ej: 4) y los OT jugados
+            maxDisplayPeriod = Math.max(maxDataQuarter, totalQuarters);
         }
         // En 'best-of-series' y 'race', maxDisplayPeriod se basa puramente en los datos jugados (maxDataQuarter)
         // para evitar mostrar "Sets" vacíos que no ocurrieron.
 
-        const periodStats = [];
+        let periodStats: { period: number; local: number; visitor: number }[] = [];
         for (let q = 1; q <= maxDisplayPeriod; q++) {
             periodStats.push({
                 period: q,
                 local: safeScores.filter(s => s.teamId === match.localTeamId && s.quarter === q).reduce((a, b) => a + b.points, 0),
                 visitor: safeScores.filter(s => s.teamId === match.visitorTeamId && s.quarter === q).reduce((a, b) => a + b.points, 0),
             });
+        }
+
+        // C2. Reta con revanchas: marcador = juegos ganados, tabla = puntos por juego (match.gameHistory)
+        const gameHistory = match.gameHistory || [];
+        const isRaceWithGames = mode === 'race' && gameHistory.length > 1;
+        let localTotalCell: number = localPointsTotal;
+        let visitorTotalCell: number = visitorPointsTotal;
+        let totalHeader = 'Total';
+
+        if (isRaceWithGames) {
+            const sortedGames = [...gameHistory].sort((a, b) => a.gameNumber - b.gameNumber);
+            mainLocalScore = sortedGames.filter(g => g.winner === 'local').length;
+            mainVisitorScore = sortedGames.filter(g => g.winner === 'visitor').length;
+            periodStats = sortedGames.map(g => ({
+                period: g.gameNumber,
+                local: g.localScore,
+                visitor: g.visitorScore
+            }));
+            localTotalCell = mainLocalScore;
+            visitorTotalCell = mainVisitorScore;
+            totalHeader = 'Ganados';
         }
 
         // D. Estadísticas por Jugador
@@ -124,6 +147,11 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             mainVisitorScore,
             localPointsTotal,
             visitorPointsTotal,
+            localTotalCell,
+            visitorTotalCell,
+            totalHeader,
+            isRaceWithGames,
+            totalQuarters,
             periodStats,
             localStats: processTeamStats(match.localTeamId),
             visitorStats: processTeamStats(match.visitorTeamId),
@@ -150,7 +178,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     const getPeriodLabel = (p: number) => {
         if (stats.mode === 'best-of-series') return `Set ${p}`;
         if (stats.mode === 'race') return `Juego ${p}`;
-        return `Q${p}`;
+        return formatPeriodLabel(p, stats.totalQuarters);
     };
 
     const getModeIcon = () => {
@@ -161,7 +189,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
     const getModeTitle = () => {
         if (stats.mode === 'best-of-series') return 'Desglose por Sets';
-        if (stats.mode === 'race') return 'Puntuación Final';
+        if (stats.mode === 'race') return stats.isRaceWithGames ? 'Desglose por Juegos' : 'Puntuación Final';
         return 'Desglose por Periodos';
     };
 
@@ -194,7 +222,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                     </div>
 
                     <div className="report-vs">
-                        {stats.mode === 'best-of-series' ? 'SETS' : 'VS'}
+                        {stats.mode === 'best-of-series' ? 'SETS' : stats.isRaceWithGames ? 'JUEGOS' : 'VS'}
                     </div>
 
                     {/* Visita */}
@@ -234,7 +262,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                                                 {getPeriodLabel(qs.period)}
                                             </div>
                                         ))}
-                                        <div className="q-cell head">Total</div>
+                                        <div className="q-cell head">{stats.totalHeader}</div>
 
                                         {/* --- FILA LOCAL --- */}
                                         <div className="q-cell team-name local">
@@ -245,7 +273,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                                                 {qs.local}
                                             </div>
                                         ))}
-                                        <div className="q-cell total-val">{stats.localPointsTotal}</div>
+                                        <div className="q-cell total-val">{stats.localTotalCell}</div>
 
                                         {/* --- FILA VISITANTE --- */}
                                         <div className="q-cell team-name visitor">
@@ -256,7 +284,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                                                 {qs.visitor}
                                             </div>
                                         ))}
-                                        <div className="q-cell total-val">{stats.visitorPointsTotal}</div>
+                                        <div className="q-cell total-val">{stats.visitorTotalCell}</div>
                                     </div>
                                 </div>
                             </>

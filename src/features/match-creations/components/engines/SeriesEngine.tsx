@@ -1,4 +1,4 @@
-// src/features/match-creations/componets/engines/SeriesEngine.tsx
+// src/features/match-creations/components/engines/SeriesEngine.tsx
 import React, { useState, useEffect } from 'react';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
@@ -7,7 +7,7 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
-import { Trophy, Layers } from 'lucide-react';
+import { Trophy, Layers, Flag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom'; // Importar useNavigate
 
 export const SeriesEngine: React.FC = () => {
@@ -56,6 +56,14 @@ export const SeriesEngine: React.FC = () => {
             addFoul(currentAction.teamId, playerId || undefined);
         }
         setCurrentAction(null);
+    };
+
+    const handleEarlyFinish = async () => {
+        const confirmed = window.confirm(
+            'La serie aún no termina. ¿Deseas finalizar y cerrar el partido de todos modos?'
+        );
+        if (!confirmed) return;
+        await endSeries();
     };
 
     return (
@@ -142,11 +150,23 @@ export const SeriesEngine: React.FC = () => {
                         />
                     </div>
                 </div>
+
+                <div className="bottom-bar">
+                    <button
+                        onClick={handleEarlyFinish}
+                        className="btn btn-secondary btn-full"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    >
+                        <Flag size={16} />
+                        Finalizar / Cerrar Partido
+                    </button>
+                </div>
             </section>
 
             {/* --- MODALES --- */}
             {currentAction && (
                 <PlayerSelectModal
+                    matchId={match.id}
                     teamName={currentAction.teamName}
                     players={currentAction.players}
                     action={currentAction.action}

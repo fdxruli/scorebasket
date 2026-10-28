@@ -4,6 +4,7 @@ import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
+import { formatPeriodLabel } from '../../../../utils/matchHelpers';
 
 // UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard'; 
@@ -28,8 +29,12 @@ export const TraditionalEngine: React.FC = () => {
     nextQuarter,
     showQuarterEndModal,
     showMatchEndModal,
-    endMatch
+    endMatch,
+    startOvertime,
+    isTied
   } = useTraditionalLogic({ match });
+
+  const periodLabel = formatPeriodLabel(currentQuarter, totalQuarters);
 
   const currentQuarterFouls = useLiveQuery(async () => {
     if (!match.id) {
@@ -88,7 +93,7 @@ export const TraditionalEngine: React.FC = () => {
     if (timeLeft > 0) {
       const actionLabel = isLastQuarter ? 'finalizar el partido' : 'avanzar al siguiente periodo';
       const shouldContinue = window.confirm(
-        `Aún quedan ${formatTime(timeLeft)} en el Q${currentQuarter}. ¿Deseas ${actionLabel} de todos modos?`
+        `Aún quedan ${formatTime(timeLeft)} en el ${periodLabel}. ¿Deseas ${actionLabel} de todos modos?`
       );
 
       if (!shouldContinue) return;
@@ -134,6 +139,8 @@ export const TraditionalEngine: React.FC = () => {
 
       {playerModal.isOpen && (
         <PlayerSelectModal 
+          matchId={match.id}
+          foulLimit={5}
           teamName={playerModal.teamId === localTeam.id ? localTeam.name : visitorTeam.name}
           players={playerModal.teamId === localTeam.id ? localTeam.players : visitorTeam.players}
           action={playerModal.actionType === 'score' ? { type: 'score', points: playerModal.points! } : { type: 'foul' }}
@@ -145,12 +152,12 @@ export const TraditionalEngine: React.FC = () => {
       {showQuarterEndModal && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>Fin del Q{currentQuarter}</h3>
+            <h3>Fin del {periodLabel}</h3>
             <p className="text-muted" style={{ margin: '0.75rem 0 1.25rem' }}>
               El tiempo del periodo terminó. El siguiente periodo iniciará pausado.
             </p>
             <button onClick={nextQuarter} className="btn btn-primary">
-              Iniciar Q{currentQuarter + 1}
+              Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
             </button>
           </div>
         </div>
@@ -159,9 +166,20 @@ export const TraditionalEngine: React.FC = () => {
       {showMatchEndModal && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>¡Fin del Partido!</h3>
+            <h3>{isTied ? '¡Empate! Tiempo Extra Requerido' : '¡Fin del Partido!'}</h3>
             <h2>{localTeam.name} {match.localScore} - {match.visitorScore} {visitorTeam.name}</h2>
-            <button onClick={endMatch} className="btn btn-danger">Terminar Partido</button>
+            {isTied ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+                <button onClick={() => startOvertime(5)} className="btn btn-primary">
+                  Iniciar OT (+5 min)
+                </button>
+                <button onClick={endMatch} className="btn-modal-secondary">
+                  Terminar en Empate
+                </button>
+              </div>
+            ) : (
+              <button onClick={endMatch} className="btn btn-danger">Terminar Partido</button>
+            )}
           </div>
         </div>
       )}

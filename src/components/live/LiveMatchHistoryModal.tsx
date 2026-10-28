@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { X, Trash2, Clock, AlertCircle, Trophy, History } from 'lucide-react';
+import { formatPeriodLabel } from '../../utils/matchHelpers';
 
 interface LiveMatchHistoryModalProps {
   matchId: number;
@@ -55,7 +56,11 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
 
-    return { combined, playerMap, teamMap };
+    const matchData = await db.matches.get(matchId);
+    const mode = matchData?.config?.mode || 'traditional';
+    const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
+
+    return { combined, playerMap, teamMap, mode, totalQuarters };
   }, [matchId]);
 
   // 2. Función para eliminar y cerrar
@@ -92,8 +97,6 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
           }
         }
       });
-
-      onClose();
     } catch (err) {
       console.error("Error al eliminar", err);
       alert("No se pudo eliminar la acción");
@@ -105,7 +108,14 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
   };
 
   if (!historyData) return null;
-  const { combined, playerMap, teamMap } = historyData;
+  const { combined, playerMap, teamMap, mode, totalQuarters } = historyData;
+
+  // Etiqueta según el modo: Set (serie), Juego (reta) o Q/OT (tradicional)
+  const getPeriodLabel = (period: number) => {
+    if (mode === 'best-of-series') return `Set ${period}`;
+    if (mode === 'race') return `Juego ${period}`;
+    return formatPeriodLabel(period, totalQuarters);
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -167,7 +177,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
 
                       {/* Detalle: Quién y Cuándo */}
                       <span className="action-detail">
-                        <span className="action-time">Q{item.quarter} • {formatTime(item.createdAt)}</span>
+                        <span className="action-time">{getPeriodLabel(item.quarter)} • {formatTime(item.createdAt)}</span>
                         <span>
                           {player ? (
                             <span className="text-gray-300">#{player.number} {player.name}</span>

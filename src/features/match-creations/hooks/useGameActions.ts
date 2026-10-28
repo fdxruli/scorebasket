@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { db } from '../../../db/db';
-import { useLiveMatch } from '../componets/context/LiveMatchContext';
+import { useLiveMatch } from '../components/context/LiveMatchContext';
 import type { Score, Foul } from '../../../db/models';
 import type { Match } from '../../../db/models/Match';
 
@@ -42,15 +42,6 @@ const normalizePoints = (points: number): ScorePoints => {
 const validateMatchIsActive = (match: Match) => {
   if (match.status === 'finished') {
     throw new Error('El partido ya finalizó');
-  }
-};
-
-const validateTraditionalClock = (match: Match) => {
-  const mode = getMode(match);
-  if (mode !== 'traditional') return;
-
-  if (!match.timerLastStart || (match.timerSecondsRemaining ?? 0) <= 0) {
-    throw new Error('Debes iniciar o reanudar el reloj antes de registrar esta acción.');
   }
 };
 
@@ -109,7 +100,6 @@ export const useGameActions = () => {
         if (!currentMatch) throw new Error('El partido no existe');
 
         validateMatchIsActive(currentMatch);
-        validateTraditionalClock(currentMatch);
         validateScoreWindow(currentMatch);
 
         const side = getTeamSide(currentMatch, teamId);
@@ -149,7 +139,6 @@ export const useGameActions = () => {
         if (!currentMatch) throw new Error('El partido no existe');
 
         validateMatchIsActive(currentMatch);
-        validateTraditionalClock(currentMatch);
 
         const side = getTeamSide(currentMatch, teamId);
         const currentPeriod = getCurrentActionPeriod(currentMatch);

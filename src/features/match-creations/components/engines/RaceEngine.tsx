@@ -7,7 +7,7 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
-import { Target, Trophy, RotateCcw } from 'lucide-react';
+import { Target, Trophy, RotateCcw, Flag } from 'lucide-react';
 
 export const RaceEngine: React.FC = () => {
     const navigate = useNavigate(); // Hook de navegación
@@ -53,6 +53,14 @@ export const RaceEngine: React.FC = () => {
             addFoul(currentAction.teamId, playerId || undefined);
         }
         setCurrentAction(null);
+    };
+
+    const handleEarlyFinish = async () => {
+        const confirmed = window.confirm(
+            'La reta aún no llega a la meta. ¿Deseas finalizar y cerrar el partido de todos modos?'
+        );
+        if (!confirmed) return;
+        await endMatch();
     };
 
     return (
@@ -104,10 +112,22 @@ export const RaceEngine: React.FC = () => {
                         />
                     </div>
                 </div>
+
+                <div className="bottom-bar">
+                    <button
+                        onClick={handleEarlyFinish}
+                        className="btn btn-secondary btn-full"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    >
+                        <Flag size={16} />
+                        Finalizar / Cerrar Partido
+                    </button>
+                </div>
             </section>
 
             {currentAction && (
                 <PlayerSelectModal
+                    matchId={match.id}
                     teamName={currentAction.teamName}
                     players={currentAction.players}
                     action={currentAction.action}

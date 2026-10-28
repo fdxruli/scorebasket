@@ -1,5 +1,5 @@
 // src/features/match-creations/components/engines/RaceEngine.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
@@ -23,10 +23,14 @@ export const RaceEngine: React.FC = () => {
     const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
     const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
 
+    // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
+    // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
+    const prevHasAnyPlayersRef = useRef(false);
     useEffect(() => {
-        if (hasAnyPlayers) {
+        if (hasAnyPlayers && !prevHasAnyPlayersRef.current) {
             setTrackPlayers(true);
         }
+        prevHasAnyPlayersRef.current = hasAnyPlayers;
     }, [hasAnyPlayers]);
 
     if (!match || !localTeam || !visitorTeam) return null;

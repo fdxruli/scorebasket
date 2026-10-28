@@ -1,5 +1,5 @@
 // src/features/match-creations/components/engines/TraditionalEngine.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLiveMatch } from '../context/LiveMatchContext';
@@ -32,10 +32,14 @@ export const TraditionalEngine: React.FC = () => {
   const [customSeconds, setCustomSeconds] = useState('00');
   const [confirmDialog, setConfirmDialog] = useState<'end-match' | 'next-quarter' | null>(null);
 
+  // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
+  // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
+  const prevHasAnyPlayersRef = useRef(false);
   useEffect(() => {
-    if (hasAnyPlayers) {
+    if (hasAnyPlayers && !prevHasAnyPlayersRef.current) {
       setTrackPlayers(true);
     }
+    prevHasAnyPlayersRef.current = hasAnyPlayers;
   }, [hasAnyPlayers]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch, type TeamWithPlayers } from '../../features/match-creations/components/context/LiveMatchContext';
 import { useGameActions } from '../../features/match-creations/hooks/useGameActions';
 import { X, Users, UserPlus, AlertCircle, Check, Pencil } from 'lucide-react';
@@ -27,6 +28,7 @@ export function LivePlayersModal({
   const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
   const [teamNameDraft, setTeamNameDraft] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const matchId = match?.id;
 
@@ -63,6 +65,13 @@ export function LivePlayersModal({
     }, 1800);
   };
 
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => {
+      setErrorMsg(prev => (prev === msg ? null : prev));
+    }, 3500);
+  };
+
   const handleQuickScore = async (teamId: number, playerId: number, playerName: string, pts: 1 | 2 | 3) => {
     await addScore(teamId, pts, playerId);
     showToast(`+${pts} PTS para ${playerName}`);
@@ -77,6 +86,17 @@ export function LivePlayersModal({
     const trimmed = newName.trim();
     if (!trimmed) return;
     const parsedNum = newNumber.trim() !== '' ? parseInt(newNumber.trim(), 10) : undefined;
+
+    if (parsedNum !== undefined && !isNaN(parsedNum)) {
+      const duplicated = await db.players
+        .where({ teamId })
+        .filter(p => !p.isArchived && p.number === parsedNum)
+        .first();
+      if (duplicated) {
+        showError(`El dorsal #${parsedNum} ya lo tiene ${duplicated.name} en este equipo.`);
+        return;
+      }
+    }
 
     await db.players.add({
       name: trimmed,
@@ -93,12 +113,12 @@ export function LivePlayersModal({
   };
 
   const handleSaveTeamName = async (teamId: number) => {
-    const trimmed = teamNameDraft.trim();
-    if (!trimmed) {
-      setEditingTeamId(null);
+    const rivalTeamId = teamId === match?.localTeamId ? match?.visitorTeamId : match?.localTeamId;
+    const result = await renameTeamSafely(teamId, teamNameDraft, rivalTeamId);
+    if (!result.ok) {
+      showError(result.error ?? 'No se pudo renombrar el equipo.');
       return;
     }
-    await db.teams.update(teamId, { name: trimmed });
     setEditingTeamId(null);
     showToast('Nombre de equipo actualizado');
   };
@@ -333,6 +353,13 @@ export function LivePlayersModal({
           <div className="live-roster-toast">
             <Check size={15} />
             <span>{feedbackMsg}</span>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="live-roster-toast" role="alert" style={{ background: 'var(--danger)', color: '#fff' }}>
+            <AlertCircle size={15} />
+            <span>{errorMsg}</span>
           </div>
         )}
 

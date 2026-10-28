@@ -1,7 +1,7 @@
 // src/components/live/Scoreboard.tsx
 import { useState } from 'react';
 import { Pencil, Clock, Check, X } from 'lucide-react';
-import { db } from '../../db/db';
+import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
 
 interface ScoreboardProps {
@@ -57,7 +57,7 @@ export function Scoreboard({
     const saveRename = async (side: 'local' | 'visitor') => {
         const teamId = side === 'local' ? resolvedLocalId : resolvedVisitorId;
         const currentName = side === 'local' ? localName : visitorName;
-        const rivalName = side === 'local' ? visitorName : localName;
+        const rivalTeamId = side === 'local' ? resolvedVisitorId : resolvedLocalId;
 
         if (!teamId) {
             setEditingSide(null);
@@ -71,29 +71,17 @@ export function Scoreboard({
             return;
         }
 
-        if (trimmed.toLowerCase() === rivalName.trim().toLowerCase()) {
-            setRenameError('Ya existe otro equipo con ese nombre.');
-            return;
-        }
-
         try {
-            const duplicate = await db.teams
-                .where('name')
-                .equalsIgnoreCase(trimmed)
-                .and(t => !t.isArchived && t.id !== teamId)
-                .first();
-
-            if (duplicate) {
-                setRenameError('Ya existe otro equipo activo con ese nombre.');
+            const result = await renameTeamSafely(teamId, trimmed, rivalTeamId);
+            if (!result.ok) {
+                setRenameError(result.error ?? 'No se pudo renombrar el equipo.');
                 return;
             }
-
-            await db.teams.update(teamId, { name: trimmed });
             setEditingSide(null);
             setRenameError(null);
         } catch (err) {
             console.error('Error renombrando equipo:', err);
-            setEditingSide(null);
+            setRenameError('No se pudo renombrar el equipo.');
         }
     };
 

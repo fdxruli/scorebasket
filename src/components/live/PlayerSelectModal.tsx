@@ -42,6 +42,7 @@ export function PlayerSelectModal({
     const [newNumber, setNewNumber] = useState('');
     const [newName, setNewName] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+    const [addError, setAddError] = useState<string | null>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
     const isFoul = activeAction.type === 'foul';
@@ -77,8 +78,20 @@ export function PlayerSelectModal({
         if (!trimmedName || !resolvedTeamId || isAdding) return;
 
         setIsAdding(true);
+        setAddError(null);
         try {
             const parsedNum = newNumber.trim() !== '' ? parseInt(newNumber.trim(), 10) : undefined;
+
+            if (parsedNum !== undefined && !isNaN(parsedNum)) {
+                const duplicated = await db.players
+                    .where({ teamId: resolvedTeamId })
+                    .filter(p => !p.isArchived && p.number === parsedNum)
+                    .first();
+                if (duplicated) {
+                    setAddError(`El dorsal #${parsedNum} ya lo tiene ${duplicated.name} en ${teamName}.`);
+                    return;
+                }
+            }
             const newId = await db.players.add({
                 name: trimmedName,
                 number: parsedNum !== undefined && !isNaN(parsedNum) ? parsedNum : undefined,
@@ -270,7 +283,10 @@ export function PlayerSelectModal({
                                 max="99"
                                 placeholder="# Dorsal"
                                 value={newNumber}
-                                onChange={(e) => setNewNumber(e.target.value)}
+                                onChange={(e) => {
+                                    setNewNumber(e.target.value);
+                                    setAddError(null);
+                                }}
                                 className="input pm-input-num"
                             />
                             <input
@@ -295,6 +311,11 @@ export function PlayerSelectModal({
                                 <span>Guardar y Asignar</span>
                             </button>
                         </div>
+                        {addError && (
+                            <p role="alert" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', fontWeight: 700, color: 'var(--danger)' }}>
+                                {addError}
+                            </p>
+                        )}
                     </div>
                 )}
 

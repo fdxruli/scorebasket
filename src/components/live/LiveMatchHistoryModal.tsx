@@ -72,8 +72,13 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
 
-    const mode = matchData?.config?.mode || 'traditional';
-    const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
+    const foulsByPlayer = new Map<number, number>();
+    for (const f of fouls) {
+      if (f.playerId === undefined) continue;
+      foulsByPlayer.set(f.playerId, (foulsByPlayer.get(f.playerId) || 0) + 1);
+    }
+
+    const mode = matchData?.config?.mode || 'traditional';    const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
 
     let currentPeriod = matchData?.currentQuarter || 1;
     if (mode === 'race') {
@@ -87,6 +92,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
       playerMap,
       teamMap,
       activePlayersByTeam,
+      foulsByPlayer,
       mode,
       totalQuarters,
       currentPeriod,
@@ -168,6 +174,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     playerMap,
     teamMap,
     activePlayersByTeam,
+    foulsByPlayer,
     mode,
     totalQuarters,
     currentPeriod,
@@ -349,16 +356,31 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                       <div className="history-reassign-drawer">
                         <span className="history-reassign-label">Asignar jugada a:</span>
                         <div className="history-reassign-pills">
-                          {teamPlayers.map(tp => (
-                            <button
-                              key={tp.id}
-                              type="button"
-                              onClick={() => handleReassignPlayer(item, tp.id!)}
-                              className={`history-reassign-btn ${item.playerId === tp.id ? 'active' : ''}`}
-                            >
-                              <strong>#{tp.number ?? '—'}</strong> {tp.name}
-                            </button>
-                          ))}
+                          {teamPlayers.map(tp => {
+                            const playerFouls = foulsByPlayer.get(tp.id!) || 0;
+                            // Un jugador ya expulsado (>= 5 faltas) no puede recibir otra falta distinta a la actual.
+                            const isExpelledTarget =
+                              mode === 'traditional' &&
+                              item.type === 'foul' &&
+                              item.playerId !== tp.id &&
+                              playerFouls >= 5;
+
+                            return (
+                              <button
+                                key={tp.id}
+                                type="button"
+                                disabled={isExpelledTarget}
+                                onClick={() => handleReassignPlayer(item, tp.id!)}
+                                className={`history-reassign-btn ${item.playerId === tp.id ? 'active' : ''}`}
+                                style={isExpelledTarget ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                                title={isExpelledTarget ? 'Jugador expulsado (5 faltas)' : undefined}
+                              >
+                                <strong>#{tp.number ?? '—'}</strong> {tp.name}
+                                {item.type === 'foul' && ` · ${playerFouls} FAL`}
+                                {isExpelledTarget && ' (EXP)'}
+                              </button>
+                            );
+                          })}
                           <button
                             type="button"
                             onClick={() => handleReassignPlayer(item, undefined)}

@@ -61,6 +61,13 @@ export const TraditionalEngine: React.FC = () => {
     isTied
   } = useTraditionalLogic({ match });
 
+  useEffect(() => {
+    if (!showTimerModal) return;
+    const totalSecs = Math.ceil(timeLeft);
+    setCustomMinutes(String(Math.floor(totalSecs / 60)));
+    setCustomSeconds(String(totalSecs % 60).padStart(2, '0'));
+  }, [timeLeft, showTimerModal]);
+
   const periodLabel = formatPeriodLabel(currentQuarter, totalQuarters);
 
   const currentQuarterFouls = useLiveQuery(async () => {
@@ -306,6 +313,13 @@ export const TraditionalEngine: React.FC = () => {
               >
                 <RotateCcw size={16} />
                 Reiniciar Periodo
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTimerModal(false)}
+                className="btn btn-secondary btn-full"
+              >
+                Listo / Cerrar
               </button>
             </div>
           </div>

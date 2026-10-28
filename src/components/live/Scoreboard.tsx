@@ -48,7 +48,24 @@ export function Scoreboard({
         const trimmed = newName.trim();
         if (!trimmed || trimmed === currentName) return;
 
+        const rivalName = teamId === resolvedLocalId ? visitorName : localName;
+        if (trimmed.toLowerCase() === rivalName.trim().toLowerCase()) {
+            window.alert('Ya existe otro equipo activo con ese nombre.');
+            return;
+        }
+
         try {
+            const duplicate = await db.teams
+                .where('name')
+                .equalsIgnoreCase(trimmed)
+                .and(t => !t.isArchived && t.id !== teamId)
+                .first();
+
+            if (duplicate) {
+                window.alert('Ya existe otro equipo activo con ese nombre.');
+                return;
+            }
+
             await db.teams.update(teamId, { name: trimmed });
         } catch (err) {
             console.error('Error renombrando equipo:', err);

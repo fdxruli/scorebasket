@@ -323,7 +323,9 @@ export const SeriesEngine: React.FC = () => {
                         </div>
                         <h3>¡Serie Finalizada!</h3>
                         <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
-                            Ganador: {localSetsWon > visitorSetsWon ? localTeam.name : visitorTeam.name}
+                            {localSetsWon === visitorSetsWon
+                                ? 'Serie Empatada'
+                                : `Ganador: ${localSetsWon > visitorSetsWon ? localTeam.name : visitorTeam.name}`}
                         </p>
                         <div
                             style={{

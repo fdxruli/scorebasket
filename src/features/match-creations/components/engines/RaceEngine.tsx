@@ -1,3 +1,4 @@
+// src/features/match-creations/components/engines/RaceEngine.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveMatch } from '../context/LiveMatchContext';
@@ -42,8 +43,6 @@ export const RaceEngine: React.FC = () => {
     const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
         if (showMatchEndModal) return;
 
-        // 1-Tap Scoring: si el seguimiento de jugadores está apagado o el equipo no tiene jugadores,
-        // registramos directo sin abrir el modal.
         if (!trackPlayers || !players || players.length === 0) {
             if (action.type === 'score') {
                 addScore(teamId, action.points, undefined);
@@ -78,21 +77,13 @@ export const RaceEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            <div
-                style={{
-                    position: 'absolute',
-                    top: '85px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 20
-                }}
-            >
+            <div className="race-stage-banner">
                 <div className="race-info-pill">
                     <span className="race-info-label">
                         <Target size={16} color="var(--primary)" />
-                        Meta
+                        Meta del Juego
                     </span>
-                    <span className="race-info-value">{targetScore}</span>
+                    <span className="race-info-value">{targetScore} PTS</span>
                 </div>
             </div>
 
@@ -105,6 +96,7 @@ export const RaceEngine: React.FC = () => {
                 visitorFouls={match.visitorFouls}
                 timeLeft={0}
                 isTimerRunning={false}
+                showTimer={false}
             />
 
             <section className="controls-panel">
@@ -126,13 +118,13 @@ export const RaceEngine: React.FC = () => {
                             simpleScoring={true}
                             variant="visitor"
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.players ? visitorTeam.name : visitorTeam.name, visitorTeam.players, { type: 'foul' })}
                             disabled={showMatchEndModal}
                         />
                     </div>
                 </div>
 
-                <div className="bottom-bar" style={{ gap: '0.5rem' }}>
+                <div className="bottom-bar" style={{ gap: '0.65rem' }}>
                     <button
                         type="button"
                         onClick={() => setTrackPlayers(prev => !prev)}
@@ -140,10 +132,10 @@ export const RaceEngine: React.FC = () => {
                         style={{
                             flex: 1,
                             fontSize: '0.8rem',
-                            padding: '0.65rem 0.75rem',
+                            padding: '0.7rem 0.75rem',
                             borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
-                            color: trackPlayers ? 'var(--primary)' : 'var(--text-muted)',
-                            backgroundColor: trackPlayers ? 'rgba(249, 115, 22, 0.12)' : undefined
+                            color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
+                            backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : undefined
                         }}
                     >
                         <Users size={15} />
@@ -157,7 +149,7 @@ export const RaceEngine: React.FC = () => {
                         style={{
                             flex: 1,
                             fontSize: '0.8rem',
-                            padding: '0.65rem 0.75rem'
+                            padding: '0.7rem 0.75rem'
                         }}
                     >
                         <Flag size={15} />
@@ -184,7 +176,7 @@ export const RaceEngine: React.FC = () => {
                             <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Tenemos un Ganador!</h3>
-                        <p style={{ fontSize: '1.125rem', color: '#fff', fontWeight: 700, margin: '1rem 0' }}>
+                        <p style={{ fontSize: '1.35rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
                             {winnerTeamId === localTeam.id ? localTeam.name : visitorTeam.name}
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -196,7 +188,7 @@ export const RaceEngine: React.FC = () => {
                                 <button
                                     onClick={handleRematch}
                                     className="btn-modal-primary"
-                                    style={{ background: 'var(--secondary)', marginBottom: '0.5rem' }}
+                                    style={{ background: 'var(--secondary)', marginBottom: '0.35rem' }}
                                 >
                                     <RotateCcw size={18} />
                                     Dar la Vuelta (Revancha)

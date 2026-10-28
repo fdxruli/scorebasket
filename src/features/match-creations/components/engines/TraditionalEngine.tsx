@@ -1,3 +1,4 @@
+// src/features/match-creations/components/engines/TraditionalEngine.tsx
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLiveMatch } from '../context/LiveMatchContext';
@@ -5,6 +6,7 @@ import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
+import { Trophy, Clock } from 'lucide-react';
 
 // UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard'; 
@@ -90,10 +92,8 @@ export const TraditionalEngine: React.FC = () => {
 
   const handlePlayerSelect = (playerId: number | null) => {
     if (playerModal.actionType === 'score') {
-      // Permite registrar puntos aunque se elija "Jugador Desconocido".
       addScore(playerModal.teamId, playerModal.points || 1, playerId ?? undefined);
     } else {
-      // Permite falta técnica/banca cuando playerId es null.
       addFoul(playerModal.teamId, playerId ?? undefined);
     }
 
@@ -163,27 +163,48 @@ export const TraditionalEngine: React.FC = () => {
       )}
 
       {showQuarterEndModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="game-modal-overlay">
+          <div className="game-modal-card is-exit">
+            <div className="modal-icon-wrapper">
+              <Clock size={36} color="var(--secondary-light)" />
+            </div>
             <h3>Fin del {periodLabel}</h3>
-            <p className="text-muted" style={{ margin: '0.75rem 0 1.25rem' }}>
+            <p>
               El tiempo del periodo terminó. El siguiente periodo iniciará pausado.
             </p>
-            <button onClick={nextQuarter} className="btn btn-primary">
-              Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
-            </button>
+            <div className="modal-actions">
+              <button onClick={nextQuarter} className="btn-modal-primary btn-next-q">
+                Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
+              </button>
+            </div>
           </div>
         </div>
       )}
       
       {showMatchEndModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>{isTied ? '¡Empate! Tiempo Extra Requerido' : '¡Fin del Partido!'}</h3>
-            <h2>{localTeam.name} {match.localScore} - {match.visitorScore} {visitorTeam.name}</h2>
+        <div className="game-modal-overlay">
+          <div className={`game-modal-card ${isTied ? 'is-overtime' : 'is-end'}`}>
+            <div className="modal-icon-wrapper">
+              <Trophy size={38} color="var(--warning)" />
+            </div>
+            <h3>{isTied ? '¡Empate! Tiempo Extra' : '¡Fin del Partido!'}</h3>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '1.5rem',
+                fontWeight: 800,
+                margin: '0.5rem 0 1.25rem',
+                padding: '0.75rem 1.25rem',
+                background: 'rgba(0,0,0,0.35)',
+                borderRadius: 'var(--radius-sm)',
+                width: '100%'
+              }}
+            >
+              {localTeam.name} {match.localScore} - {match.visitorScore} {visitorTeam.name}
+            </div>
             {isTied ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
-                <button onClick={() => startOvertime(5)} className="btn btn-primary">
+              <div className="modal-actions">
+                <button onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
                   Iniciar OT (+5 min)
                 </button>
                 <button onClick={endMatch} className="btn-modal-secondary">
@@ -191,7 +212,11 @@ export const TraditionalEngine: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <button onClick={endMatch} className="btn btn-danger">Terminar Partido</button>
+              <div className="modal-actions">
+                <button onClick={endMatch} className="btn-modal-primary btn-finish">
+                  Guardar y Cerrar Partido
+                </button>
+              </div>
             )}
           </div>
         </div>

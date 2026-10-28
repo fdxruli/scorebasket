@@ -1,301 +1,520 @@
 /* src/styles/pages/matches.css */
+/* ==========================================================================
+   MATCHES DASHBOARD — MOBILE-FIRST TO DESKTOP ARENA COMMAND CENTER
+   ========================================================================== */
 
-/* --- HEADER --- */
-.page-header-wrapper {
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* --- KPI SUMMARY BAR (Mobile 3-col compact -> Desktop Hero Strip) --- */
+.matches-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
 }
 
-.title-header {
-  font-size: 1.5rem;
+.kpi-card {
+  background: linear-gradient(155deg, rgba(24, 28, 41, 0.85) 0%, rgba(13, 15, 23, 0.95) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card.is-highlight {
+  border-color: rgba(255, 95, 31, 0.32);
+  background: linear-gradient(155deg, rgba(255, 95, 31, 0.14) 0%, rgba(15, 18, 27, 0.95) 100%);
+}
+
+.kpi-label {
+  font-size: 0.65rem;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 900;
+  line-height: 1;
   color: var(--text-main);
-  margin: 0;
-  letter-spacing: -0.5px;
+}
+
+@media (min-width: 768px) {
+  .matches-kpi-strip {
+    gap: 1.15rem;
+  }
+
+  .kpi-card {
+    padding: 1.15rem 1.4rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .kpi-value {
+    font-size: 2.35rem;
+  }
+}
+
+/* --- CABECERAS DE SECCIÓN Y FILTROS --- */
+.section-header-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 640px) {
+  .section-header-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .section-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
-  margin: 2rem 0 1rem 0;
+  letter-spacing: 0.06em;
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.55rem;
 }
 
-/* --- LISTA DE PARTIDOS EN VIVO (SOLUCIÓN AL ESPACIADO) --- */
+.filter-pills {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.filter-pill-btn {
+  padding: 0.38rem 0.8rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.filter-pill-btn:hover {
+  color: var(--text-main);
+  border-color: var(--border-light);
+}
+
+.filter-pill-btn.active {
+  background: var(--primary-subtle);
+  border-color: rgba(255, 95, 31, 0.45);
+  color: var(--primary-light);
+}
+
+/* --- LISTA DE PARTIDOS EN VIVO (Mobile 1-col -> Tablet/Desktop Multi-Col) --- */
 .live-matches-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .live-matches-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .live-matches-list {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  }
+}
+
+/* --- TARJETA "EN VIVO" BROADCAST --- */
+.match-card.is-live {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem; /* Separación clara entre tarjetas */
-  margin-bottom: 2rem;
-}
-
-/* --- TARJETA "EN VIVO" DE ALTA PRECISIÓN --- */
-.match-card.is-live {
-  display: block;
   text-decoration: none;
   position: relative;
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(24, 24, 27, 0.9) 0%, rgba(9, 9, 11, 1) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 95, 31, 0.12), transparent 55%),
+    linear-gradient(160deg, rgba(24, 28, 42, 0.94) 0%, rgba(11, 13, 20, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: var(--shadow-md);
+}
+
+.match-card.is-live::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--secondary), var(--primary));
 }
 
 .match-card.is-live:hover {
-  transform: translateY(-3px) scale(1.01);
-  border-color: var(--primary);
-  box-shadow: 0 10px 30px -10px rgba(249, 115, 22, 0.3);
+  transform: translateY(-4px);
+  border-color: rgba(255, 95, 31, 0.5);
+  box-shadow: 0 16px 36px -10px rgba(255, 95, 31, 0.28);
 }
 
-/* Barra superior de estado (Timer y Cuarto) */
 .live-card-header {
-  padding: 0.75rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.75rem 1.15rem;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .live-badge-status {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 700;
+  gap: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 0.25rem 0.6rem;
-  border-radius: 99px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.08em;
+  padding: 0.28rem 0.65rem;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-/* Cuerpo de la tarjeta (Equipos) */
 .live-card-body {
-  padding: 1.25rem;
+  padding: 1.15rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .live-team-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid transparent;
+  transition: background-color 0.2s;
+}
+
+.live-team-row.winning {
+  background: rgba(255, 95, 31, 0.06);
+  border-color: rgba(255, 95, 31, 0.16);
 }
 
 .team-info-group {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .team-avatar-placeholder {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .live-team-name {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-main);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Stats Box: Puntos y Faltas */
 .stats-box {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.1rem;
 }
 
 .stat-fouls {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
   line-height: 1;
   gap: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
 }
-.stat-fouls strong { color: var(--danger); font-size: 0.9rem; }
+
+.stat-fouls strong {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
 
 .live-team-score {
   font-family: var(--font-mono);
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   font-weight: 800;
   color: var(--text-main);
-  min-width: 2.5ch;
+  min-width: 2.2ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-/* Indicador de quién va ganando (color sutil) */
-.winning .live-team-score { color: var(--primary); text-shadow: 0 0 20px rgba(249, 115, 22, 0.2); }
-.winning .team-avatar-placeholder { border-color: var(--primary); color: var(--primary); }
+.winning .live-team-score {
+  color: var(--primary-light);
+  text-shadow: 0 0 18px rgba(255, 95, 31, 0.35);
+}
 
-/* --- GRID DE HISTORIAL --- */
+.winning .team-avatar-placeholder {
+  border-color: var(--primary);
+  background: rgba(255, 95, 31, 0.15);
+  color: var(--primary-light);
+}
+
+/* --- GRID DE HISTORIAL (Mobile 1-col -> Tablet 2-col -> Desktop 3/4-col) --- */
 .matches-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
 }
 
-/* --- TICKET CARD (HISTORIAL) --- */
+@media (min-width: 640px) {
+  .matches-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .matches-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+  }
+}
+
+@media (min-width: 1380px) {
+  .matches-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* --- TICKET CARD (HISTORIAL COURTSIDE BOX SCORE) --- */
 .match-ticket {
-  background-color: var(--bg-surface);
+  background: linear-gradient(165deg, rgba(22, 26, 39, 0.9) 0%, rgba(13, 16, 24, 0.96) 100%);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  position: relative;
 }
 
 .match-ticket:hover {
-  transform: translateY(-2px);
-  border-color: var(--text-muted);
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
 }
 
 .ticket-header {
-  padding: 0.6rem 1rem;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px dashed var(--border-color);
+  padding: 0.65rem 1rem;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px dashed var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-weight: 700;
 }
 
 .ticket-body {
-  padding: 1rem;
+  padding: 1.1rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .ticket-team {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
   flex: 1;
+  min-width: 0;
 }
-.ticket-team:last-child { align-items: flex-end; text-align: right; }
 
-.ticket-team-name { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-.ticket-score { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 700; color: var(--text-muted); }
+.ticket-team:last-child {
+  align-items: flex-end;
+  text-align: right;
+}
 
-.ticket-team.winner .ticket-team-name { color: var(--text-main); }
-.ticket-team.winner .ticket-score { color: var(--success); }
+.ticket-team-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
-/* Separador VS */
-.ticket-vs { font-size: 0.65rem; font-weight: 900; color: #3f3f46; margin: 0 1rem; }
+.ticket-score {
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
 
-/* --- EMPTY STATE --- */
+.ticket-team.winner .ticket-team-name {
+  color: var(--text-main);
+}
+
+.ticket-team.winner .ticket-score {
+  color: var(--success);
+  text-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+}
+
+.ticket-vs {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* --- EMPTY STATE HERO --- */
 .empty-state {
-  margin-top: 3rem;
+  margin-top: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 1rem;
+  gap: 1.15rem;
   color: var(--text-muted);
-  padding: 3rem 1rem;
-  background: radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 60%);
+  padding: 3.5rem 1.5rem;
+  border-radius: var(--radius-xl);
+  border: 1px dashed var(--border-light);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 95, 31, 0.12) 0%, transparent 65%),
+    rgba(18, 21, 31, 0.6);
 }
 
-/* Estilos de tabla historial*/
-
-/* Grid contenedor */
+/* --- TABLA DE CUARTOS EN MODAL DE REPORTE --- */
 .report-quarters-grid {
-    display: grid;
-    /* Las columnas se definen inline en el JSX para ser dinámicas */
-    gap: 12px 0; /* Espacio vertical entre filas */
-    align-items: center;
-    width: 100%;
-    min-width: 100%; /* Asegura que ocupe el espacio disponible */
+  display: grid;
+  gap: 10px 0;
+  align-items: center;
+  width: 100%;
+  min-width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
 }
 
-/* Estilo base de celdas */
 .q-cell {
-    font-size: 0.95rem;
-    text-align: center;
-    padding: 0 4px;
+  font-size: 0.92rem;
+  text-align: center;
+  padding: 0 6px;
 }
 
-/* Cabeceras (Q1, Q2, Set 1...) */
 .q-cell.head {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    color: var(--muted-foreground, #888); /* Color gris suave */
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 8px;
-    margin-bottom: 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-/* Nombres de Equipos */
 .q-cell.team-name {
-    text-align: left;
-    font-weight: 600;
-    padding-left: 0.75rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis; /* Puntos suspensivos si es muy largo */
-    border-radius: 4px;
-    height: 32px;
-    display: flex;
-    align-items: center;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding-left: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 6px;
+  height: 34px;
+  display: flex;
+  align-items: center;
 }
 
-/* Colores específicos para distinguir equipos */
 .q-cell.team-name.local {
-    color: var(--secondary); /* Tu color para local */
-    background: linear-gradient(90deg, rgba(var(--secondary-rgb), 0.1) 0%, transparent 100%);
-    border-left: 3px solid var(--secondary);
+  color: var(--secondary-light);
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.15) 0%, transparent 100%);
+  border-left: 3px solid var(--secondary);
 }
 
 .q-cell.team-name.visitor {
-    color: var(--primary); /* Tu color para visita */
-    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.1) 0%, transparent 100%);
-    border-left: 3px solid var(--primary);
+  color: var(--primary-light);
+  background: linear-gradient(90deg, rgba(255, 95, 31, 0.15) 0%, transparent 100%);
+  border-left: 3px solid var(--primary);
 }
 
-/* Valores de Puntos (Cuartos/Sets) */
 .q-cell.score-val {
-    font-family: 'Monospace', monospace; /* Para tabular mejor los números */
-    font-weight: 500;
-    color: var(--foreground);
-    opacity: 0.9;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
-/* Columna Total */
 .q-cell.total-val {
-    font-weight: 800;
-    font-size: 1.1rem;
-    color: var(--foreground);
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text-main);
 }

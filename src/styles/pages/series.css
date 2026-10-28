@@ -1,135 +1,144 @@
 /* src/styles/pages/series.css */
+/* ==========================================================================
+   SERIES LIVE STAGE — MOBILE-FIRST TO WIDESCREEN ARENA
+   ========================================================================== */
 
-/* --- CONTENEDOR DE ESCENARIO EN VIVO (SERIES) --- */
 .series-stage-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  justify-content: center;
+  padding: 0.5rem 1rem;
   overflow-y: auto;
   width: 100%;
-  max-width: 32rem;
+  max-width: 1240px;
   margin: 0 auto;
-  gap: 1.5rem;
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+.series-info-pill {
+  background: rgba(18, 21, 31, 0.85);
+  border: 1px solid var(--border-light);
+  padding: 0.45rem 1.35rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+.series-info-main {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.series-info-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-left: 1px solid var(--border-light);
+  padding-left: 0.75rem;
 }
 
 .series-sets-caption {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-top: 0.5rem;
-  opacity: 0.6;
-}
-
-.series-vs-badge {
-  font-size: 0.75rem;
-  font-weight: 900;
-  color: #52525b;
-  background-color: #18181b;
-  padding: 0.5rem;
-  border-radius: 9999px;
-  border: 1px solid #27272a;
-}
-
-/* --- HEADER: Píldora de Información del Set --- */
-.series-info-pill {
-  background-color: rgba(24, 24, 27, 0.6); /* Zinc 900 más transparente */
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0.6rem 1.75rem;
-  border-radius: 99px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  min-width: 200px;
-  backdrop-filter: blur(8px);
-}
-
-.series-info-main {
-  font-size: 1rem;
   font-weight: 800;
-  color: var(--text-main);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  letter-spacing: 0.12em;
+  margin-top: 0.35rem;
 }
 
-.series-info-sub {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* --- INDICADORES DE PUNTOS DEL SET --- */
 .series-points-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 0 1rem; /* Padding lateral */
-  gap: 1rem;
-  margin: 0; 
+  gap: 0.75rem;
+  margin: 0;
 }
 
 .series-point-box {
-  flex: 1; /* Ocupar espacio equitativo */
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(9, 9, 11, 0.6);
+  background: rgba(14, 17, 26, 0.8);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 24px; /* Más redondeado */
-  padding: 1rem;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-  transition: transform 0.2s, border-color 0.2s;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  box-shadow: var(--shadow-md);
 }
 
-.series-point-box:active {
-  transform: scale(0.98);
-}
-
-/* Variante Local */
 .series-point-box.local {
-  border-top: 4px solid var(--secondary); 
-  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(9, 9, 11, 0.8) 100%);
+  border-top: 3px solid var(--secondary);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.12) 0%, rgba(12, 14, 21, 0.9) 100%);
 }
 
-/* Variante Visitante */
 .series-point-box.visitor {
-  border-top: 4px solid var(--primary);
-  background: linear-gradient(180deg, rgba(249, 115, 22, 0.08) 0%, rgba(9, 9, 11, 0.8) 100%);
+  border-top: 3px solid var(--primary);
+  background: linear-gradient(180deg, rgba(255, 95, 31, 0.12) 0%, rgba(12, 14, 21, 0.9) 100%);
 }
 
 .series-point-label {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.65rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 0.5rem;
-  opacity: 0.8;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.2rem;
 }
 
-.series-point-box.local .series-point-label { color: #93c5fd; }
-.series-point-box.visitor .series-point-label { color: #fdba74; }
+.series-point-box.local .series-point-label { color: var(--secondary-light); }
+.series-point-box.visitor .series-point-label { color: var(--primary-light); }
 
 .series-point-value {
   font-family: var(--font-mono);
-  font-size: 3rem; /* Más grandes para destacar puntos actuales */
+  font-size: clamp(2.1rem, 7vw, 3.5rem);
   font-weight: 800;
   line-height: 1;
   color: white;
-  text-shadow: 0 0 20px rgba(0,0,0,0.3);
+  font-variant-numeric: tabular-nums;
+}
+
+.series-vs-badge {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: var(--text-muted);
+  background-color: var(--bg-surface);
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .series-stage-container {
+    padding: 0.5rem 0;
+    gap: 1.15rem;
+  }
+
+  .series-points-container {
+    gap: 1.5rem;
+  }
+
+  .series-point-box {
+    padding: 1.15rem 1.5rem;
+  }
 }

@@ -1,207 +1,349 @@
 /* src/styles/pages/teams.css */
+/* ==========================================================================
+   TEAMS & FRANCHISE MANAGER — MOBILE-FIRST TO 2-COL DESKTOP WORKSPACE
+   ========================================================================== */
 
-/* --- 1. SECCIÓN DE FORMULARIO --- */
+.teams-workspace {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.teams-left-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.teams-right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .teams-workspace {
+    grid-template-columns: 390px minmax(0, 1fr);
+    gap: 2rem;
+  }
+
+  .teams-left-panel {
+    position: sticky;
+    top: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .teams-workspace {
+    grid-template-columns: 420px minmax(0, 1fr);
+  }
+}
+
+/* --- 1. TARJETA DE FORMULARIO DE CREACIÓN --- */
 .teams-form-card {
-  margin-bottom: 2rem;
-  /* Hereda propiedades de .card automáticamente */
+  margin-bottom: 0;
+  border-top: 3px solid var(--primary);
 }
 
 .form-header-text {
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
   color: var(--text-main);
-  margin-bottom: 1rem;
-  font-weight: 600;
+  margin-bottom: 1.15rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-/* Fila de agregar jugador (Inputs alineados) */
 .add-player-row {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .input-player-number {
-  width: 70px;
+  width: 78px;
+  flex-shrink: 0;
   text-align: center;
   font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--secondary);
+  font-weight: 800;
+  color: var(--secondary-light);
 }
 
 .btn-add-player {
-  aspect-ratio: 1;
+  width: 48px;
+  flex-shrink: 0;
   padding: 0;
-  width: 100px;
-  background-color: var(--bg-surface-hover);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
+  background: rgba(14, 165, 233, 0.14);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  color: var(--secondary-light);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-add-player:hover {
-  background-color: var(--primary);
-  color: white;
-  border-color: var(--primary);
+  transition: all 0.2s ease;
 }
 
-/* Lista de jugadores temporales (Pills) */
+.btn-add-player:hover {
+  background-color: var(--secondary);
+  color: white;
+  border-color: var(--secondary);
+  box-shadow: 0 4px 14px var(--secondary-glow);
+}
+
 .temp-players-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  min-height: 1rem;
+  gap: 0.45rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
 }
 
 .pill-remove-btn {
   background: transparent;
   border: none;
   color: inherit;
-  margin-left: 6px;
+  margin-left: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  opacity: 0.6;
+  opacity: 0.65;
 }
-.pill-remove-btn:hover { opacity: 1; }
 
+.pill-remove-btn:hover {
+  opacity: 1;
+}
 
-/* --- 2. CABECERA DE LA LISTA Y BOTÓN DE ARCHIVADOS --- */
+/* --- 2. CABECERA DE LA LISTA, BUSCADOR Y BOTÓN DE ARCHIVADOS --- */
 .teams-list-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid transparent;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (min-width: 640px) {
+  .teams-list-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .list-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.06em;
   margin: 0;
-}
-
-/* CORRECCIÓN: Botón "Ver Archivados" optimizado */
-.btn-archive-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.8rem;
-  font-size: 0.8rem;
-  font-weight: 600;
+}
+
+.btn-archive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  background-color: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-full); /* Más redondeado y moderno */
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all 0.2s ease;
-  height: auto; /* Evita que herede alturas forzadas */
 }
 
 .btn-archive-toggle:hover {
   color: var(--text-main);
   background-color: var(--bg-surface-hover);
+  border-color: var(--border-light);
 }
 
 .btn-archive-toggle.active {
-  color: var(--primary);
-  background-color: rgba(249, 115, 22, 0.1);
-  border-color: rgba(249, 115, 22, 0.2);
+  color: var(--primary-light);
+  background-color: var(--primary-subtle);
+  border-color: rgba(255, 95, 31, 0.35);
 }
 
-
-/* --- 3. LISTA DE EQUIPOS (CARDS) --- */
+/* --- 3. GRID DE FRANQUICIAS / EQUIPOS (Mobile 1-col -> Tablet/Desktop Multi-Col) --- */
 .teams-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .teams-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+  }
 }
 
 .team-card {
-  padding: 1rem 1.25rem;
+  padding: 1.15rem;
   display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s ease;
-  border-left: 3px solid transparent; /* Indicador visual al hover */
+  gap: 1rem;
+  transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  border-left: 3px solid var(--secondary);
 }
 
-/* Efecto hover suave */
 .team-card:hover {
-  transform: translateX(4px);
+  transform: translateY(-3px);
   border-left-color: var(--primary);
-  border-color: var(--border-light);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.team-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .team-info {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.team-monogram {
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(255, 95, 31, 0.14));
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--text-main);
+  flex-shrink: 0;
+}
+
+.team-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .team-name {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
   color: var(--text-main);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Estilos específicos para equipos archivados */
+.team-roster-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.team-roster-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 1.65rem;
+  align-items: center;
+}
+
+.roster-mini-chip {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.roster-mini-chip strong {
+  font-family: var(--font-mono);
+  color: var(--secondary-light);
+  margin-right: 3px;
+}
+
+.team-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
 .team-card.is-archived {
-  opacity: 0.6;
-  border: 1px dashed var(--border-color);
-  background-image: none;
-  background-color: transparent;
+  opacity: 0.68;
+  border: 1px dashed var(--border-light);
+  background: rgba(12, 14, 21, 0.5);
 }
 
 .team-card.is-archived:hover {
   opacity: 1;
-  border-color: var(--text-muted);
-  transform: none; /* No mover si está archivado */
 }
 
 .archived-badge {
-  font-size: 0.65rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.62rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.06em;
+  border: 1px solid var(--border-color);
 }
 
-/* --- 4. INFO BOX (Ayuda al final) --- */
+/* --- 4. INFO BOX --- */
 .teams-info-box {
-  margin-top: 2rem;
-  padding: 1rem 1.25rem;
-  background-color: rgba(59, 130, 246, 0.05); /* Azul muy sutil */
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  padding: 1rem 1.15rem;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(18, 21, 31, 0.8));
+  border: 1px solid rgba(14, 165, 233, 0.25);
   border-radius: var(--radius-md);
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
   display: flex;
-  gap: 1rem;
+  gap: 0.85rem;
   align-items: flex-start;
 }
 
 .info-content strong {
   color: var(--text-main);
   display: block;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
+
 .info-content ul {
   padding-left: 1rem;
-  margin-top: 0.5rem;
-  line-height: 1.6;
+  margin-top: 0.35rem;
+  line-height: 1.5;
   list-style-type: disc;
+  color: var(--text-muted);
 }

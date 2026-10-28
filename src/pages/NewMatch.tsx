@@ -1,9 +1,10 @@
+// src/pages/NewMatch.tsx
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
-import { Play, AlertCircle, Trophy, Zap } from 'lucide-react';
+import { Play, AlertCircle, Trophy, Zap, Shield } from 'lucide-react';
 import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
 import { TraditionalConfigComponent } from '../features/match-creations/components/TraditionalConfig';
 import { RaceConfigComponent } from '../features/match-creations/components/RaceConfig';
@@ -32,7 +33,6 @@ export function NewMatch() {
     }
   };
 
-  // --- 2. Usamos el Hook de Configuración que creaste ---
   const {
     config,
     changeMode,
@@ -43,7 +43,6 @@ export function NewMatch() {
     isValid
   } = useMatchConfig('traditional');
 
-  // Cargar equipos
   const teams = useLiveQuery(async () => {
     try {
       return await TeamsRepository.getAll();
@@ -53,11 +52,9 @@ export function NewMatch() {
     }
   });
 
-  // --- 3. Lógica para Guardar el Partido según el Modo ---
   const handleStartMatch = async () => {
     setError(null);
 
-    // Validaciones Básicas
     if (!localTeamId || !visitorTeamId) {
       setError("Debes seleccionar ambos equipos.");
       return;
@@ -67,7 +64,6 @@ export function NewMatch() {
       return;
     }
 
-    // Validar Configuración del Modo
     if (!isValid) {
       setError(validation.errors[0] || "Configuración inválida");
       return;
@@ -76,51 +72,32 @@ export function NewMatch() {
     setIsCreating(true);
 
     try {
-      // Objeto base del partido
-      // Usamos 'any' temporalmente o 'Partial<Match>' para construirlo dinámicamente
       const matchData: any = {
         localTeamId: Number(localTeamId),
         visitorTeamId: Number(visitorTeamId),
         status: 'created',
         createdAt: new Date(),
-        
-        // Aquí guardamos la configuración completa que viene del hook
-        config: config, 
-
-        // Inicializamos marcadores en 0
+        config: config,
         localScore: 0,
         visitorScore: 0,
         localFouls: 0,
         visitorFouls: 0
       };
 
-      // --- LOGICA ESPECÍFICA POR MODO ---
-      
-      // A. MODO TRADICIONAL (Necesita tiempo y cuartos)
       if (config.mode === 'traditional' && config.traditional) {
         matchData.currentQuarter = 1;
-        // Convertimos minutos a segundos para el timer
         matchData.timerSecondsRemaining = config.traditional.minutesPerQuarter * 60;
         matchData.timerLastStart = undefined;
-        
-        // Campos legacy para compatibilidad (opcional, pero recomendado por ahora)
         matchData.totalQuarters = config.traditional.totalQuarters;
         matchData.quarterDuration = config.traditional.minutesPerQuarter;
       }
 
-      // B. MODOS SIN RELOJ (Race / Best Of)
       if (config.mode === 'race' || config.mode === 'best-of-series') {
-        // Inicializamos historial de juegos/sets vacío
         matchData.gameHistory = [];
-        // No definimos timerSecondsRemaining, el sistema entenderá que no hay reloj
       }
 
-      // Guardar en BD
       const matchId = await db.matches.add(matchData);
-      
-      // Redirigir a la pantalla de juego
       navigate(`/live/${matchId}`);
-
     } catch (err) {
       console.error(err);
       setError("Hubo un error al crear el partido.");
@@ -128,16 +105,25 @@ export function NewMatch() {
     }
   };
 
-  // Evitar render si cargando
   if (teams === undefined) return null;
+
+  const selectedLocalName = teams.find(t => String(t.id) === localTeamId)?.name || 'Equipo Local';
+  const selectedVisitorName = teams.find(t => String(t.id) === visitorTeamId)?.name || 'Equipo Visitante';
 
   return (
     <div className="page-container">
-      <div className="flex-between" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
-        <h1 className="title-header" style={{ marginBottom: 0 }}>
-          <Trophy color="var(--primary)" />
-          Nuevo Partido
-        </h1>
+      {/* --- CABECERA --- */}
+      <header className="page-header-wrapper">
+        <div className="page-title-group">
+          <span className="page-eyebrow">
+            <Trophy size={13} />
+            Arena Setup
+          </span>
+          <h1 className="title-header">Configurar Partido</h1>
+          <p className="page-subtitle">
+            Elige las franquicias que se enfrentan, selecciona el formato de competencia y salta a la cancha.
+          </p>
+        </div>
 
         <button
           type="button"
@@ -149,7 +135,7 @@ export function NewMatch() {
           <Zap size={16} fill="currentColor" />
           Reta Rápida (21 pts)
         </button>
-      </div>
+      </header>
 
       {/* Banner de Error */}
       {error && (
@@ -159,108 +145,139 @@ export function NewMatch() {
         </div>
       )}
 
-      {/* --- SELECCIÓN DE EQUIPOS (Faceoff) --- */}
-      <div className="match-faceoff">
-        <div className="team-select-wrapper">
-          <label className="team-select-label">Equipo Local</label>
-          <select
-            value={localTeamId}
-            onChange={(e) => setLocalTeamId(e.target.value)}
-            className="input"
-            style={{ fontSize: '1.1rem', padding: '1rem' }}
-          >
-            <option value="" disabled>Seleccionar...</option>
-            {teams.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+      {/* --- GRID PRINCIPAL DE 2 COLUMNAS EN DESKTOP --- */}
+      <div className="new-match-layout">
+        {/* COLUMNA IZQUIERDA: CONFIGURACIÓN */}
+        <div className="new-match-main-col">
+          {/* 1. SELECCIÓN DE EQUIPOS (Faceoff) */}
+          <div className="match-faceoff">
+            <div className="team-select-wrapper is-local">
+              <label className="team-select-label">
+                <span className="flex-gap">
+                  <Shield size={13} color="var(--secondary)" />
+                  Equipo Local
+                </span>
+                <span className="team-select-badge">HOME</span>
+              </label>
+              <select
+                value={localTeamId}
+                onChange={(e) => setLocalTeamId(e.target.value)}
+                className="input"
+                style={{ fontSize: '1rem', fontWeight: 700 }}
+              >
+                <option value="" disabled>Seleccionar franquicia...</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="vs-badge">VS</div>
+
+            <div className="team-select-wrapper is-visitor">
+              <label className="team-select-label">
+                <span className="flex-gap">
+                  <Shield size={13} color="var(--primary)" />
+                  Equipo Visitante
+                </span>
+                <span className="team-select-badge">AWAY</span>
+              </label>
+              <select
+                value={visitorTeamId}
+                onChange={(e) => setVisitorTeamId(e.target.value)}
+                className="input"
+                style={{ fontSize: '1rem', fontWeight: 700 }}
+              >
+                <option value="" disabled>Seleccionar franquicia...</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 2. SELECTOR DE MODO DE JUEGO */}
+          <GameModeSelector
+            selectedMode={config.mode}
+            onModeChange={changeMode}
+          />
+
+          {/* 3. CONFIGURACIÓN ESPECÍFICA */}
+          {config.mode === 'traditional' && config.traditional && (
+            <TraditionalConfigComponent
+              config={config.traditional}
+              onChange={updateTraditional}
+            />
+          )}
+
+          {config.mode === 'race' && config.race && (
+            <RaceConfigComponent
+              config={config.race}
+              onChange={updateRace}
+            />
+          )}
+
+          {config.mode === 'best-of-series' && config.bestOf && (
+            <BestOfConfigComponent
+              config={config.bestOf}
+              onChange={updateBestOf}
+            />
+          )}
         </div>
 
-        <div className="vs-badge">VS</div>
+        {/* COLUMNA DERECHA (STICKY EN DESKTOP): PREVIEW + RESUMEN + ACCIÓN */}
+        <aside className="new-match-side-col">
+          {/* Matchup Preview Ticket */}
+          <div className="matchup-preview-banner">
+            <div className="preview-team-pill">
+              <span className="preview-team-role" style={{ color: 'var(--secondary-light)' }}>Local</span>
+              <span className="preview-team-name">{selectedLocalName}</span>
+            </div>
+            <span className="ticket-vs">VS</span>
+            <div className="preview-team-pill right">
+              <span className="preview-team-role" style={{ color: 'var(--primary-light)' }}>Visita</span>
+              <span className="preview-team-name">{selectedVisitorName}</span>
+            </div>
+          </div>
 
-        <div className="team-select-wrapper">
-          <label className="team-select-label" style={{ textAlign: 'right' }}>
-            Equipo Visitante
-          </label>
-          <select
-            value={visitorTeamId}
-            onChange={(e) => setVisitorTeamId(e.target.value)}
-            className="input"
-            style={{ fontSize: '1.1rem', padding: '1rem', textAlign: 'right', direction: 'rtl' }}
+          {/* Resumen de Reglas */}
+          <ConfigSummary config={config} />
+
+          {/* Error de validación */}
+          {!isValid && validation.errors.length > 0 && (
+            <div className="error-banner">
+              <AlertCircle size={20} />
+              {validation.errors[0]}
+            </div>
+          )}
+
+          {/* Botón de Inicio */}
+          <button
+            onClick={handleStartMatch}
+            disabled={isCreating || !isValid}
+            className="btn btn-primary btn-lg btn-full"
           >
-            <option value="" disabled>...Seleccionar</option>
-            {teams.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
+            {isCreating ? (
+              'Abriendo Cancha...'
+            ) : (
+              <>
+                <Play fill="currentColor" size={20} />
+                Iniciar Partido Oficial
+              </>
+            )}
+          </button>
+
+          {/* Warning si no hay equipos suficientes */}
+          {teams.length < 2 && (
+            <p className="warning-banner">
+              Necesitas al menos 2 equipos activos para configurar un partido personalizado, o usa <strong>Reta Rápida (21 pts)</strong> arriba. <br />
+              <Link to="/teams" style={{ color: 'var(--primary-light)', fontWeight: 800, textDecoration: 'underline' }}>
+                Registrar equipos aquí →
+              </Link>
+            </p>
+          )}
+        </aside>
       </div>
-
-      {/* --- SELECTOR DE MODO DE JUEGO --- */}
-      <GameModeSelector 
-        selectedMode={config.mode} 
-        onModeChange={changeMode} 
-      />
-
-      {/* --- CONFIGURACIÓN ESPECÍFICA (Render Condicional) --- */}
-      {config.mode === 'traditional' && config.traditional && (
-        <TraditionalConfigComponent
-          config={config.traditional}
-          onChange={updateTraditional}
-        />
-      )}
-
-      {config.mode === 'race' && config.race && (
-        <RaceConfigComponent
-          config={config.race}
-          onChange={updateRace}
-        />
-      )}
-
-      {config.mode === 'best-of-series' && config.bestOf && (
-        <BestOfConfigComponent
-          config={config.bestOf}
-          onChange={updateBestOf}
-        />
-      )}
-
-      {/* --- RESUMEN --- */}
-      <ConfigSummary config={config} />
-
-      {/* Mostrar error de validación específico si existe */}
-      {!isValid && validation.errors.length > 0 && (
-        <div className="error-banner" style={{marginBottom: '1rem'}}>
-          <AlertCircle size={20} />
-          {validation.errors[0]}
-        </div>
-      )}
-
-      {/* --- BOTÓN DE INICIO --- */}
-      <button
-        onClick={handleStartMatch}
-        disabled={isCreating || !isValid}
-        className="btn btn-primary btn-full"
-        style={{ padding: '1rem', fontSize: '1.1rem' }}
-      >
-        {isCreating ? (
-          'Creando...'
-        ) : (
-          <>
-            <Play fill="currentColor" size={20} />
-            Iniciar Partido
-          </>
-        )}
-      </button>
-
-      {/* Warning si no hay equipos suficientes */}
-      {teams.length < 2 && (
-        <p className="warning-banner">
-          Necesitas al menos 2 equipos activos para configurar un partido personalizado, o usa <strong>Reta Rápida (21 pts)</strong> arriba. <br/>
-          <Link to="/teams" style={{ color: 'var(--primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
-            Crear equipos aquí
-          </Link>.
-        </p>
-      )}
     </div>
   );
 }

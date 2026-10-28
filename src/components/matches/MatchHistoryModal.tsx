@@ -83,8 +83,6 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             // En tradicional, mostramos al menos los configurados (ej: 4) y los OT jugados
             maxDisplayPeriod = Math.max(maxDataQuarter, totalQuarters);
         }
-        // En 'best-of-series' y 'race', maxDisplayPeriod se basa puramente en los datos jugados (maxDataQuarter)
-        // para evitar mostrar "Sets" vacíos que no ocurrieron.
 
         let periodStats: { period: number; local: number; visitor: number }[] = [];
         for (let q = 1; q <= maxDisplayPeriod; q++) {
@@ -171,7 +169,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             return new Intl.DateTimeFormat('es-MX', {
                 weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
             }).format(date);
-        } catch (e) { return ""; }
+        } catch { return ""; }
     };
 
     // Helper para etiquetas de la tabla
@@ -199,12 +197,15 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
                 {/* 1. HEADER */}
                 <div className="modal-header">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-bold text-muted uppercase tracking-widest flex items-center gap-2">
+                    <div className="flex-col">
+                        <span
+                            className="flex-gap text-muted uppercase font-bold"
+                            style={{ fontSize: '0.75rem', letterSpacing: '0.1em' }}
+                        >
                             <Calendar size={12} />
                             {formatDate(match.createdAt)}
                         </span>
-                        <h2 className="modal-title mt-1">
+                        <h2 className="modal-title" style={{ marginTop: '0.25rem' }}>
                             Resumen Oficial
                         </h2>
                     </div>
@@ -233,30 +234,26 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                 </div>
 
                 {/* 3. CUERPO SCROLLABLE */}
-                <div className="modal-body p-0 pb-8">
+                <div className="modal-body" style={{ padding: 0, paddingBottom: '2rem' }}>
                     <div className="report-section">
 
                         {/* TABLA DINÁMICA DE PERIODOS / SETS */}
                         {stats.periodStats.length > 0 && (
                             <>
-                                <div className="report-subtitle mb-4">
+                                <div className="report-subtitle" style={{ marginBottom: '1rem' }}>
                                     {getModeIcon()} {getModeTitle()}
                                 </div>
 
                                 {/* CONTENEDOR CON SCROLL HORIZONTAL (por si hay muchos sets) */}
-                                <div className="overflow-x-auto pb-2">
+                                <div style={{ overflowX: 'auto', paddingBottom: '0.5rem' }}>
                                     <div
                                         className="report-quarters-grid"
                                         style={{
-                                            // MEJORA CLAVE:
-                                            // 1. Nombre: minmax(140px, 2fr) -> Mínimo 140px, pero puede crecer.
-                                            // 2. Periodos: minmax(45px, 1fr) -> Ancho cómodo para números.
-                                            // 3. Total: minmax(70px, 0.5fr) -> Espacio fijo para el total.
                                             gridTemplateColumns: `minmax(140px, 2fr) repeat(${stats.periodStats.length}, minmax(45px, 1fr)) minmax(70px, 0.5fr)`
                                         }}
                                     >
                                         {/* --- HEADER --- */}
-                                        <div className="q-cell head text-left pl-2">Equipo</div>
+                                        <div className="q-cell head" style={{ textAlign: 'left', paddingLeft: '0.5rem' }}>Equipo</div>
                                         {stats.periodStats.map(qs => (
                                             <div key={qs.period} className="q-cell head">
                                                 {getPeriodLabel(qs.period)}
@@ -291,7 +288,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                         )}
 
                         {/* ESTADÍSTICAS JUGADORES (BOX SCORE) */}
-                        <div className="report-subtitle mt-8">
+                        <div className="report-subtitle" style={{ marginTop: '2rem' }}>
                             <Users size={14} /> Estadísticas de Jugadores
                         </div>
 
@@ -308,13 +305,13 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     );
 }
 
-// Subcomponente para lista de jugadores (limpieza de código)
+// Subcomponente para lista de jugadores
 const TeamStatsGroup = ({ teamName, stats, color }: { teamName?: string, stats: PlayerStat[], color: string }) => (
     <div className="stats-group">
         <h4
             style={{
                 fontSize: '0.85rem', fontWeight: 700, color: color,
-                borderBottom: `1px solid ${color}33`, // 33 es aprox 20% opacity hex
+                borderBottom: `1px solid ${color}33`,
                 paddingBottom: '0.25rem', marginBottom: '0.5rem', paddingLeft: '0.5rem'
             }}
         >
@@ -322,13 +319,13 @@ const TeamStatsGroup = ({ teamName, stats, color }: { teamName?: string, stats: 
         </h4>
         <div className="stats-header-row">
             <span>Jugador</span>
-            <div className="flex gap-4">
-                <span className="w-10 text-center">FAL</span>
-                <span className="w-10 text-center">PTS</span>
+            <div className="flex-gap" style={{ gap: '1rem' }}>
+                <span className="text-center" style={{ width: '2.5rem' }}>FAL</span>
+                <span className="text-center" style={{ width: '2.5rem' }}>PTS</span>
             </div>
         </div>
         {stats.length === 0 ? (
-            <p className="text-muted text-xs p-2 italic">Sin registros.</p>
+            <p className="text-muted" style={{ fontSize: '0.75rem', padding: '0.5rem', fontStyle: 'italic' }}>Sin registros.</p>
         ) : stats.map(p => (
             <div key={p.id} className="stat-player-row">
                 <div className="player-info">

@@ -67,11 +67,24 @@ export const TraditionalEngine: React.FC = () => {
     return `${m}:${sec}`;
   };
 
+  const getTeamPlayers = (teamId: number) =>
+    teamId === localTeam.id ? localTeam.players : visitorTeam.players;
+
   const handleScoreClick = (teamId: number, points: 1 | 2 | 3) => {
+    const teamPlayers = getTeamPlayers(teamId);
+    if (!teamPlayers || teamPlayers.length === 0) {
+      addScore(teamId, points, undefined);
+      return;
+    }
     setPlayerModal({ isOpen: true, teamId, actionType: 'score', points });
   };
 
   const handleFoulClick = (teamId: number) => {
+    const teamPlayers = getTeamPlayers(teamId);
+    if (!teamPlayers || teamPlayers.length === 0) {
+      addFoul(teamId, undefined);
+      return;
+    }
     setPlayerModal({ isOpen: true, teamId, actionType: 'foul' });
   };
 

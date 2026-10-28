@@ -4,6 +4,7 @@ import { LiveMatchProvider, useLiveMatch } from '../features/match-creations/com
 import { TraditionalEngine } from '../features/match-creations/components/engines/TraditionalEngine';
 import { RaceEngine } from '../features/match-creations/components/engines/RaceEngine';
 import { SeriesEngine } from '../features/match-creations/components/engines/SeriesEngine';
+import { useWakeLock } from '../hooks/useWakeLock';
 
 // Layout de pantalla completa centrado (sustituye clases utilitarias que no existen en src/styles)
 const fullScreenCenter: CSSProperties = {
@@ -67,6 +68,9 @@ class LiveMatchErrorBoundary extends Component<LiveMatchErrorBoundaryProps, Live
 const EngineDispatcher = () => {
   const { match, localTeam, visitorTeam, isLoading, error } = useLiveMatch();
   const navigate = useNavigate();
+
+  // Mantener pantalla encendida mientras el partido esté activo
+  useWakeLock(match?.status !== 'finished');
 
   // 1. Estado de Carga visible y con altura completa.
   if (isLoading) {

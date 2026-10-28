@@ -3,13 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
-import { Play, AlertCircle, Trophy } from 'lucide-react';
+import { Play, AlertCircle, Trophy, Zap } from 'lucide-react';
 import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
 import { TraditionalConfigComponent } from '../features/match-creations/components/TraditionalConfig';
 import { RaceConfigComponent } from '../features/match-creations/components/RaceConfig';
 import { BestOfConfigComponent } from '../features/match-creations/components/BestOfConfig';
 import { ConfigSummary } from '../features/match-creations/components/ConfigSummary';
 import { useMatchConfig } from '../features/match-creations/hooks/useMatchConfig';
+import { startQuickPickupMatch } from '../utils/matchHelpers';
 
 export function NewMatch() {
   const navigate = useNavigate();
@@ -17,6 +18,19 @@ export function NewMatch() {
   const [visitorTeamId, setVisitorTeamId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  const handleQuickMatch = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const matchId = await startQuickPickupMatch(21);
+      navigate(`/live/${matchId}`);
+    } catch (err) {
+      console.error(err);
+      setError('No se pudo iniciar la Reta Rápida.');
+      setIsCreating(false);
+    }
+  };
 
   // --- 2. Usamos el Hook de Configuración que creaste ---
   const {
@@ -119,10 +133,23 @@ export function NewMatch() {
 
   return (
     <div className="page-container">
-      <h1 className="title-header">
-        <Trophy color="var(--primary)" />
-        Nuevo Partido
-      </h1>
+      <div className="flex-between" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+        <h1 className="title-header" style={{ marginBottom: 0 }}>
+          <Trophy color="var(--primary)" />
+          Nuevo Partido
+        </h1>
+
+        <button
+          type="button"
+          onClick={handleQuickMatch}
+          disabled={isCreating}
+          className="btn btn-sm btn-primary"
+          title="Crear equipos Local vs Visitante y jugar a 21 puntos de inmediato"
+        >
+          <Zap size={16} fill="currentColor" />
+          Reta Rápida (21 pts)
+        </button>
+      </div>
 
       {/* Banner de Error */}
       {error && (
@@ -212,7 +239,7 @@ export function NewMatch() {
       <button
         onClick={handleStartMatch}
         disabled={isCreating || !isValid}
-        className="btn btn-primary w-full"
+        className="btn btn-primary btn-full"
         style={{ padding: '1rem', fontSize: '1.1rem' }}
       >
         {isCreating ? (
@@ -228,7 +255,7 @@ export function NewMatch() {
       {/* Warning si no hay equipos suficientes */}
       {teams.length < 2 && (
         <p className="warning-banner">
-          Necesitas al menos 2 equipos activos para jugar. <br/>
+          Necesitas al menos 2 equipos activos para configurar un partido personalizado, o usa <strong>Reta Rápida (21 pts)</strong> arriba. <br/>
           <Link to="/teams" style={{ color: 'var(--primary)', fontWeight: 'bold', textDecoration: 'underline' }}>
             Crear equipos aquí
           </Link>.

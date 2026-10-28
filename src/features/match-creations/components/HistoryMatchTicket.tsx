@@ -27,9 +27,9 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
         // En series, mostramos SETS ganados
         localDisplayScore = match.config.bestOf?.wins?.local || 0;
         visitorDisplayScore = match.config.bestOf?.wins?.visitor || 0;
-        modeIcon = <Trophy size={12} className="text-green-500" />;
+        modeIcon = <Trophy size={12} color="var(--success)" />;
     } else if (mode === 'race') {
-        modeIcon = <Target size={12} className="text-orange-500" />;
+        modeIcon = <Target size={12} color="var(--primary)" />;
 
         // Con revanchas: mostramos JUEGOS ganados en lugar del marcador del último juego
         if (match.gameHistory && match.gameHistory.length > 1) {
@@ -45,7 +45,7 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
     return (
         <div className="match-ticket cursor-pointer" onClick={onClick}>
             <div className="ticket-header">
-                <span className="flex items-center gap-2">
+                <span className="flex-gap">
                     {modeIcon}
                     {formatDate(match.createdAt)}
                 </span>
@@ -64,8 +64,18 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
             </div>
             {/* Si es serie o reta con revanchas, aclaramos qué representa el marcador */}
             {(mode === 'best-of-series' || isRaceWithGames) && (
-                <div className="bg-zinc-900/50 py-1 px-3 text-center border-t border-zinc-800">
-                    <span className="text-[10px] text-muted uppercase font-bold tracking-widest">
+                <div
+                    className="text-center"
+                    style={{
+                        backgroundColor: 'rgba(24, 24, 27, 0.5)',
+                        padding: '0.25rem 0.75rem',
+                        borderTop: '1px solid var(--border-color)'
+                    }}
+                >
+                    <span
+                        className="text-muted uppercase font-bold"
+                        style={{ fontSize: '0.625rem', letterSpacing: '0.1em' }}
+                    >
                         {isRaceWithGames ? 'Juegos Ganados' : 'Resultado en Sets'}
                     </span>
                 </div>

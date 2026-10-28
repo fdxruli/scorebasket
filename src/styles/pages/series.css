@@ -1,5 +1,42 @@
 /* src/styles/pages/series.css */
 
+/* --- CONTENEDOR DE ESCENARIO EN VIVO (SERIES) --- */
+.series-stage-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 32rem;
+  margin: 0 auto;
+  gap: 1.5rem;
+}
+
+.series-sets-caption {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.5rem;
+  opacity: 0.6;
+}
+
+.series-vs-badge {
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: #52525b;
+  background-color: #18181b;
+  padding: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid #27272a;
+}
+
 /* --- HEADER: Píldora de Información del Set --- */
 .series-info-pill {
   background-color: rgba(24, 24, 27, 0.6); /* Zinc 900 más transparente */
@@ -13,7 +50,6 @@
   gap: 0.25rem;
   min-width: 200px;
   backdrop-filter: blur(8px);
-  /* Ya no necesita margin auto si usas flex gap en el padre */
 }
 
 .series-info-main {
@@ -43,8 +79,6 @@
   width: 100%;
   padding: 0 1rem; /* Padding lateral */
   gap: 1rem;
-  
-  /* Eliminamos márgenes fijos grandes y dejamos que el contenedor flex controle el gap */
   margin: 0; 
 }
 
@@ -97,5 +131,5 @@
   font-weight: 800;
   line-height: 1;
   color: white;
-  text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  text-shadow: 0 0 20px rgba(0,0,0,0.3);
 }

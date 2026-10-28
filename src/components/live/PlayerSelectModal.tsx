@@ -2,7 +2,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
-import { Trophy, AlertCircle, UserX, Shirt } from 'lucide-react'; // Importamos iconos
+import { Trophy, AlertCircle, UserX, Shirt } from 'lucide-react';
 
 export type GameAction =
     | { type: 'score'; points: 1 | 2 | 3 }
@@ -22,6 +22,8 @@ interface PlayerSelectModalProps {
 
 export function PlayerSelectModal({ teamName, players, action, onSelect, onCancel, matchId, foulLimit }: PlayerSelectModalProps) {
     const isFoul = action.type === 'foul';
+    const accentColor = isFoul ? 'var(--danger)' : 'var(--success)';
+    const accentBg = isFoul ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)';
 
     // Faltas acumuladas por jugador en todo el partido
     const foulsByPlayer = useLiveQuery(async () => {
@@ -45,15 +47,26 @@ export function PlayerSelectModal({ teamName, players, action, onSelect, onCance
                 {/* CABECERA */}
                 <div className="modal-header">
                     {/* Icono Grande */}
-                    <div className={`mb-2 p-3 rounded-full ${isFoul ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
+                    <div
+                        style={{
+                            marginBottom: '0.5rem',
+                            padding: '0.75rem',
+                            borderRadius: '9999px',
+                            backgroundColor: accentBg,
+                            color: accentColor,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
                         {isFoul ? <AlertCircle size={32} /> : <Trophy size={32} />}
                     </div>
 
-                    <h3 className={`modal-title ${isFoul ? 'text-red-500' : 'text-green-500'}`}>
+                    <h3 className="modal-title" style={{ color: accentColor }}>
                         {isFoul ? 'Falta Personal' : `+${action.points} Puntos`}
                     </h3>
-                    <p className="modal-subtitle text-zinc-400">
-                        ¿Quién de <span className="text-white font-bold">{teamName}</span>?
+                    <p className="modal-subtitle text-muted">
+                        ¿Quién de <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{teamName}</span>?
                     </p>
                 </div>
 
@@ -66,11 +79,16 @@ export function PlayerSelectModal({ teamName, players, action, onSelect, onCance
                         return (
                             <button
                                 key={p.id}
-                                onClick={() => onSelect(p.id!)}
-                                className="pm-player-btn group" // group para efectos hover
+                                disabled={isExpelled}
+                                onClick={() => {
+                                    if (!isExpelled) onSelect(p.id!);
+                                }}
+                                className="pm-player-btn"
                                 style={isExpelled ? {
                                     borderColor: 'var(--danger)',
-                                    backgroundColor: 'rgba(239, 68, 68, 0.15)'
+                                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                    opacity: 0.45,
+                                    cursor: 'not-allowed'
                                 } : undefined}
                             >
                                 {/* Número Grande (Estilo Jersey) */}
@@ -121,7 +139,7 @@ export function PlayerSelectModal({ teamName, players, action, onSelect, onCance
 
                 {/* BOTÓN CANCELAR */}
                 <div className="variant-game-footer">
-                    <button onClick={onCancel} className="btn btn-ghost w-full py-3 text-zinc-500 hover:text-white">
+                    <button onClick={onCancel} className="btn btn-ghost btn-full">
                         Cancelar
                     </button>
                 </div>

@@ -41,13 +41,37 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
     <Link to={`/live/${match.id}`} className="match-card is-live">
       {/* Header Tradicional: Estado + Q + Cronómetro */}
       <div className="live-card-header">
-        <div className={`live-badge-status ${isRunning ? 'text-primary border-orange-500/30' : 'text-muted'}`}>
-          <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-primary animate-pulse' : 'bg-zinc-600'}`}></div>
+        <div
+          className="live-badge-status"
+          style={isRunning
+            ? { color: 'var(--primary)', borderColor: 'rgba(249, 115, 22, 0.3)' }
+            : { color: 'var(--text-muted)' }
+          }
+        >
+          <div
+            style={{
+              width: '0.5rem',
+              height: '0.5rem',
+              borderRadius: '9999px',
+              backgroundColor: isRunning ? 'var(--primary)' : '#52525b'
+            }}
+          />
           {isRunning ? 'EN JUEGO' : 'PAUSADO'}
         </div>
-        <div className="flex items-center gap-2 font-mono text-sm font-bold text-main">
-          <span className="text-muted text-xs uppercase tracking-widest mr-2">{formatPeriodLabel(currentQuarter, totalQuarters)}</span>
-          {isRunning ? <Play size={10} className="text-primary" fill="currentColor" /> : <Pause size={10} className="text-muted" fill="currentColor" />}
+        <div
+          className="flex-gap font-mono font-bold text-main"
+          style={{ fontSize: '0.875rem' }}
+        >
+          <span
+            className="text-muted uppercase"
+            style={{ fontSize: '0.75rem', letterSpacing: '0.1em', marginRight: '0.25rem' }}
+          >
+            {formatPeriodLabel(currentQuarter, totalQuarters)}
+          </span>
+          {isRunning
+            ? <Play size={10} color="var(--primary)" fill="currentColor" />
+            : <Pause size={10} color="var(--text-muted)" fill="currentColor" />
+          }
           {formatTime(timeLeft)}
         </div>
       </div>

@@ -33,7 +33,7 @@
   min-height: 100%;
 }
 
-/* --- UTILIDADES FLEX --- */
+/* --- UTILIDADES FLEX Y TEXTO --- */
 .flex-center { display: flex; align-items: center; justify-content: center; }
 .flex-between { display: flex; align-items: center; justify-content: space-between; }
 .flex-col { display: flex; flex-direction: column; }
@@ -42,6 +42,20 @@
 .gap-sm { gap: 0.5rem; }
 .gap-md { gap: 1rem; }
 .gap-lg { gap: 1.5rem; }
+
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+.text-muted { color: var(--text-muted); }
+.text-main { color: var(--text-main); }
+.text-primary { color: var(--primary); }
+.text-secondary { color: var(--secondary); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+.font-mono { font-family: var(--font-mono); }
+.font-bold { font-weight: 700; }
+.uppercase { text-transform: uppercase; }
+.cursor-pointer { cursor: pointer; }
 
 /* --- NAVBAR INFERIOR (Traído de components/Layout.css) --- */
 .navbar {

@@ -13,12 +13,15 @@ export const SeriesLiveCard = ({ match, localName, visitorName }: Props) => {
   return (
     <Link to={`/live/${match.id}`} className="match-card is-live" style={{ borderColor: 'rgba(34, 197, 94, 0.3)' }}>
       <div className="live-card-header">
-        <div className="live-badge-status text-success border-green-500/30">
+        <div
+          className="live-badge-status text-success"
+          style={{ borderColor: 'rgba(34, 197, 94, 0.3)' }}
+        >
           <Trophy size={12} />
           <span>SERIE (MEJOR DE {totalGames})</span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-main font-bold">
-           <Layers size={12} className="text-muted"/> SET {match.currentQuarter}
+        <div className="flex-gap text-main font-bold" style={{ fontSize: '0.75rem', gap: '0.25rem' }}>
+          <Layers size={12} color="var(--text-muted)" /> SET {match.currentQuarter || 1}
         </div>
       </div>
 
@@ -34,23 +37,31 @@ const TeamRow = ({ name, sets, points, winsNeeded }: any) => (
   <div className="live-team-row">
     <div className="team-info-group">
       {/* Indicador de Sets ganados visual */}
-      <div className="flex flex-col gap-[2px] mr-1">
-          {[...Array(winsNeeded)].map((_, i) => (
-              <div key={i} className={`w-1 h-1 rounded-full ${i < sets ? 'bg-green-500' : 'bg-zinc-700'}`} />
-          ))}
+      <div className="flex-col" style={{ gap: '3px', marginRight: '0.25rem' }}>
+        {[...Array(winsNeeded)].map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: '5px',
+              height: '5px',
+              borderRadius: '9999px',
+              backgroundColor: i < sets ? 'var(--success)' : '#3f3f46'
+            }}
+          />
+        ))}
       </div>
       <span className="live-team-name">{name}</span>
     </div>
     
-    <div className="flex items-center gap-4">
-        <div className="flex flex-col items-end">
-            <span className="text-[0.65rem] text-muted uppercase font-bold">Puntos</span>
-            <span className="font-mono font-bold text-zinc-400">{points}</span>
-        </div>
-        <div className="flex flex-col items-center min-w-[30px]">
-             <span className="text-[0.65rem] text-success uppercase font-bold">Sets</span>
-             <span className="live-team-score text-success">{sets}</span>
-        </div>
+    <div className="flex-gap" style={{ gap: '1rem' }}>
+      <div className="flex-col" style={{ alignItems: 'flex-end' }}>
+        <span className="text-muted uppercase font-bold" style={{ fontSize: '0.65rem' }}>Puntos</span>
+        <span className="font-mono font-bold" style={{ color: '#a1a1aa' }}>{points}</span>
+      </div>
+      <div className="flex-col" style={{ alignItems: 'center', minWidth: '30px' }}>
+        <span className="text-success uppercase font-bold" style={{ fontSize: '0.65rem' }}>Sets</span>
+        <span className="live-team-score text-success">{sets}</span>
+      </div>
     </div>
   </div>
 );

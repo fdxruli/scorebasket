@@ -147,12 +147,15 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
                 {/* --- HEADER --- */}
                 <div className="modal-header">
-                    <div className="flex flex-col">
-                        <h2 className="modal-title flex items-center gap-2">
-                            <Shield size={20} className="text-primary" />
+                    <div className="flex-col">
+                        <h2 className="modal-title flex-gap">
+                            <Shield size={20} color="var(--primary)" />
                             Editar Equipo
                         </h2>
-                        <span className="text-xs text-muted uppercase tracking-wider font-bold mt-1">
+                        <span
+                            className="text-muted uppercase font-bold"
+                            style={{ fontSize: '0.75rem', letterSpacing: '0.05em', marginTop: '0.25rem' }}
+                        >
                             ID: {teamId}
                         </span>
                     </div>
@@ -177,12 +180,12 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                         />
                     </div>
 
-                    <div className="separator" style={{ height: '1px', background: 'var(--border-color)', margin: '0.5rem 0' }}></div>
+                    <div className="separator" style={{ height: '1px', background: 'var(--border-color)', margin: '0.5rem 0' }} />
 
                     {/* SECCIÓN 2: ROSTER */}
                     <div>
-                        <div className="flex-between mb-2">
-                            <label className="label flex items-center gap-2">
+                        <div className="flex-between" style={{ marginBottom: '0.5rem' }}>
+                            <label className="label flex-gap">
                                 <Users size={14} />
                                 Plantilla ({players.length})
                             </label>
@@ -191,7 +194,15 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                         {/* LISTA DE JUGADORES */}
                         <div className="roster-section">
                             {players.length === 0 && (
-                                <div className="text-center py-4 text-muted text-sm border border-dashed border-zinc-800 rounded-lg">
+                                <div
+                                    className="text-center text-muted"
+                                    style={{
+                                        padding: '1rem 0',
+                                        fontSize: '0.875rem',
+                                        border: '1px dashed var(--border-color)',
+                                        borderRadius: '0.5rem'
+                                    }}
+                                >
                                     Sin jugadores asignados
                                 </div>
                             )}
@@ -199,11 +210,22 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                             {players.map((p, idx) => (
                                 <div key={p.id || `temp-${idx}`} className="player-edit-row">
                                     {/* Icono decorativo */}
-                                    <User size={16} className="text-muted" />
+                                    <User size={16} color="var(--text-muted)" />
 
                                     {/* Input Número */}
-                                    <div className="relative">
-                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600 text-[10px]">#</span>
+                                    <div style={{ position: 'relative' }}>
+                                        <span
+                                            style={{
+                                                position: 'absolute',
+                                                left: '0.5rem',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                color: '#52525b',
+                                                fontSize: '0.625rem'
+                                            }}
+                                        >
+                                            #
+                                        </span>
                                         <input
                                             type="number"
                                             className="player-edit-input player-number-input"
@@ -226,7 +248,8 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                     {/* Botón Quitar de plantilla */}
                                     <button
                                         onClick={() => handleDeletePlayer(idx)}
-                                        className="btn-icon danger hover:bg-red-500/10 p-1.5 rounded"
+                                        className="btn-icon danger"
+                                        style={{ padding: '0.375rem', borderRadius: '0.25rem' }}
                                         title="Quitar de la plantilla activa sin borrar historial"
                                     >
                                         <Trash2 size={16} />
@@ -237,12 +260,12 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
                         {/* CAJA DE AGREGAR JUGADOR */}
                         <div className="add-player-box">
-                            <div className="add-player-header flex items-center gap-2">
+                            <div className="add-player-header flex-gap">
                                 <Plus size={12} />
                                 Agregar Nuevo Jugador
                             </div>
                             <div className="add-player-controls">
-                                <div className="relative">
+                                <div style={{ position: 'relative' }}>
                                     <input
                                         type="number"
                                         className="input"
@@ -257,8 +280,8 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 <input
                                     ref={newPlayerInputRef}
                                     type="text"
-                                    className="input flex-1"
-                                    style={{ fontSize: '0.9rem' }}
+                                    className="input"
+                                    style={{ flex: 1, fontSize: '0.9rem' }}
                                     placeholder="Nombre jugador"
                                     value={newPlayerName}
                                     onChange={(e) => setNewPlayerName(e.target.value)}

@@ -28,7 +28,7 @@ export const GameActionControls: React.FC<Props> = ({
   const balancedBtnClass = variant === 'local' ? 'btn-local-lg' : 'btn-visitor-lg';
 
   return (
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex-col w-full" style={{ gap: '0.75rem' }}>
       
       {simpleScoring ? (
         /* --- MODO SIMPLE (RACE): +1 / +2 / +3 en grilla de 3 columnas --- */
@@ -56,37 +56,36 @@ export const GameActionControls: React.FC<Props> = ({
 
       ) : balancedLayout ? (
         /* --- MODO SERIES (MEJORADO: Jerarquía Vertical 1, 2, 3) --- */
-        /* Usamos flex vertical para un orden claro y botones de tamaño consistente */
-        <div className="flex flex-col gap-2">
-            <button
-              disabled={disabled}
-              onClick={() => onScore(1)}
-              className={`btn-action ${balancedBtnClass}`}
-              style={{ fontSize: '1.2rem' }}
-            >
-              +1
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() => onScore(2)}
-              className={`btn-action ${balancedBtnClass}`}
-              style={{ fontSize: '1.2rem' }}
-            >
-              +2
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() => onScore(3)}
-              className={`btn-action ${balancedBtnClass}`}
-              style={{ fontSize: '1.2rem' }}
-            >
-              +3
-            </button>
+        <div className="flex-col gap-sm">
+          <button
+            disabled={disabled}
+            onClick={() => onScore(1)}
+            className={`btn-action ${balancedBtnClass}`}
+            style={{ fontSize: '1.2rem' }}
+          >
+            +1
+          </button>
+          <button
+            disabled={disabled}
+            onClick={() => onScore(2)}
+            className={`btn-action ${balancedBtnClass}`}
+            style={{ fontSize: '1.2rem' }}
+          >
+            +2
+          </button>
+          <button
+            disabled={disabled}
+            onClick={() => onScore(3)}
+            className={`btn-action ${balancedBtnClass}`}
+            style={{ fontSize: '1.2rem' }}
+          >
+            +3
+          </button>
         </div>
       ) : (
         /* --- MODO TRADICIONAL (Grid original) --- */
         <>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="btn-score-group">
             <button
               disabled={disabled}
               onClick={() => onScore(1)}
@@ -119,7 +118,7 @@ export const GameActionControls: React.FC<Props> = ({
         onClick={onFoul}
         className={`btn-action ${foulBtnClass}`}
       >
-        <AlertCircle size={16} className="mr-2" />
+        <AlertCircle size={16} />
         Falta
       </button>
     </div>

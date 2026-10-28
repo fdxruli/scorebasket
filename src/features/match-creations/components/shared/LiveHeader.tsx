@@ -13,39 +13,41 @@ export const LiveHeader: React.FC = () => {
 
   return (
     <>
-    <header className="live-header">
-      {/* Botón Volver */}
-      <button 
-        onClick={() => navigate('/matches')} 
-        className="live-btn-icon"
-        title="Volver a Partidos"
-      >
-        <ChevronLeft size={28} />
-      </button>
-
-      {/* Título o Espacio Central (Opcional, se puede dejar vacío para mantener estilo) */}
-      <div className="flex-1"></div>
-
-      {/* Botón Historial (log jugada por jugada) */}
-      {match?.id && (
-        <button
-          onClick={() => setShowHistory(true)}
+      <header className="live-header">
+        {/* Botón Volver */}
+        <button 
+          onClick={() => navigate('/matches')} 
           className="live-btn-icon"
-          title="Historial de jugadas"
+          title="Volver a Partidos"
         >
-          <History size={22} />
+          <ChevronLeft size={28} />
         </button>
-      )}
 
-      {/* Botón Deshacer */}
-      <button 
-        onClick={undoLastAction} 
-        className="live-btn-icon"
-        title="Deshacer última acción"
-      >
-        <RotateCcw size={22} />
-      </button>
-    </header>
+        {/* Espacio Central */}
+        <div style={{ flex: 1 }} />
+
+        <div className="flex-gap">
+          {/* Botón Historial (log jugada por jugada) */}
+          {match?.id && (
+            <button
+              onClick={() => setShowHistory(true)}
+              className="live-btn-icon"
+              title="Historial de jugadas"
+            >
+              <History size={22} />
+            </button>
+          )}
+
+          {/* Botón Deshacer */}
+          <button 
+            onClick={undoLastAction} 
+            className="live-btn-icon"
+            title="Deshacer última acción"
+          >
+            <RotateCcw size={22} />
+          </button>
+        </div>
+      </header>
 
       {showHistory && match?.id && (
         <LiveMatchHistoryModal

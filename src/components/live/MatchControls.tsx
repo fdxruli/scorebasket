@@ -57,7 +57,7 @@ export function MatchControls({
              onClick={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, {type:'foul'})} 
              className="btn-action btn-local-foul"
           >
-             <AlertCircle size={14} className="mr-2" />
+             <AlertCircle size={14} />
              Falta {localTeam.name.substring(0,3)}
           </button>
         </div>
@@ -88,7 +88,7 @@ export function MatchControls({
              onClick={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, {type:'foul'})} 
              className="btn-action btn-visitor-foul"
           >
-             <AlertCircle size={14} className="mr-2" />
+             <AlertCircle size={14} />
              Falta {visitorTeam.name.substring(0,3)}
           </button>
         </div>
@@ -107,7 +107,7 @@ export function MatchControls({
           {isTimerRunning ? (
              <Pause fill="currentColor" size={36} />
           ) : (
-             <Play fill="currentColor" size={36} className="ml-1" />
+             <Play fill="currentColor" size={36} style={{ marginLeft: '0.25rem' }} />
           )}
         </button>
 

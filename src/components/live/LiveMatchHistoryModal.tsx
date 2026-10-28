@@ -63,17 +63,15 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     return { combined, playerMap, teamMap, mode, totalQuarters };
   }, [matchId]);
 
-  // 2. Función para eliminar y cerrar
+  // 2. Función para eliminar acción
   const handleDelete = async (item: HistoryItem) => {
     if (!confirm("¿Eliminar esta acción?")) return;
 
     try {
       await db.transaction('rw', db.scores, db.fouls, db.matches, async () => {
-        // 1. Borrar la acción original
         if (item.type === 'score') {
           await db.scores.delete(item.id);
 
-          // 🟢 NUEVO: Actualizar el Match restando los puntos
           const match = await db.matches.get(matchId);
           if (match) {
             const isLocal = item.teamId === match.localTeamId;
@@ -86,7 +84,6 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
         } else {
           await db.fouls.delete(item.id);
 
-          // 🟢 NUEVO: Actualizar el Match restando la falta
           const match = await db.matches.get(matchId);
           if (match) {
             const isLocal = item.teamId === match.localTeamId;
@@ -127,8 +124,8 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
         {/* Header */}
         <div className="modal-header">
           <div>
-            <h3 className="modal-title flex items-center gap-2">
-              <History size={20} className="text-primary" />
+            <h3 className="modal-title flex-gap">
+              <History size={20} color="var(--primary)" />
               Historial del Partido
             </h3>
             <p className="modal-subtitle">
@@ -140,7 +137,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
           </button>
         </div>
 
-        {/* Lista Scrollable con nuevas clases */}
+        {/* Lista Scrollable */}
         <div className="history-scroll-area">
           {combined.length === 0 ? (
             <div className="history-empty">
@@ -161,16 +158,19 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                       {/* Título: Qué pasó y para qué equipo */}
                       <span className="action-title">
                         {isScore ? (
-                          <span className="text-green-400 flex items-center gap-1">
+                          <span className="flex-gap text-success" style={{ gap: '0.25rem' }}>
                             <Trophy size={14} /> +{item.points} Pts
                           </span>
                         ) : (
-                          <span className="text-red-400 flex items-center gap-1">
+                          <span className="flex-gap text-danger" style={{ gap: '0.25rem' }}>
                             <AlertCircle size={14} /> Falta
                           </span>
                         )}
-                        <span className="text-muted font-normal">•</span>
-                        <span className="text-main font-bold uppercase text-xs tracking-wide">
+                        <span className="text-muted" style={{ fontWeight: 400 }}>•</span>
+                        <span
+                          className="text-main font-bold uppercase"
+                          style={{ fontSize: '0.75rem', letterSpacing: '0.025em' }}
+                        >
                           {team?.name}
                         </span>
                       </span>
@@ -180,9 +180,9 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                         <span className="action-time">{getPeriodLabel(item.quarter)} • {formatTime(item.createdAt)}</span>
                         <span>
                           {player ? (
-                            <span className="text-gray-300">#{player.number} {player.name}</span>
+                            <span style={{ color: '#d4d4d8' }}>#{player.number} {player.name}</span>
                           ) : (
-                            <span className="italic opacity-50">Desconocido</span>
+                            <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Sin jugador asignado</span>
                           )}
                         </span>
                       </span>

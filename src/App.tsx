@@ -1,7 +1,5 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from './db/db';
 
 // Componentes
 import { Layout } from './components/Layout';
@@ -11,20 +9,11 @@ import { NewMatch } from './pages/NewMatch';
 import { LiveMatch } from './pages/LiveMatch';
 
 function App() {
-  const teamCount = useLiveQuery(() => db.teams.count());
-
-  if (teamCount === undefined) {
-    return <div className="h-screen flex items-center justify-center text-gray-500">Cargando base de datos...</div>;
-  }
-
   return (
     <BrowserRouter>
       <Routes>
         {/* Ruta Raíz */}
-        <Route 
-          path="/" 
-          element={ teamCount > 0 ? <Navigate to="/matches" /> : <Navigate to="/teams" /> } 
-        />
+        <Route path="/" element={<Navigate to="/matches" />} />
 
         {/* 1. RUTAS CON BARRA DE NAVEGACIÓN (Layout) */}
         <Route element={<Layout />}>

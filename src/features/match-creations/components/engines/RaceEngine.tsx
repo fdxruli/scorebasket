@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'; // Importar useEffect
-import { useNavigate } from 'react-router-dom';     // Importar useNavigate
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useRaceLogic } from '../../hooks/useRaceLogic';
@@ -7,12 +7,13 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
-import { Target, Trophy, RotateCcw, Flag } from 'lucide-react';
+import { Target, Trophy, RotateCcw, Flag, Users } from 'lucide-react';
 
 export const RaceEngine: React.FC = () => {
-    const navigate = useNavigate(); // Hook de navegación
+    const navigate = useNavigate();
     const { match, localTeam, visitorTeam } = useLiveMatch();
     const { addScore, addFoul } = useGameActions();
+    const [trackPlayers, setTrackPlayers] = useState(false);
 
     if (!match || !localTeam || !visitorTeam) return null;
 
@@ -25,10 +26,9 @@ export const RaceEngine: React.FC = () => {
         winnerTeamId
     } = useRaceLogic({ match });
 
-    // 🟢 NUEVO: Redirección automática al terminar el partido
     useEffect(() => {
         if (match.status === 'finished') {
-            navigate('/matches'); // O redirigir al historial si prefieres
+            navigate('/matches');
         }
     }, [match.status, navigate]);
 
@@ -40,8 +40,19 @@ export const RaceEngine: React.FC = () => {
     } | null>(null);
 
     const requestAction = (teamId: number, teamName: string, players: any[], action: GameAction) => {
-        // Evitar acciones si el modal de fin ya está visible
         if (showMatchEndModal) return;
+
+        // 1-Tap Scoring: si el seguimiento de jugadores está apagado o el equipo no tiene jugadores,
+        // registramos directo sin abrir el modal.
+        if (!trackPlayers || !players || players.length === 0) {
+            if (action.type === 'score') {
+                addScore(teamId, action.points, undefined);
+            } else {
+                addFoul(teamId, undefined);
+            }
+            return;
+        }
+
         setCurrentAction({ teamId, teamName, players, action });
     };
 
@@ -67,10 +78,18 @@ export const RaceEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            <div className="absolute top-[85px] left-1/2 -translate-x-1/2 z-20">
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '85px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 20
+                }}
+            >
                 <div className="race-info-pill">
                     <span className="race-info-label">
-                        <Target size={16} className="text-primary" />
+                        <Target size={16} color="var(--primary)" />
                         Meta
                     </span>
                     <span className="race-info-value">{targetScore}</span>
@@ -97,7 +116,7 @@ export const RaceEngine: React.FC = () => {
                             variant="local"
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
-                            disabled={showMatchEndModal} // Deshabilitar botones si el modal está abierto
+                            disabled={showMatchEndModal}
                         />
                     </div>
 
@@ -108,18 +127,40 @@ export const RaceEngine: React.FC = () => {
                             variant="visitor"
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
-                            disabled={showMatchEndModal} // Deshabilitar botones si el modal está abierto
+                            disabled={showMatchEndModal}
                         />
                     </div>
                 </div>
 
-                <div className="bottom-bar">
+                <div className="bottom-bar" style={{ gap: '0.5rem' }}>
                     <button
-                        onClick={handleEarlyFinish}
-                        className="btn btn-secondary btn-full"
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                        type="button"
+                        onClick={() => setTrackPlayers(prev => !prev)}
+                        className="btn btn-secondary"
+                        style={{
+                            flex: 1,
+                            fontSize: '0.8rem',
+                            padding: '0.65rem 0.75rem',
+                            borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
+                            color: trackPlayers ? 'var(--primary)' : 'var(--text-muted)',
+                            backgroundColor: trackPlayers ? 'rgba(249, 115, 22, 0.12)' : undefined
+                        }}
                     >
-                        <Flag size={16} />
+                        <Users size={15} />
+                        Jugadores: {trackPlayers ? 'ON' : 'OFF'}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleEarlyFinish}
+                        className="btn btn-secondary"
+                        style={{
+                            flex: 1,
+                            fontSize: '0.8rem',
+                            padding: '0.65rem 0.75rem'
+                        }}
+                    >
+                        <Flag size={15} />
                         Finalizar / Cerrar Partido
                     </button>
                 </div>
@@ -140,18 +181,17 @@ export const RaceEngine: React.FC = () => {
                 <div className="game-modal-overlay">
                     <div className="game-modal-card is-end">
                         <div className="modal-icon-wrapper">
-                            <Trophy size={40} className="text-yellow-500" />
+                            <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Tenemos un Ganador!</h3>
-                        <p className="text-lg text-white font-bold my-4">
+                        <p style={{ fontSize: '1.125rem', color: '#fff', fontWeight: 700, margin: '1rem 0' }}>
                             {winnerTeamId === localTeam.id ? localTeam.name : visitorTeam.name}
                         </p>
-                        <p className="text-sm text-muted mb-6">
+                        <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                             Ha alcanzado la meta de {targetScore} puntos.
                         </p>
 
                         <div className="modal-actions">
-                            {/* BOTÓN DAR VUELTA / REVANCHA (Solo si está activado) */}
                             {hasRematches && (
                                 <button
                                     onClick={handleRematch}
@@ -163,7 +203,6 @@ export const RaceEngine: React.FC = () => {
                                 </button>
                             )}
 
-                            {/* BOTÓN FINALIZAR */}
                             <button onClick={endMatch} className="btn-modal-primary btn-finish">
                                 Finalizar Partido
                             </button>

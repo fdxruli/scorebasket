@@ -5,7 +5,7 @@ import type { Match } from '../../../../db/models/Match';
 
 interface Props { match: Match; localName: string; visitorName: string; }
 
-// Barra de progreso lateral (inline: las clases utilitarias estilo Tailwind no existen en src/styles)
+// Barra de progreso lateral
 const progressTrack = (side: 'left' | 'right', color: string): CSSProperties => ({
   position: 'absolute',
   top: 0,
@@ -37,7 +37,7 @@ export const RaceLiveCard = ({ match, localName, visitorName }: Props) => {
           <Target size={12} />
           <span>RACE TO {target}</span>
         </div>
-        <div className="text-xs text-muted font-bold uppercase">
+        <div className="text-muted font-bold uppercase" style={{ fontSize: '0.75rem' }}>
           Juego #{match.config.race?.currentGame || 1}
           {gameHistory.length > 0 && ` • ${localGames}-${visitorGames}`}
         </div>
@@ -61,9 +61,9 @@ const TeamRow = ({ name, score, target, isWinning }: any) => (
       <div className="team-avatar-placeholder">{name.substring(0, 1)}</div>
       <span className="live-team-name">{name}</span>
     </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div className="text-xs text-muted font-mono">{score}/{target}</div>
-        <span className="live-team-score">{score}</span>
+    <div className="flex-gap" style={{ gap: '0.75rem' }}>
+      <div className="text-muted font-mono" style={{ fontSize: '0.75rem' }}>{score}/{target}</div>
+      <span className="live-team-score">{score}</span>
     </div>
   </div>
 );

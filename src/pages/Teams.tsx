@@ -47,22 +47,23 @@ export function Teams() {
 
     const handleSaveTeam = async () => {
         if (!teamName.trim()) return alert("El equipo necesita un nombre");
-        if (tempPlayers.length === 0) return alert("Agrega al menos un jugador");
 
         setIsSaving(true);
         try {
             await db.transaction('rw', db.teams, db.players, async () => {
                 const teamId = await TeamsRepository.create(teamName);
 
-                const playersToSave = tempPlayers.map(p => ({
-                    name: p.name,
-                    number: p.number ? parseInt(p.number) : undefined,
-                    teamId: Number(teamId),
-                    createdAt: new Date(),
-                    isArchived: false
-                }));
+                if (tempPlayers.length > 0) {
+                    const playersToSave = tempPlayers.map(p => ({
+                        name: p.name,
+                        number: p.number ? parseInt(p.number) : undefined,
+                        teamId: Number(teamId),
+                        createdAt: new Date(),
+                        isArchived: false
+                    }));
 
-                await db.players.bulkAdd(playersToSave);
+                    await db.players.bulkAdd(playersToSave);
+                }
             });
             setTeamName('');
             setTempPlayers([]);
@@ -146,7 +147,7 @@ export function Teams() {
                 </div>
 
                 <div className="form-group">
-                    <label className="label">Agregar Jugadores</label>
+                    <label className="label">Agregar Jugadores (Opcional)</label>
                     
                     {/* Fila de inputs alineados usando CSS grid/flex */}
                     <div className="add-player-row">
@@ -160,7 +161,8 @@ export function Teams() {
 
                         <input
                             type="text"
-                            className="input flex-1"
+                            className="input"
+                            style={{ flex: 1 }}
                             placeholder="Nombre del jugador"
                             value={playerName}
                             onChange={e => setPlayerName(e.target.value)}
@@ -182,7 +184,11 @@ export function Teams() {
                     <div className="temp-players-list">
                         {tempPlayers.map((p, idx) => (
                             <span key={idx} className="pill">
-                                {p.number && <span className="mr-1 font-bold text-white/50">#{p.number}</span>}
+                                {p.number && (
+                                    <span style={{ marginRight: '0.25rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.5)' }}>
+                                        #{p.number}
+                                    </span>
+                                )}
                                 {p.name}
                                 <button
                                     onClick={() => setTempPlayers(tempPlayers.filter((_, i) => i !== idx))}
@@ -198,7 +204,7 @@ export function Teams() {
                 <button
                     onClick={handleSaveTeam}
                     disabled={isSaving}
-                    className="btn btn-primary w-full"
+                    className="btn btn-primary btn-full"
                 >
                     <Save size={20} />
                     {isSaving ? 'Guardando...' : 'Guardar Equipo'}

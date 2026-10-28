@@ -17,8 +17,8 @@ export function ErrorToast({ message, onClose, duration = 5000 }: ErrorToastProp
   return (
     <div className="error-toast">
       <div className="error-toast-content">
-        <AlertCircle size={20} className="flex-shrink-0" />
-        <span className="flex-1">{message}</span>
+        <AlertCircle size={20} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1 }}>{message}</span>
         <button
           onClick={onClose}
           className="error-toast-close"

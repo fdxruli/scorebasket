@@ -7,7 +7,8 @@ import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
-import { Trophy, Clock, RotateCcw, X, Flag, FastForward } from 'lucide-react';
+import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
+import { Trophy, Clock, RotateCcw, X, Flag, FastForward, Share2 } from 'lucide-react';
 
 // UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard';
@@ -31,6 +32,7 @@ export const TraditionalEngine: React.FC = () => {
   const [customMinutes, setCustomMinutes] = useState('10');
   const [customSeconds, setCustomSeconds] = useState('00');
   const [confirmDialog, setConfirmDialog] = useState<'end-match' | 'next-quarter' | null>(null);
+  const [isSharingCard, setIsSharingCard] = useState(false);
 
   // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
   // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
@@ -157,6 +159,22 @@ export const TraditionalEngine: React.FC = () => {
     await undoLastAction();
     setShowQuarterEndModal(false);
     setShowMatchEndModal(false);
+  };
+
+  const handleShareLiveResult = async () => {
+    if (!match.id || isSharingCard) return;
+    setIsSharingCard(true);
+    try {
+      const payload = await buildShareMatchCardInputFromDb(match.id);
+      if (payload) {
+        await shareOrDownloadMatchCard(payload);
+      }
+    } catch (err) {
+      console.error('Error al compartir resultado en vivo:', err);
+      window.alert('No se pudo generar la imagen del partido.');
+    } finally {
+      setIsSharingCard(false);
+    }
   };
 
   const openTimerEditor = () => {
@@ -434,6 +452,16 @@ export const TraditionalEngine: React.FC = () => {
                 <button type="button" onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
                   Iniciar OT (+5 min)
                 </button>
+                <button
+                  type="button"
+                  onClick={handleShareLiveResult}
+                  disabled={isSharingCard}
+                  className="btn-modal-secondary"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                >
+                  <Share2 size={17} />
+                  {isSharingCard ? 'Generando imagen...' : 'Compartir Resultado (Imagen)'}
+                </button>
                 <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                   Deshacer última acción / Corregir
                 </button>
@@ -445,6 +473,22 @@ export const TraditionalEngine: React.FC = () => {
               <div className="modal-actions">
                 <button type="button" onClick={endMatch} className="btn-modal-primary btn-finish">
                   Guardar y Cerrar Partido
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShareLiveResult}
+                  disabled={isSharingCard}
+                  className="btn-modal-primary"
+                  style={{
+                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <Share2 size={18} />
+                  {isSharingCard ? 'Generando imagen...' : 'Compartir Resultado (Imagen)'}
                 </button>
                 <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                   Deshacer última acción / Corregir

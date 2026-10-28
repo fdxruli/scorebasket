@@ -8,7 +8,8 @@ import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
-import { Target, Trophy, RotateCcw, Flag, Users } from 'lucide-react';
+import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
+import { Target, Trophy, RotateCcw, Flag, Users, Share2 } from 'lucide-react';
 import type { Player } from '../../../../db/models';
 
 export const RaceEngine: React.FC = () => {
@@ -22,6 +23,7 @@ export const RaceEngine: React.FC = () => {
     );
     const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
     const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
+    const [isSharingCard, setIsSharingCard] = useState(false);
 
     // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
     // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
@@ -92,6 +94,22 @@ export const RaceEngine: React.FC = () => {
             addFoul(currentAction.teamId, playerId ?? undefined);
         }
         setCurrentAction(null);
+    };
+
+    const handleShareLiveResult = async () => {
+        if (!match.id || isSharingCard) return;
+        setIsSharingCard(true);
+        try {
+            const payload = await buildShareMatchCardInputFromDb(match.id);
+            if (payload) {
+                await shareOrDownloadMatchCard(payload);
+            }
+        } catch (err) {
+            console.error('Error al compartir resultado en vivo:', err);
+            window.alert('No se pudo generar la imagen del partido.');
+        } finally {
+            setIsSharingCard(false);
+        }
     };
 
     const gameHistory = match.gameHistory || [];
@@ -276,6 +294,23 @@ export const RaceEngine: React.FC = () => {
 
                             <button type="button" onClick={endMatch} className="btn-modal-primary btn-finish">
                                 Finalizar Partido
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleShareLiveResult}
+                                disabled={isSharingCard}
+                                className="btn-modal-primary"
+                                style={{
+                                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.5rem'
+                                }}
+                            >
+                                <Share2 size={18} />
+                                {isSharingCard ? 'Generando imagen...' : 'Compartir Resultado (Imagen)'}
                             </button>
 
                             <button type="button" onClick={undoLastAction} className="btn-modal-secondary">

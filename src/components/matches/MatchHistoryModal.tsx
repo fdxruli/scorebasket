@@ -1,9 +1,14 @@
 // src/components/matches/MatchHistoryModal.tsx
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { X, Calendar, BarChart2, Users, Target, Layers, Trash2 } from 'lucide-react';
+import { X, Calendar, BarChart2, Users, Target, Layers, Trash2, Share2, Download, CheckCircle2 } from 'lucide-react';
 import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
+import {
+    shareOrDownloadMatchCard,
+    downloadMatchCardPng,
+    type ShareMatchCardInput
+} from '../../utils/shareCardGenerator';
 
 interface MatchHistoryModalProps {
     matchId: number;
@@ -19,6 +24,8 @@ interface PlayerStat {
 }
 
 export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) {
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
     // --- 1. CARGA DE DATOS ---
     const data = useLiveQuery(async () => {
@@ -223,6 +230,83 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         return 'Desglose por Periodos';
     };
 
+    const scoreUnitLabel =
+        stats.mode === 'best-of-series' ? 'SETS' : stats.isRaceWithGames ? 'JUEGOS' : 'FINAL';
+
+    const buildCardPayload = (): ShareMatchCardInput => {
+        const mappedPeriods = stats.periodStats.map(qs => ({
+            label: getPeriodLabel(qs.period),
+            local: qs.local,
+            visitor: qs.visitor
+        }));
+
+        return {
+            mode: stats.mode,
+            dateStr: formatDate(match.createdAt),
+            localName: localTeam?.name || 'Local',
+            visitorName: visitorTeam?.name || 'Visita',
+            mainLocalScore: stats.mainLocalScore,
+            mainVisitorScore: stats.mainVisitorScore,
+            scoreUnitLabel,
+            periodHeaders: mappedPeriods.map(p => p.label),
+            periodStats: mappedPeriods,
+            totalHeader: stats.totalHeader,
+            localTotalCell: stats.localTotalCell,
+            visitorTotalCell: stats.visitorTotalCell,
+            localPlayers: stats.localStats.map(p => ({
+                name: p.name,
+                number: p.number,
+                points: p.points,
+                fouls: p.fouls
+            })),
+            visitorPlayers: stats.visitorStats.map(p => ({
+                name: p.name,
+                number: p.number,
+                points: p.points,
+                fouls: p.fouls
+            }))
+        };
+    };
+
+    const triggerFeedback = (msg: string) => {
+        setShareFeedback(msg);
+        window.setTimeout(() => {
+            setShareFeedback(prev => (prev === msg ? null : prev));
+        }, 3500);
+    };
+
+    const handleShareWhatsApp = async () => {
+        if (isGenerating) return;
+        setIsGenerating(true);
+        try {
+            const result = await shareOrDownloadMatchCard(buildCardPayload());
+            triggerFeedback(
+                result === 'shared'
+                    ? '¡Imagen lista para compartir!'
+                    : '¡Imagen lista para compartir! (PNG descargado)'
+            );
+        } catch (err) {
+            console.error('Error al generar tarjeta:', err);
+            window.alert('No se pudo generar la imagen del partido.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleDownloadPng = async () => {
+        if (isGenerating) return;
+        setIsGenerating(true);
+        try {
+            await downloadMatchCardPng(buildCardPayload());
+            triggerFeedback('¡Imagen lista para compartir! (PNG descargado)');
+        } catch (err) {
+            console.error('Error al descargar PNG:', err);
+            window.alert('No se pudo descargar la imagen PNG.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content variant-report" onClick={e => e.stopPropagation()}>
@@ -256,13 +340,26 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                             title="Eliminar Partido"
                         >
                             <Trash2 size={14} />
-                            Eliminar Partido
+                            Eliminar
                         </button>
                         <button onClick={onClose} className="btn-icon">
                             <X size={20} />
                         </button>
                     </div>
                 </div>
+
+                {shareFeedback && (
+                    <div
+                        className="live-roster-toast"
+                        style={{
+                            margin: '0.65rem 1.25rem 0',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <CheckCircle2 size={16} />
+                        <span>{shareFeedback}</span>
+                    </div>
+                )}
 
                 {/* 2. MARCADOR PRINCIPAL */}
                 <div className="report-score-panel">
@@ -272,7 +369,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                     </div>
 
                     <div className="report-vs">
-                        {stats.mode === 'best-of-series' ? 'SETS' : stats.isRaceWithGames ? 'JUEGOS' : 'FINAL'}
+                        {scoreUnitLabel}
                     </div>
 
                     <div className={`report-team ${visitorWon ? 'is-winner' : ''}`}>
@@ -342,6 +439,47 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                         </div>
 
                     </div>
+                </div>
+
+                {/* 4. FOOTER DE COMPARTIR Y DESCARGAR */}
+                <div
+                    className="modal-footer"
+                    style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.65rem'
+                    }}
+                >
+                    <button
+                        type="button"
+                        onClick={handleDownloadPng}
+                        disabled={isGenerating}
+                        className="btn btn-secondary"
+                        style={{ flex: '1 1 150px' }}
+                    >
+                        <Download size={17} />
+                        <span>{isGenerating ? 'Generando...' : 'Descargar PNG'}</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleShareWhatsApp}
+                        disabled={isGenerating}
+                        className="btn btn-primary"
+                        style={{
+                            flex: '2 1 220px',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            boxShadow: '0 6px 20px -4px rgba(16, 185, 129, 0.45)',
+                            border: '1px solid rgba(52, 211, 153, 0.4)'
+                        }}
+                    >
+                        <Share2 size={18} />
+                        <span>
+                            {isGenerating ? 'Generando imagen...' : 'Compartir Acta / WhatsApp'}
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>

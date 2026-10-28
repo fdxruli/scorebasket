@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronLeft, RotateCcw, History, Users, Trophy, AlertCircle } from 'lucide-react';
+import { ChevronLeft, RotateCcw, History, Users, Trophy, AlertCircle, Volume2, VolumeX, Bell } from 'lucide-react';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { LiveMatchHistoryModal } from '../../../../components/live/LiveMatchHistoryModal';
 import { LivePlayersModal } from '../../../../components/live/LivePlayersModal';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
+import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 import { db } from '../../../../db/db';
 
 export const LiveHeader: React.FC = () => {
@@ -16,6 +17,17 @@ export const LiveHeader: React.FC = () => {
   const { match, localTeam, visitorTeam } = useLiveMatch();
   const [showHistory, setShowHistory] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
+  const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
+
+  const handleToggleMute = () => {
+    const nextMuted = toggleSoundMute();
+    setMuted(nextMuted);
+  };
+
+  const handleManualBuzzer = () => {
+    unlockAudioContext();
+    playBuzzer();
+  };
 
   const mode = match?.config?.mode || 'traditional';
   const currentQuarter = match?.currentQuarter || 1;
@@ -108,8 +120,30 @@ export const LiveHeader: React.FC = () => {
           </div>
         </div>
 
-        {/* Acciones Rápidas: Jugadores, Historial, Deshacer */}
+        {/* Acciones Rápidas: Chicharra, Sonido, Jugadores, Historial, Deshacer */}
         <div className="live-header-actions">
+          {mode === 'traditional' && (
+            <button
+              type="button"
+              onClick={handleManualBuzzer}
+              className="live-btn-icon buzzer-btn"
+              title="Sonar chicharra manual (cambios / mesa)"
+              aria-label="Sonar chicharra manual"
+            >
+              <Bell size={19} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleToggleMute}
+            className={`live-btn-icon ${muted ? 'is-muted' : 'is-sound-on'}`}
+            title={muted ? 'Sonido silenciado (toca para activar)' : 'Sonido de cancha activo (toca para silenciar)'}
+            aria-label={muted ? 'Activar sonido' : 'Silenciar sonido'}
+          >
+            {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+          </button>
+
           <button
             type="button"
             onClick={() => setShowPlayers(true)}
@@ -178,6 +212,7 @@ export const LiveHeader: React.FC = () => {
             onClick={undoLastAction}
             className="last-play-undo-btn"
             title="Deshacer esta jugada"
+            aria-label="Deshacer esta jugada"
           >
             <RotateCcw size={13} />
             <span>Deshacer</span>

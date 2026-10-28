@@ -63,10 +63,14 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     const currentQ = match.currentQuarter || 1;
     
     if (currentQ < quartersConfig) {
+      const nextQ = currentQ + 1;
+      const isNewHalf = currentQ === 2 && nextQ === 3;
+
       await db.matches.update(match.id!, {
-        currentQuarter: currentQ + 1,
+        currentQuarter: nextQ,
         timerSecondsRemaining: minutesPerQuarter * 60, // Reiniciar tiempo en BD
-        timerLastStart: undefined // Asegurar que inicie pausado
+        timerLastStart: undefined, // Asegurar que inicie pausado
+        ...(isNewHalf ? { localTimeouts: 0, visitorTimeouts: 0 } : {})
       });
       setShowQuarterEndModal(false);
     }
@@ -88,7 +92,9 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     await db.matches.update(match.id!, {
       currentQuarter: (match.currentQuarter || quartersConfig) + 1,
       timerSecondsRemaining: overtimeMinutes * 60,
-      timerLastStart: undefined // Inicia pausado
+      timerLastStart: undefined, // Inicia pausado
+      localTimeouts: 0,
+      visitorTimeouts: 0
     });
     setShowMatchEndModal(false);
     setShowQuarterEndModal(false);

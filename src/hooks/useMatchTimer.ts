@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models/Match';
+import { unlockAudioContext, playBuzzer } from '../utils/soundEffects';
 
 interface UseMatchTimerReturn {
   timeLeft: number;
@@ -68,9 +69,11 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   useEffect(() => {
     if (timeLeft <= 0 && isRunning && match?.id) {
       pauseTimer(match.id);
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if (enableAutoPause) {
+        playBuzzer();
+      }
     }
-  }, [timeLeft, isRunning, match]);
+  }, [timeLeft, isRunning, match, enableAutoPause]);
 
   // 🔧 CORRECCIÓN DEL BUG: Efecto sin dependencias
   // Solo se ejecuta al montar/desmontar, no se reconstruye
@@ -86,6 +89,9 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
 
   const toggleTimer = useCallback(async () => {
     if (!match) return;
+
+    // Desbloquear canal de audio en gesto directo del usuario
+    unlockAudioContext();
 
     const { id } = match;
 

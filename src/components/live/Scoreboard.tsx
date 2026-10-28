@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pencil, Clock, Check, X } from 'lucide-react';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
+import { db } from '../../db/db';
+import { unlockAudioContext, playWhistle } from '../../utils/soundEffects';
 
 interface ScoreboardProps {
     localName: string;
@@ -16,9 +18,12 @@ interface ScoreboardProps {
     showTimer?: boolean;
     showFouls?: boolean;
     onTimerClick?: () => void;
+    onToggleTimer?: () => Promise<void> | void;
     localTeamId?: number;
     visitorTeamId?: number;
 }
+
+const MAX_TIMEOUTS = 3;
 
 const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);
@@ -35,6 +40,7 @@ export function Scoreboard({
     showTimer = true,
     showFouls = true,
     onTimerClick,
+    onToggleTimer,
     localTeamId,
     visitorTeamId
 }: ScoreboardProps) {
@@ -85,28 +91,91 @@ export function Scoreboard({
         }
     };
 
+    const handleTogglePossession = async () => {
+        if (!match?.id) return;
+        const current = match.possession ?? null;
+        const nextPossession: 'local' | 'visitor' = current === 'local' ? 'visitor' : 'local';
+        await db.matches.update(match.id, { possession: nextPossession });
+    };
+
+    const handleTimeoutClick = async (side: 'local' | 'visitor') => {
+        if (!match?.id) return;
+        unlockAudioContext();
+
+        const currentCount = (side === 'local' ? match.localTimeouts : match.visitorTimeouts) ?? 0;
+
+        // Si ya llegó al máximo (3), un toque adicional permite reiniciarlo a 0
+        if (currentCount >= MAX_TIMEOUTS) {
+            await db.matches.update(
+                match.id,
+                side === 'local' ? { localTimeouts: 0 } : { visitorTimeouts: 0 }
+            );
+            return;
+        }
+
+        // 1. Si el reloj está corriendo, pausarlo automáticamente
+        if (isTimerRunning) {
+            if (onToggleTimer) {
+                await onToggleTimer();
+            } else if (match.timerLastStart) {
+                const elapsed = (Date.now() - match.timerLastStart.getTime()) / 1000;
+                await db.matches.update(match.id, {
+                    timerLastStart: undefined,
+                    timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
+                });
+            }
+        }
+
+        // 2. Sonar silbato de árbitro
+        playWhistle();
+
+        // 3. Incrementar contador de tiempos fuera del equipo
+        const nextCount = currentCount + 1;
+        await db.matches.update(
+            match.id,
+            side === 'local' ? { localTimeouts: nextCount } : { visitorTimeouts: nextCount }
+        );
+    };
+
     const canEditTimer = Boolean(onTimerClick) && !isTimerRunning;
     const isTraditional = (match?.config?.mode || 'traditional') === 'traditional';
+    const possession = match?.possession ?? null;
+    const localTimeouts = match?.localTimeouts ?? 0;
+    const visitorTimeouts = match?.visitorTimeouts ?? 0;
 
     return (
         <section className={`scoreboard-container ${!showTimer ? 'no-timer' : ''}`}>
-            {/* Reloj Central (Píldora Digital) */}
+            {/* Reloj Central + Flecha de Posesión Alterna */}
             {showTimer && (
-                <button
-                    type="button"
-                    className={`timer-pill ${isTimerRunning ? 'running' : 'paused'} ${canEditTimer ? 'editable' : ''}`}
-                    onClick={canEditTimer ? onTimerClick : undefined}
-                    disabled={!canEditTimer}
-                    title={canEditTimer ? 'Toca para ajustar el reloj' : 'Pausa el reloj para editarlo'}
-                >
-                    <span className="timer-digits">{formatTime(timeLeft)}</span>
-                    {canEditTimer && (
-                        <span className="timer-edit-hint">
-                            <Clock size={11} />
-                            EDITAR
-                        </span>
-                    )}
-                </button>
+                <div className="timer-center-hub">
+                    <button
+                        type="button"
+                        className={`timer-pill ${isTimerRunning ? 'running' : 'paused'} ${canEditTimer ? 'editable' : ''}`}
+                        onClick={canEditTimer ? onTimerClick : undefined}
+                        disabled={!canEditTimer}
+                        title={canEditTimer ? 'Toca para ajustar el reloj' : 'Pausa el reloj para editarlo'}
+                    >
+                        <span className="timer-digits">{formatTime(timeLeft)}</span>
+                        {canEditTimer && (
+                            <span className="timer-edit-hint">
+                                <Clock size={11} />
+                                EDITAR
+                            </span>
+                        )}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleTogglePossession}
+                        className={`possession-pill ${possession ? `is-${possession}` : 'is-neutral'}`}
+                        title="Alternar flecha de posesión (Local / Visitante)"
+                        aria-label="Alternar posesión"
+                    >
+                        {possession === 'local' && <span>◀ POS</span>}
+                        {possession === 'visitor' && <span>POS ▶</span>}
+                        {!possession && <span>POS •</span>}
+                    </button>
+                </div>
             )}
 
             {/* Card Local */}
@@ -163,19 +232,38 @@ export function Scoreboard({
 
                 <div className="score-big">{localScore}</div>
 
-                {showFouls && (
-                    <div className="fouls-bar" title={`${localFouls} faltas de equipo`}>
-                        <div className="fouls-dots">
-                            {[...Array(5)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`dot ${i < localFouls ? 'active' : ''}`}
-                                />
-                            ))}
-                        </div>
-                        <span className="fouls-count-label">{localFouls} FAL</span>
-                        {isTraditional && localFouls >= 5 && (
-                            <span className="bonus-pill">BONUS</span>
+                {(showFouls || showTimer) && (
+                    <div className="team-meta-row">
+                        {showFouls && (
+                            <div className="fouls-bar" title={`${localFouls} faltas de equipo`}>
+                                <div className="fouls-dots">
+                                    {[...Array(5)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`dot ${i < localFouls ? 'active' : ''}`}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="fouls-count-label">{localFouls} FAL</span>
+                                {isTraditional && localFouls >= 5 && (
+                                    <span className="bonus-pill">BONUS</span>
+                                )}
+                            </div>
+                        )}
+
+                        {showTimer && (
+                            <button
+                                type="button"
+                                onClick={() => handleTimeoutClick('local')}
+                                className={`timeout-chip local ${localTimeouts >= MAX_TIMEOUTS ? 'maxed' : ''}`}
+                                title={
+                                    localTimeouts >= MAX_TIMEOUTS
+                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
+                                }
+                            >
+                                <span>T. FUERA ({localTimeouts}/{MAX_TIMEOUTS})</span>
+                            </button>
                         )}
                     </div>
                 )}
@@ -235,19 +323,38 @@ export function Scoreboard({
 
                 <div className="score-big">{visitorScore}</div>
 
-                {showFouls && (
-                    <div className="fouls-bar" title={`${visitorFouls} faltas de equipo`}>
-                        <div className="fouls-dots">
-                            {[...Array(5)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`dot ${i < visitorFouls ? 'active' : ''}`}
-                                />
-                            ))}
-                        </div>
-                        <span className="fouls-count-label">{visitorFouls} FAL</span>
-                        {isTraditional && visitorFouls >= 5 && (
-                            <span className="bonus-pill">BONUS</span>
+                {(showFouls || showTimer) && (
+                    <div className="team-meta-row">
+                        {showFouls && (
+                            <div className="fouls-bar" title={`${visitorFouls} faltas de equipo`}>
+                                <div className="fouls-dots">
+                                    {[...Array(5)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`dot ${i < visitorFouls ? 'active' : ''}`}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="fouls-count-label">{visitorFouls} FAL</span>
+                                {isTraditional && visitorFouls >= 5 && (
+                                    <span className="bonus-pill">BONUS</span>
+                                )}
+                            </div>
+                        )}
+
+                        {showTimer && (
+                            <button
+                                type="button"
+                                onClick={() => handleTimeoutClick('visitor')}
+                                className={`timeout-chip visitor ${visitorTimeouts >= MAX_TIMEOUTS ? 'maxed' : ''}`}
+                                title={
+                                    visitorTimeouts >= MAX_TIMEOUTS
+                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
+                                }
+                            >
+                                <span>T. FUERA ({visitorTimeouts}/{MAX_TIMEOUTS})</span>
+                            </button>
                         )}
                     </div>
                 )}

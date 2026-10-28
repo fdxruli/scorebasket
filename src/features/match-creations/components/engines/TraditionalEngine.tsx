@@ -210,6 +210,7 @@ export const TraditionalEngine: React.FC = () => {
         timeLeft={timeLeft}
         isTimerRunning={isTimerRunning}
         onTimerClick={openTimerEditor}
+        onToggleTimer={toggleTimer}
       />
 
       <MatchControls

@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { db } from '../../../db/db';
 import { useLiveMatch } from '../components/context/LiveMatchContext';
+import { unlockAudioContext, playScorePop, playWhistle } from '../../../utils/soundEffects';
 import type { Score, Foul } from '../../../db/models';
 import type { Match } from '../../../db/models/Match';
 
@@ -136,6 +137,9 @@ export const useGameActions = () => {
 
         await db.matches.update(currentMatch.id!, updateData);
       });
+
+      unlockAudioContext();
+      playScorePop(normalizedPoints);
     } catch (error) {
       notifyActionError(error, 'No se pudieron registrar los puntos.');
     }
@@ -177,6 +181,9 @@ export const useGameActions = () => {
 
         await db.matches.update(currentMatch.id!, updateData);
       });
+
+      unlockAudioContext();
+      playWhistle();
     } catch (error) {
       notifyActionError(error, 'No se pudo registrar la falta.');
     }

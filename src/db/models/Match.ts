@@ -30,6 +30,9 @@ export interface Match {
   currentQuarter?: number;
   timerSecondsRemaining?: number;
   timerLastStart?: Date;
+  possession?: 'local' | 'visitor' | null;
+  localTimeouts?: number;
+  visitorTimeouts?: number;
   
   // Solo para modos RACE y BEST-OF (sin tiempo)
   gameHistory?: GameResult[];   // Historial de partidos completados

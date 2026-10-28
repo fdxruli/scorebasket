@@ -1,5 +1,5 @@
-// src/features/match-creation/components/RaceConfig.tsx
-import { Target, RotateCcw, Info } from 'lucide-react';
+// src/features/match-creations/components/RaceConfig.tsx
+import { Target, RotateCcw, Info, ShieldCheck } from 'lucide-react';
 import type { RaceConfig } from '../../../db/models/MatchConfig';
 import { MODE_OPTIONS } from '../../../config/gamePresets';
 import './ModeConfig.css';
@@ -11,6 +11,8 @@ interface RaceConfigProps {
 
 export function RaceConfigComponent({ config, onChange }: RaceConfigProps) {
   const { targetScores } = MODE_OPTIONS.race;
+  const scoringSystem = config.scoringSystem || 'standard';
+  const winByTwo = config.winByTwo ?? false;
 
   return (
     <div className="mode-config race">
@@ -45,6 +47,49 @@ export function RaceConfigComponent({ config, onChange }: RaceConfigProps) {
           className="input input-number"
           placeholder="Otro puntaje..."
         />
+      </div>
+
+      {/* Selector de Sistema de Puntos */}
+      <div className="config-group" style={{ marginTop: '1rem' }}>
+        <label className="config-label">Sistema de Puntos</label>
+        <p className="config-hint">Valores de anotación disponibles durante la reta</p>
+        <div className="preset-buttons" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, scoringSystem: 'standard' })}
+            className={`preset-btn ${scoringSystem === 'standard' ? 'active' : ''}`}
+            style={{ fontSize: '0.88rem', fontFamily: 'var(--font-sans)' }}
+          >
+            Estándar (+1, +2, +3)
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, scoringSystem: 'street' })}
+            className={`preset-btn ${scoringSystem === 'street' ? 'active' : ''}`}
+            style={{ fontSize: '0.88rem', fontFamily: 'var(--font-sans)' }}
+          >
+            Callejero (+1, +2)
+          </button>
+        </div>
+      </div>
+
+      {/* Toggle Win by 2 */}
+      <div className="config-group" style={{ marginTop: '0.5rem' }}>
+        <label className="toggle-label">
+          <input
+            type="checkbox"
+            checked={winByTwo}
+            onChange={e => onChange({ ...config, winByTwo: e.target.checked })}
+            className="toggle-input"
+          />
+          <div className="toggle-switch">
+            <div className="toggle-slider" />
+          </div>
+          <div className="toggle-text">
+            <ShieldCheck size={18} />
+            <span>Ganar por diferencia de 2 puntos (Win by 2)</span>
+          </div>
+        </label>
       </div>
 
       {/* Toggle de Revancha */}

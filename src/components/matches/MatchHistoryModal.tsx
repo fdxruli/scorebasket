@@ -2,8 +2,8 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { X, Calendar, BarChart2, Users, Target, Layers } from 'lucide-react';
-import { formatPeriodLabel } from '../../utils/matchHelpers';
+import { X, Calendar, BarChart2, Users, Target, Layers, Trash2 } from 'lucide-react';
+import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
 
 interface MatchHistoryModalProps {
     matchId: number;
@@ -42,6 +42,17 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             players: players || []
         };
     }, [matchId]);
+
+    const handleDeleteMatch = async () => {
+        if (!window.confirm('¿Eliminar permanentemente este partido y todas sus estadísticas?')) return;
+        try {
+            await deleteMatchCascade(matchId);
+            onClose();
+        } catch (err) {
+            console.error('Error al eliminar partido:', err);
+            window.alert('No se pudo eliminar el partido.');
+        }
+    };
 
     // --- 2. CÁLCULOS Y LÓGICA DE MODO ---
     const stats = useMemo(() => {
@@ -90,9 +101,15 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             });
         }
 
-        // C2. Reta con revanchas
+        // C2. Reta con revanchas o juegos guardados en gameHistory
         const gameHistory = match.gameHistory || [];
-        const isRaceWithGames = mode === 'race' && gameHistory.length > 1;
+        const hasRematchesPlayed = (match.config?.race?.currentGame || 1) > 1 || gameHistory.length > 1;
+        const isCurrentScoreZero = (match.localScore || 0) === 0 && (match.visitorScore || 0) === 0;
+        const isRaceWithGames =
+            mode === 'race' &&
+            gameHistory.length >= 1 &&
+            (hasRematchesPlayed || isCurrentScoreZero);
+
         let localTotalCell: number = localPointsTotal;
         let visitorTotalCell: number = visitorPointsTotal;
         let totalHeader = 'Total';
@@ -109,6 +126,26 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             localTotalCell = mainLocalScore;
             visitorTotalCell = mainVisitorScore;
             totalHeader = 'Ganados';
+        } else if (mode === 'race' && gameHistory.length === 1 && localPointsTotal === 0 && visitorPointsTotal === 0) {
+            // Fallback por si el partido se guardó en gameHistory sin scores individuales
+            mainLocalScore = gameHistory[0].localScore;
+            mainVisitorScore = gameHistory[0].visitorScore;
+            localTotalCell = mainLocalScore;
+            visitorTotalCell = mainVisitorScore;
+        }
+
+        if (mode === 'best-of-series') {
+            if (gameHistory.length > 0 && periodStats.length === 0) {
+                const sortedSets = [...gameHistory].sort((a, b) => a.gameNumber - b.gameNumber);
+                periodStats = sortedSets.map(g => ({
+                    period: g.gameNumber,
+                    local: g.localScore,
+                    visitor: g.visitorScore
+                }));
+            }
+            totalHeader = 'Sets';
+            localTotalCell = mainLocalScore;
+            visitorTotalCell = mainVisitorScore;
         }
 
         // D. Estadísticas por Jugador
@@ -204,9 +241,27 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                             Acta Oficial del Partido
                         </h2>
                     </div>
-                    <button onClick={onClose} className="btn-icon">
-                        <X size={20} />
-                    </button>
+                    <div className="flex-gap" style={{ gap: '0.5rem' }}>
+                        <button
+                            type="button"
+                            onClick={handleDeleteMatch}
+                            className="btn btn-sm btn-secondary"
+                            style={{
+                                color: 'var(--danger)',
+                                borderColor: 'rgba(244, 63, 94, 0.35)',
+                                backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                                padding: '0.4rem 0.65rem',
+                                fontSize: '0.75rem'
+                            }}
+                            title="Eliminar Partido"
+                        >
+                            <Trash2 size={14} />
+                            Eliminar Partido
+                        </button>
+                        <button onClick={onClose} className="btn-icon">
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* 2. MARCADOR PRINCIPAL */}

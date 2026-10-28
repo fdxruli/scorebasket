@@ -87,7 +87,9 @@ export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
         race: {
           targetScore,
           hasRematches: true,
-          currentGame: 1
+          currentGame: 1,
+          winByTwo: false,
+          scoringSystem: 'standard'
         }
       },
       localScore: 0,
@@ -98,5 +100,16 @@ export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
     });
 
     return Number(matchId);
+  });
+}
+
+/**
+ * Elimina en cascada un partido y todas sus acciones (scores y fouls) asociadas.
+ */
+export async function deleteMatchCascade(matchId: number): Promise<void> {
+  await db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
+    await db.scores.where('matchId').equals(matchId).delete();
+    await db.fouls.where('matchId').equals(matchId).delete();
+    await db.matches.delete(matchId);
   });
 }

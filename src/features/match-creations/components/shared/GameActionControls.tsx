@@ -7,6 +7,7 @@ interface Props {
   disabled?: boolean;
   simpleScoring?: boolean;
   balancedLayout?: boolean;
+  scoringOptions?: (1 | 2 | 3)[];
   variant: 'local' | 'visitor';
 }
 
@@ -16,6 +17,7 @@ export const GameActionControls: React.FC<Props> = ({
   disabled = false, 
   simpleScoring = false,
   balancedLayout = false,
+  scoringOptions = [1, 2, 3],
   variant
 }) => {
   
@@ -31,9 +33,15 @@ export const GameActionControls: React.FC<Props> = ({
     <div className="flex-col w-full" style={{ gap: '0.75rem' }}>
       
       {simpleScoring ? (
-        /* --- MODO SIMPLE (RACE): +1 / +2 / +3 en grilla de 3 columnas --- */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-          {[1, 2, 3].map((pts) => (
+        /* --- MODO SIMPLE (RACE / SERIES): +1 / +2 / (+3) en grilla dinámica --- */
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${scoringOptions.length}, 1fr)`,
+            gap: '0.5rem'
+          }}
+        >
+          {scoringOptions.map((pts) => (
             <button
               key={pts}
               disabled={disabled}
@@ -45,7 +53,7 @@ export const GameActionControls: React.FC<Props> = ({
                 justifyContent: 'center',
                 padding: '0.5rem 0',
                 minWidth: 0,
-                fontSize: '1.5rem',
+                fontSize: scoringOptions.length === 2 ? '1.85rem' : '1.5rem',
                 fontWeight: 800
               }}
             >
@@ -55,32 +63,19 @@ export const GameActionControls: React.FC<Props> = ({
         </div>
 
       ) : balancedLayout ? (
-        /* --- MODO SERIES (MEJORADO: Jerarquía Vertical 1, 2, 3) --- */
+        /* --- MODO SERIES (MEJORADO: Jerarquía Vertical) --- */
         <div className="flex-col gap-sm">
-          <button
-            disabled={disabled}
-            onClick={() => onScore(1)}
-            className={`btn-action ${balancedBtnClass}`}
-            style={{ fontSize: '1.2rem' }}
-          >
-            +1
-          </button>
-          <button
-            disabled={disabled}
-            onClick={() => onScore(2)}
-            className={`btn-action ${balancedBtnClass}`}
-            style={{ fontSize: '1.2rem' }}
-          >
-            +2
-          </button>
-          <button
-            disabled={disabled}
-            onClick={() => onScore(3)}
-            className={`btn-action ${balancedBtnClass}`}
-            style={{ fontSize: '1.2rem' }}
-          >
-            +3
-          </button>
+          {scoringOptions.map((pts) => (
+            <button
+              key={pts}
+              disabled={disabled}
+              onClick={() => onScore(pts)}
+              className={`btn-action ${balancedBtnClass}`}
+              style={{ fontSize: '1.2rem' }}
+            >
+              +{pts}
+            </button>
+          ))}
         </div>
       ) : (
         /* --- MODO TRADICIONAL (Grid original) --- */

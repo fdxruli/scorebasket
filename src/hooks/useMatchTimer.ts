@@ -8,6 +8,7 @@ interface UseMatchTimerReturn {
   isRunning: boolean;
   toggleTimer: () => Promise<void>;
   resetTimer: () => Promise<void>;
+  adjustTime: (deltaSeconds: number) => Promise<void>;
   keepTimerRunningOnUnmount: () => void;
 }
 
@@ -130,6 +131,23 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     });
   }, [match]);
 
+  const adjustTime = useCallback(async (deltaSeconds: number) => {
+    if (!match?.id || match.timerLastStart) return;
+
+    await db.transaction('rw', db.matches, async () => {
+      const currentMatch = await db.matches.get(match.id!);
+      if (!currentMatch || currentMatch.timerLastStart) return;
+
+      const currentSeconds = Math.ceil(currentMatch.timerSecondsRemaining ?? 0);
+      const nextSeconds = Math.max(0, currentSeconds + deltaSeconds);
+
+      await db.matches.update(match.id!, {
+        timerSecondsRemaining: nextSeconds,
+        timerLastStart: undefined
+      });
+    });
+  }, [match?.id, match?.timerLastStart]);
+
   const keepTimerRunningOnUnmount = useCallback(() => {
     shouldPauseOnUnmount.current = false;
   }, []);
@@ -139,6 +157,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     isRunning,
     toggleTimer,
     resetTimer,
+    adjustTime,
     keepTimerRunningOnUnmount
   };
 }

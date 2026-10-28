@@ -1,5 +1,5 @@
 // src/components/live/MatchControls.tsx
-import { Play, Pause, FastForward, X, AlertCircle } from 'lucide-react';
+import { Play, Pause, FastForward, X, AlertCircle, Users } from 'lucide-react';
 import type { Player, Team } from '../../db/models';
 import type { GameAction } from './PlayerSelectModal';
 
@@ -9,6 +9,8 @@ interface MatchControlsProps {
   localPlayers: Player[];
   visitorPlayers: Player[];
   isTimerRunning: boolean;
+  trackPlayers?: boolean;
+  onToggleTrackPlayers?: () => void;
   onActionRequest: (teamId: number, teamName: string, players: Player[], action: GameAction) => void;
   onToggleTimer: () => void;
   onNextQuarter: () => void;
@@ -19,6 +21,8 @@ export function MatchControls({
   localTeam, visitorTeam,
   localPlayers, visitorPlayers,
   isTimerRunning,
+  trackPlayers = true,
+  onToggleTrackPlayers,
   onActionRequest,
   onToggleTimer,
   onNextQuarter,
@@ -94,6 +98,28 @@ export function MatchControls({
         </div>
 
       </div>
+
+      {/* CHIP TOGGLE JUGADORES ON / OFF */}
+      {onToggleTrackPlayers && (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={onToggleTrackPlayers}
+            className="btn btn-secondary"
+            style={{
+              fontSize: '0.75rem',
+              padding: '0.4rem 0.9rem',
+              borderRadius: '999px',
+              borderColor: trackPlayers ? 'var(--primary)' : 'var(--border-color)',
+              color: trackPlayers ? 'var(--primary-light)' : 'var(--text-muted)',
+              backgroundColor: trackPlayers ? 'rgba(255, 95, 31, 0.14)' : 'rgba(255, 255, 255, 0.03)'
+            }}
+          >
+            <Users size={14} />
+            Jugadores: {trackPlayers ? 'ON' : 'OFF'}
+          </button>
+        </div>
+      )}
 
       {/* BARRA DE UTILIDADES E INICIO */}
       <div className="bottom-bar">

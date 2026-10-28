@@ -1,12 +1,13 @@
 // src/features/match-creations/components/engines/TraditionalEngine.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
-import { Trophy, Clock } from 'lucide-react';
+import { Trophy, Clock, RotateCcw, X } from 'lucide-react';
 
 // UI Components
 import { Scoreboard } from '../../../../components/live/Scoreboard'; 
@@ -17,8 +18,28 @@ import { PlayerSelectModal } from '../../../../components/live/PlayerSelectModal
 import { LiveHeader } from '../shared/LiveHeader';
 
 export const TraditionalEngine: React.FC = () => {
+  const navigate = useNavigate();
   const { match, localTeam, visitorTeam } = useLiveMatch();
-  const { addScore, addFoul } = useGameActions();
+  const { addScore, addFoul, undoLastAction } = useGameActions();
+
+  const hasAnyPlayers = Boolean(
+    (localTeam?.players && localTeam.players.length > 0) ||
+    (visitorTeam?.players && visitorTeam.players.length > 0)
+  );
+  const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [customMinutes, setCustomMinutes] = useState('10');
+  const [customSeconds, setCustomSeconds] = useState('00');
+
+  useEffect(() => {
+    setTrackPlayers(hasAnyPlayers);
+  }, [hasAnyPlayers]);
+
+  useEffect(() => {
+    if (match?.status === 'finished') {
+      navigate('/matches');
+    }
+  }, [match?.status, navigate]);
 
   if (!match || !localTeam || !visitorTeam) return null;
 
@@ -26,11 +47,15 @@ export const TraditionalEngine: React.FC = () => {
     timeLeft,
     isTimerRunning,
     toggleTimer,
+    resetCurrentQuarter,
+    adjustTime,
     currentQuarter,
     totalQuarters,
     nextQuarter,
     showQuarterEndModal,
+    setShowQuarterEndModal,
     showMatchEndModal,
+    setShowMatchEndModal,
     endMatch,
     startOvertime,
     isTied
@@ -55,7 +80,7 @@ export const TraditionalEngine: React.FC = () => {
     };
   }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
 
-  const [playerModal, setPlayerModal] = React.useState<{
+  const [playerModal, setPlayerModal] = useState<{
     isOpen: boolean;
     teamId: number;
     actionType: 'score' | 'foul';
@@ -74,7 +99,7 @@ export const TraditionalEngine: React.FC = () => {
 
   const handleScoreClick = (teamId: number, points: 1 | 2 | 3) => {
     const teamPlayers = getTeamPlayers(teamId);
-    if (!teamPlayers || teamPlayers.length === 0) {
+    if (!trackPlayers || !teamPlayers || teamPlayers.length === 0) {
       addScore(teamId, points, undefined);
       return;
     }
@@ -83,7 +108,7 @@ export const TraditionalEngine: React.FC = () => {
 
   const handleFoulClick = (teamId: number) => {
     const teamPlayers = getTeamPlayers(teamId);
-    if (!teamPlayers || teamPlayers.length === 0) {
+    if (!trackPlayers || !teamPlayers || teamPlayers.length === 0) {
       addFoul(teamId, undefined);
       return;
     }
@@ -100,11 +125,16 @@ export const TraditionalEngine: React.FC = () => {
     setPlayerModal({ ...playerModal, isOpen: false });
   };
 
+  const handleManualEndMatch = async () => {
+    if (!window.confirm('¿Deseas finalizar y cerrar el partido actual?')) return;
+    await endMatch();
+  };
+
   const handleNextQuarter = async () => {
     const isLastQuarter = currentQuarter >= totalQuarters;
 
     if (timeLeft > 0) {
-      const actionLabel = isLastQuarter ? 'finalizar el partido' : 'avanzar al siguiente periodo';
+      const actionLabel = isLastQuarter ? 'cerrar el periodo actual' : 'avanzar al siguiente periodo';
       const shouldContinue = window.confirm(
         `Aún quedan ${formatTime(timeLeft)} en el ${periodLabel}. ¿Deseas ${actionLabel} de todos modos?`
       );
@@ -113,11 +143,38 @@ export const TraditionalEngine: React.FC = () => {
     }
 
     if (isLastQuarter) {
+      if (isTied) {
+        setShowMatchEndModal(true);
+        return;
+      }
       await endMatch();
       return;
     }
 
     await nextQuarter();
+  };
+
+  const handleUndoFromModal = async () => {
+    await undoLastAction();
+    setShowQuarterEndModal(false);
+    setShowMatchEndModal(false);
+  };
+
+  const openTimerEditor = () => {
+    if (isTimerRunning) return;
+    const totalSecs = Math.ceil(timeLeft);
+    setCustomMinutes(String(Math.floor(totalSecs / 60)));
+    setCustomSeconds(String(totalSecs % 60).padStart(2, '0'));
+    setShowTimerModal(true);
+  };
+
+  const handleApplyCustomTime = async () => {
+    const mins = Math.max(0, parseInt(customMinutes, 10) || 0);
+    const secs = Math.max(0, Math.min(59, parseInt(customSeconds, 10) || 0));
+    const targetTotal = mins * 60 + secs;
+    const currentTotal = Math.ceil(timeLeft);
+    await adjustTime(targetTotal - currentTotal);
+    setShowTimerModal(false);
   };
 
   return (
@@ -133,6 +190,7 @@ export const TraditionalEngine: React.FC = () => {
         visitorFouls={currentQuarterFouls?.visitor ?? 0}
         timeLeft={timeLeft} 
         isTimerRunning={isTimerRunning}
+        onTimerClick={openTimerEditor}
       />
 
       <MatchControls 
@@ -141,9 +199,11 @@ export const TraditionalEngine: React.FC = () => {
         localPlayers={localTeam.players}
         visitorPlayers={visitorTeam.players}
         isTimerRunning={isTimerRunning}
+        trackPlayers={trackPlayers}
+        onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
         onToggleTimer={toggleTimer}
         onNextQuarter={handleNextQuarter}
-        onEndMatch={() => endMatch()}
+        onEndMatch={handleManualEndMatch}
         onActionRequest={(teamId, _, __, action) => {
           if (action.type === 'score') handleScoreClick(teamId, action.points);
           else handleFoulClick(teamId);
@@ -162,6 +222,96 @@ export const TraditionalEngine: React.FC = () => {
         />
       )}
 
+      {/* Modal Editor Rápido de Reloj (En Pausa) */}
+      {showTimerModal && !isTimerRunning && (
+        <div className="game-modal-overlay" onClick={() => setShowTimerModal(false)}>
+          <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowTimerModal(false)}
+              className="btn-icon"
+              style={{ position: 'absolute', top: '0.85rem', right: '0.85rem' }}
+            >
+              <X size={20} />
+            </button>
+
+            <div className="modal-icon-wrapper">
+              <Clock size={32} color="var(--secondary-light)" />
+            </div>
+            <h3>Ajustar Reloj ({periodLabel})</h3>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '2.25rem',
+                fontWeight: 800,
+                color: '#fff',
+                margin: '0.25rem 0 1rem'
+              }}
+            >
+              {formatTime(timeLeft)}
+            </div>
+
+            {/* Botones rápidos de ajuste */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', width: '100%', marginBottom: '1rem' }}>
+              <button type="button" onClick={() => adjustTime(-10)} className="btn btn-secondary" style={{ padding: '0.6rem 0.25rem', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                -10s
+              </button>
+              <button type="button" onClick={() => adjustTime(-1)} className="btn btn-secondary" style={{ padding: '0.6rem 0.25rem', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                -1s
+              </button>
+              <button type="button" onClick={() => adjustTime(1)} className="btn btn-secondary" style={{ padding: '0.6rem 0.25rem', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                +1s
+              </button>
+              <button type="button" onClick={() => adjustTime(10)} className="btn btn-secondary" style={{ padding: '0.6rem 0.25rem', fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                +10s
+              </button>
+            </div>
+
+            {/* Input directo de minutos y segundos */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', marginBottom: '1rem' }}>
+              <input
+                type="number"
+                min="0"
+                max="99"
+                value={customMinutes}
+                onChange={e => setCustomMinutes(e.target.value)}
+                className="input"
+                style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800 }}
+                placeholder="Min"
+              />
+              <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>:</span>
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={customSeconds}
+                onChange={e => setCustomSeconds(e.target.value)}
+                className="input"
+                style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800 }}
+                placeholder="Seg"
+              />
+              <button type="button" onClick={handleApplyCustomTime} className="btn btn-primary" style={{ padding: '0.65rem 1rem' }}>
+                Fijar
+              </button>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                onClick={async () => {
+                  await resetCurrentQuarter();
+                  setShowTimerModal(false);
+                }}
+                className="btn btn-secondary btn-full"
+              >
+                <RotateCcw size={16} />
+                Reiniciar Periodo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showQuarterEndModal && (
         <div className="game-modal-overlay">
           <div className="game-modal-card is-exit">
@@ -175,6 +325,9 @@ export const TraditionalEngine: React.FC = () => {
             <div className="modal-actions">
               <button onClick={nextQuarter} className="btn-modal-primary btn-next-q">
                 Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
+              </button>
+              <button onClick={handleUndoFromModal} className="btn-modal-secondary">
+                Deshacer última acción / Corregir
               </button>
             </div>
           </div>
@@ -204,8 +357,14 @@ export const TraditionalEngine: React.FC = () => {
             </div>
             {isTied ? (
               <div className="modal-actions">
+                <button onClick={() => startOvertime(3)} className="btn-modal-primary btn-overtime">
+                  Iniciar OT (+3 min)
+                </button>
                 <button onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
                   Iniciar OT (+5 min)
+                </button>
+                <button onClick={handleUndoFromModal} className="btn-modal-secondary">
+                  Deshacer última acción / Corregir
                 </button>
                 <button onClick={endMatch} className="btn-modal-secondary">
                   Terminar en Empate
@@ -215,6 +374,9 @@ export const TraditionalEngine: React.FC = () => {
               <div className="modal-actions">
                 <button onClick={endMatch} className="btn-modal-primary btn-finish">
                   Guardar y Cerrar Partido
+                </button>
+                <button onClick={handleUndoFromModal} className="btn-modal-secondary">
+                  Deshacer última acción / Corregir
                 </button>
               </div>
             )}

@@ -1,4 +1,4 @@
-// src/features/match-creation/components/ConfigSummary.tsx
+// src/features/match-creations/components/ConfigSummary.tsx
 import { Clock, Target, Trophy, Calendar } from 'lucide-react';
 import type { MatchConfig } from '../../../db/models/MatchConfig';
 import { getModeName } from '../../../utils/matchHelpers';
@@ -53,6 +53,18 @@ export function ConfigSummary({ config }: ConfigSummaryProps) {
               <span className="summary-value">{config.race.targetScore} puntos</span>
             </div>
             <div className="summary-row">
+              <span className="summary-label">Sistema de Puntos:</span>
+              <span className="summary-value">
+                {config.race.scoringSystem === 'street' ? 'Callejero (+1, +2)' : 'Estándar (+1, +2, +3)'}
+              </span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Diferencia de 2:</span>
+              <span className={`summary-badge ${config.race.winByTwo ? 'success' : 'muted'}`}>
+                {config.race.winByTwo ? 'Sí (Win by 2)' : 'No'}
+              </span>
+            </div>
+            <div className="summary-row">
               <span className="summary-label">Revancha:</span>
               <span className={`summary-badge ${config.race.hasRematches ? 'success' : 'muted'}`}>
                 {config.race.hasRematches ? 'Permitida' : 'No permitida'}
@@ -71,8 +83,20 @@ export function ConfigSummary({ config }: ConfigSummaryProps) {
               <span className="summary-value">Mejor de {config.bestOf.totalGames}</span>
             </div>
             <div className="summary-row">
-              <span className="summary-label">Puntos/Partido:</span>
+              <span className="summary-label">Puntos/Set:</span>
               <span className="summary-value">{config.bestOf.targetScorePerGame}</span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Sistema de Puntos:</span>
+              <span className="summary-value">
+                {config.bestOf.scoringSystem === 'street' ? 'Callejero (+1, +2)' : 'Estándar (+1, +2, +3)'}
+              </span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Diferencia de 2:</span>
+              <span className={`summary-badge ${config.bestOf.winByTwo ? 'success' : 'muted'}`}>
+                {config.bestOf.winByTwo ? 'Sí (Win by 2)' : 'No'}
+              </span>
             </div>
             <div className="summary-total">
               Victorias necesarias: <strong>{Math.ceil(config.bestOf.totalGames / 2)}</strong>

@@ -5,6 +5,8 @@
  */
 export type GameMode = 'traditional' | 'race' | 'best-of-series';
 
+export type ScoringSystem = 'standard' | 'street';
+
 /**
  * Configuración para modo tradicional (por tiempo)
  */
@@ -21,6 +23,8 @@ export interface RaceConfig {
   targetScore: number;          // Puntos objetivo (ej: 10, 15, 21)
   hasRematches: boolean;        // ¿Permitir "dar la vuelta"?
   currentGame: number;          // Número del partido actual (1, 2, 3...)
+  winByTwo?: boolean;           // Requerir diferencia de >= 2 puntos para ganar
+  scoringSystem?: ScoringSystem; // 'standard' (+1, +2, +3) o 'street' (+1, +2)
 }
 
 /**
@@ -35,6 +39,8 @@ export interface BestOfConfig {
     local: number;              // Victorias del equipo local
     visitor: number;            // Victorias del equipo visitante
   };
+  winByTwo?: boolean;           // Requerir diferencia de >= 2 puntos para ganar el set
+  scoringSystem?: ScoringSystem; // 'standard' (+1, +2, +3) o 'street' (+1, +2)
 }
 
 /**

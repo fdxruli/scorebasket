@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../../db/db';
-import { X, Trash2, Clock, AlertCircle, Trophy, History } from 'lucide-react';
-import { formatPeriodLabel } from '../../utils/matchHelpers';
+import { X, Trash2, Clock, AlertCircle, Trophy, History, Lock } from 'lucide-react';
+import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
 
 interface LiveMatchHistoryModalProps {
   matchId: number;
@@ -19,6 +20,7 @@ type HistoryItem = {
 };
 
 export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModalProps) {
+  const navigate = useNavigate();
 
   // 1. Obtenemos datos combinados
   const historyData = useLiveQuery(async () => {
@@ -60,11 +62,24 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     const mode = matchData?.config?.mode || 'traditional';
     const totalQuarters = matchData?.config?.traditional?.totalQuarters || matchData?.totalQuarters || 4;
 
-    return { combined, playerMap, teamMap, mode, totalQuarters };
+    let currentPeriod = matchData?.currentQuarter || 1;
+    if (mode === 'race') {
+      currentPeriod = matchData?.config?.race?.currentGame || 1;
+    } else if (mode === 'best-of-series') {
+      currentPeriod = matchData?.currentQuarter || matchData?.config?.bestOf?.currentGame || 1;
+    }
+
+    return { combined, playerMap, teamMap, mode, totalQuarters, currentPeriod };
   }, [matchId]);
 
   // 2. Función para eliminar acción
   const handleDelete = async (item: HistoryItem) => {
+    if (!historyData) return;
+    const isLockedPeriod =
+      (historyData.mode === 'race' || historyData.mode === 'best-of-series') &&
+      item.quarter !== historyData.currentPeriod;
+
+    if (isLockedPeriod) return;
     if (!confirm("¿Eliminar esta acción?")) return;
 
     try {
@@ -100,12 +115,24 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     }
   };
 
+  const handleDeleteMatch = async () => {
+    if (!window.confirm('¿Eliminar permanentemente este partido y todas sus estadísticas?')) return;
+    try {
+      await deleteMatchCascade(matchId);
+      onClose();
+      navigate('/matches');
+    } catch (err) {
+      console.error("Error al eliminar el partido", err);
+      alert("No se pudo eliminar el partido");
+    }
+  };
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
   if (!historyData) return null;
-  const { combined, playerMap, teamMap, mode, totalQuarters } = historyData;
+  const { combined, playerMap, teamMap, mode, totalQuarters, currentPeriod } = historyData;
 
   // Etiqueta según el modo: Set (serie), Juego (reta) o Q/OT (tradicional)
   const getPeriodLabel = (period: number) => {
@@ -150,6 +177,9 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                 const team = teamMap.get(item.teamId);
                 const player = item.playerId ? playerMap.get(item.playerId) : null;
                 const isScore = item.type === 'score';
+                const isClosedPeriod =
+                  (mode === 'race' || mode === 'best-of-series') &&
+                  item.quarter !== currentPeriod;
 
                 return (
                   <div key={`${item.type}-${item.id}`} className={`history-item ${isScore ? 'is-score' : 'is-foul'}`}>
@@ -188,14 +218,35 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                       </span>
                     </div>
 
-                    {/* Botón Eliminar */}
-                    <button
-                      onClick={() => handleDelete(item)}
-                      className="btn-delete-action"
-                      title="Eliminar esta acción"
-                    >
-                      <Trash2 size={20} />
-                    </button>
+                    {/* Botón Eliminar o Badge de periodo cerrado */}
+                    <div className="flex-gap" style={{ gap: '0.5rem' }}>
+                      {isClosedPeriod && (
+                        <span
+                          className="flex-gap text-muted"
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '999px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid var(--border-color)',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          <Lock size={11} />
+                          Set/Juego cerrado
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDelete(item)}
+                        disabled={isClosedPeriod}
+                        className="btn-delete-action"
+                        style={isClosedPeriod ? { opacity: 0.3, cursor: 'not-allowed' } : undefined}
+                        title={isClosedPeriod ? 'Set/Juego cerrado' : 'Eliminar esta acción'}
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -203,9 +254,22 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
           )}
         </div>
 
-        {/* Footer simple */}
-        <div className="modal-footer">
-          <button onClick={onClose} className="btn btn-secondary btn-full">
+        {/* Footer */}
+        <div className="modal-footer" style={{ justifyContent: 'space-between', gap: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={handleDeleteMatch}
+            className="btn btn-secondary"
+            style={{
+              color: 'var(--danger)',
+              borderColor: 'rgba(244, 63, 94, 0.35)',
+              backgroundColor: 'rgba(244, 63, 94, 0.08)'
+            }}
+          >
+            <Trash2 size={16} />
+            Eliminar Partido
+          </button>
+          <button onClick={onClose} className="btn btn-secondary" style={{ flex: 1 }}>
             Volver al Juego
           </button>
         </div>

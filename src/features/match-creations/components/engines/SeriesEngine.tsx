@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 export const SeriesEngine: React.FC = () => {
     const { match, localTeam, visitorTeam } = useLiveMatch();
-    const { addScore, addFoul } = useGameActions();
+    const { addScore, addFoul, undoLastAction } = useGameActions();
     const navigate = useNavigate();
     const [trackPlayers, setTrackPlayers] = useState(false);
 
@@ -24,12 +24,16 @@ export const SeriesEngine: React.FC = () => {
         visitorSetsWon,
         setsToWin,
         pointsPerSet,
+        winByTwo,
+        scoringSystem,
         showSetEndModal,
         showSeriesEndModal,
         confirmSetEnd,
         endSeries,
         setWinnerId
     } = useSeriesLogic({ match });
+
+    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
 
     useEffect(() => {
         if (match.status === 'finished') {
@@ -81,52 +85,138 @@ export const SeriesEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
-            <div className="series-stage-container">
-                {/* 1. INFORMACIÓN DE LA SERIE (Sets) */}
-                <div className="series-info-pill">
-                    <div className="series-info-main">
-                        <Layers size={16} color="var(--secondary-light)" />
-                        SET {currentSet}
+            {/* 1. BANNER SUPERIOR COMPACTO DE SETS GANADOS (PLAYOFFS BAR) */}
+            <div className="race-stage-banner" style={{ paddingBottom: '0.25rem' }}>
+                <div
+                    className="series-info-pill"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.85rem',
+                        width: '100%',
+                        maxWidth: '580px',
+                        padding: '0.5rem 1.15rem'
+                    }}
+                >
+                    {/* Sets Local */}
+                    <div className="flex-gap" style={{ gap: '0.45rem' }}>
+                        <span
+                            style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                color: 'var(--secondary-light)',
+                                maxWidth: '88px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            {localTeam.name}
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '1.15rem',
+                                fontWeight: 900,
+                                color: '#fff',
+                                background: 'rgba(14, 165, 233, 0.22)',
+                                border: '1px solid rgba(14, 165, 233, 0.45)',
+                                borderRadius: '6px',
+                                padding: '0.1rem 0.5rem'
+                            }}
+                        >
+                            {localSetsWon}
+                        </span>
+                        <div className="flex-gap" style={{ gap: '3px' }}>
+                            {[...Array(setsToWin)].map((_, i) => (
+                                <span
+                                    key={`l-set-${i}`}
+                                    style={{
+                                        width: '7px',
+                                        height: '7px',
+                                        borderRadius: '50%',
+                                        backgroundColor: i < localSetsWon ? 'var(--secondary-light)' : 'rgba(255,255,255,0.15)',
+                                        boxShadow: i < localSetsWon ? '0 0 8px var(--secondary)' : 'none'
+                                    }}
+                                />
+                            ))}
+                        </div>
                     </div>
-                    <div className="series-info-sub">
-                        A {pointsPerSet} Pts • Gana {setsToWin} de {((setsToWin * 2) - 1)}
-                    </div>
-                </div>
 
-                {/* 2. SCOREBOARD DE SETS */}
-                <div className="w-full">
-                    <Scoreboard
-                        localName={localTeam.name}
-                        visitorName={visitorTeam.name}
-                        localScore={localSetsWon}
-                        visitorScore={visitorSetsWon}
-                        localFouls={0}
-                        visitorFouls={0}
-                        timeLeft={0}
-                        isTimerRunning={false}
-                        showTimer={false}
-                        showFouls={false}
-                    />
-                    <div className="series-sets-caption">
-                        Sets Ganados en la Serie
-                    </div>
-                </div>
-
-                {/* 3. PUNTOS DEL SET ACTUAL */}
-                <div className="series-points-container">
-                    <div className="series-point-box local">
-                        <div className="series-point-label">Puntos Set Actual</div>
-                        <div className="series-point-value">{match.localScore}</div>
+                    {/* Info Set Actual */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                        <div className="series-info-main" style={{ fontSize: '0.88rem' }}>
+                            <Layers size={14} color="var(--secondary-light)" />
+                            SET {currentSet} (A {pointsPerSet} PTS{winByTwo ? ' +2' : ''})
+                        </div>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            Sets Ganados (Meta: {setsToWin})
+                        </span>
                     </div>
 
-                    <div className="series-vs-badge">VS</div>
-
-                    <div className="series-point-box visitor">
-                        <div className="series-point-label">Puntos Set Actual</div>
-                        <div className="series-point-value">{match.visitorScore}</div>
+                    {/* Sets Visita */}
+                    <div className="flex-gap" style={{ gap: '0.45rem' }}>
+                        <div className="flex-gap" style={{ gap: '3px' }}>
+                            {[...Array(setsToWin)].map((_, i) => (
+                                <span
+                                    key={`v-set-${i}`}
+                                    style={{
+                                        width: '7px',
+                                        height: '7px',
+                                        borderRadius: '50%',
+                                        backgroundColor: i < visitorSetsWon ? 'var(--primary-light)' : 'rgba(255,255,255,0.15)',
+                                        boxShadow: i < visitorSetsWon ? '0 0 8px var(--primary)' : 'none'
+                                    }}
+                                />
+                            ))}
+                        </div>
+                        <span
+                            style={{
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '1.15rem',
+                                fontWeight: 900,
+                                color: '#fff',
+                                background: 'rgba(255, 95, 31, 0.22)',
+                                border: '1px solid rgba(255, 95, 31, 0.45)',
+                                borderRadius: '6px',
+                                padding: '0.1rem 0.5rem'
+                            }}
+                        >
+                            {visitorSetsWon}
+                        </span>
+                        <span
+                            style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                color: 'var(--primary-light)',
+                                maxWidth: '88px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            {visitorTeam.name}
+                        </span>
                     </div>
                 </div>
             </div>
+
+            {/* 2. SCOREBOARD PRINCIPAL: PUNTOS DEL SET ACTUAL EN GRANDE */}
+            <Scoreboard
+                localName={localTeam.name}
+                visitorName={visitorTeam.name}
+                localScore={match.localScore}
+                visitorScore={match.visitorScore}
+                localFouls={match.localFouls}
+                visitorFouls={match.visitorFouls}
+                timeLeft={0}
+                isTimerRunning={false}
+                showTimer={false}
+                showFouls={true}
+            />
 
             {/* Controles */}
             <section className="controls-panel">
@@ -135,8 +225,10 @@ export const SeriesEngine: React.FC = () => {
                         <GameActionControls
                             variant="local"
                             simpleScoring={true}
+                            scoringOptions={scoringOptions}
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
+                            disabled={showSetEndModal || showSeriesEndModal}
                         />
                     </div>
 
@@ -144,8 +236,10 @@ export const SeriesEngine: React.FC = () => {
                         <GameActionControls
                             variant="visitor"
                             simpleScoring={true}
+                            scoringOptions={scoringOptions}
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            disabled={showSetEndModal || showSeriesEndModal}
                         />
                     </div>
                 </div>
@@ -203,8 +297,8 @@ export const SeriesEngine: React.FC = () => {
                             <Trophy size={40} color="var(--secondary-light)" />
                         </div>
                         <h3>Fin del Set {currentSet}</h3>
-                        <p style={{ color: '#fff', marginBottom: '0.75rem' }}>
-                            Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong>
+                        <p style={{ color: '#fff', marginBottom: '0.5rem' }}>
+                            Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong> ({match.localScore} - {match.visitorScore})
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                             El marcador de puntos se reiniciará para el siguiente set.
@@ -212,6 +306,9 @@ export const SeriesEngine: React.FC = () => {
                         <div className="modal-actions">
                             <button onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
                                 Confirmar y Siguiente Set
+                            </button>
+                            <button onClick={undoLastAction} className="btn-modal-secondary">
+                                Deshacer último punto (Corregir)
                             </button>
                         </div>
                     </div>

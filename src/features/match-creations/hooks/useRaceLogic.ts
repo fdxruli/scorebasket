@@ -10,9 +10,14 @@ interface UseRaceLogicProps {
 const getRaceWinnerTeamId = (match: Match, targetScore: number): number | null => {
   const localScore = match.localScore || 0;
   const visitorScore = match.visitorScore || 0;
+  const winByTwo = match.config.race?.winByTwo ?? false;
 
-  if (localScore >= targetScore) return match.localTeamId;
-  if (visitorScore >= targetScore) return match.visitorTeamId;
+  if (localScore >= targetScore && (!winByTwo || localScore - visitorScore >= 2)) {
+    return match.localTeamId;
+  }
+  if (visitorScore >= targetScore && (!winByTwo || visitorScore - localScore >= 2)) {
+    return match.visitorTeamId;
+  }
   return null;
 };
 
@@ -32,6 +37,8 @@ const appendGameResultOnce = (history: GameResult[], entry: GameResult): GameRes
 export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
   const targetScore = match.config.race?.targetScore || 21;
   const hasRematches = match.config.race?.hasRematches || false;
+  const winByTwo = match.config.race?.winByTwo ?? false;
+  const scoringSystem = match.config.race?.scoringSystem || 'standard';
 
   const [showMatchEndModal, setShowMatchEndModal] = useState(false);
 
@@ -52,7 +59,7 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
     if (winnerTeamId) {
       if (!showMatchEndModal) setShowMatchEndModal(true);
     } else {
-      // Si NO hay ganador (ej: se dio vuelta a los scores), CERRAR modal.
+      // Si NO hay ganador (ej: se dio vuelta a los scores o se deshizo el último punto), CERRAR modal.
       if (showMatchEndModal) setShowMatchEndModal(false);
     }
   }, [match.status, winnerTeamId, showMatchEndModal]);
@@ -70,12 +77,31 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
       const currentGameNumber = currentMatch.config?.race?.currentGame || 1;
       const currentHistory = currentMatch.gameHistory || [];
 
-      const gameHistory = currentWinnerTeamId
-        ? appendGameResultOnce(
-            currentHistory,
-            buildGameResult(currentMatch, currentGameNumber, currentWinnerTeamId)
-          )
-        : currentHistory;
+      const localScore = currentMatch.localScore || 0;
+      const visitorScore = currentMatch.visitorScore || 0;
+
+      let gameHistory = currentHistory;
+
+      if (currentWinnerTeamId) {
+        gameHistory = appendGameResultOnce(
+          currentHistory,
+          buildGameResult(currentMatch, currentGameNumber, currentWinnerTeamId)
+        );
+      } else if (localScore !== visitorScore && currentHistory.length === 0) {
+        // Cierre anticipado con ventaja en el primer juego
+        const earlyWinnerId = localScore > visitorScore ? currentMatch.localTeamId : currentMatch.visitorTeamId;
+        gameHistory = appendGameResultOnce(
+          currentHistory,
+          buildGameResult(currentMatch, currentGameNumber, earlyWinnerId)
+        );
+      } else if (localScore !== visitorScore && currentHistory.length >= 1) {
+        // Si ya había juegos previos y el juego actual también llevaba ventaja al cerrarse, lo registramos sin perder los previos
+        const earlyWinnerId = localScore > visitorScore ? currentMatch.localTeamId : currentMatch.visitorTeamId;
+        gameHistory = appendGameResultOnce(
+          currentHistory,
+          buildGameResult(currentMatch, currentGameNumber, earlyWinnerId)
+        );
+      }
 
       await db.matches.update(currentMatch.id!, {
         status: 'finished',
@@ -121,6 +147,8 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
   return {
     targetScore,
     hasRematches,
+    winByTwo,
+    scoringSystem,
     showMatchEndModal,
     setShowMatchEndModal,
     endMatch,

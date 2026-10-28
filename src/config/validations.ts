@@ -117,7 +117,9 @@ export function getDefaultConfig(mode: MatchConfig['mode']): MatchConfig {
         race: {
           targetScore: 15,
           hasRematches: false,
-          currentGame: 1
+          currentGame: 1,
+          winByTwo: false,
+          scoringSystem: 'standard'
         }
       };
     
@@ -128,7 +130,9 @@ export function getDefaultConfig(mode: MatchConfig['mode']): MatchConfig {
           totalGames: 3,
           targetScorePerGame: 15,
           currentGame: 1,
-          wins: { local: 0, visitor: 0 }
+          wins: { local: 0, visitor: 0 },
+          winByTwo: false,
+          scoringSystem: 'standard'
         }
       };
   }

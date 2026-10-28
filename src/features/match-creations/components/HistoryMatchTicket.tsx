@@ -31,10 +31,14 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
     } else if (mode === 'race') {
         modeIcon = <Target size={12} color="var(--primary)" />;
 
-        // Con revanchas: mostramos JUEGOS ganados en lugar del marcador del último juego
-        if (match.gameHistory && match.gameHistory.length > 1) {
-            localDisplayScore = match.gameHistory.filter(g => g.winner === 'local').length;
-            visitorDisplayScore = match.gameHistory.filter(g => g.winner === 'visitor').length;
+        const gameHistory = match.gameHistory || [];
+        const hasRematchesPlayed = (match.config?.race?.currentGame || 1) > 1 || gameHistory.length > 1;
+        const isCurrentScoreZero = (match.localScore || 0) === 0 && (match.visitorScore || 0) === 0;
+
+        // Con revanchas o si el marcador actual quedó en 0-0 tras cerrar: mostramos JUEGOS ganados
+        if (gameHistory.length >= 1 && (hasRematchesPlayed || isCurrentScoreZero)) {
+            localDisplayScore = gameHistory.filter(g => g.winner === 'local').length;
+            visitorDisplayScore = gameHistory.filter(g => g.winner === 'visitor').length;
             isRaceWithGames = true;
         }
     }

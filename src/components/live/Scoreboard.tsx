@@ -1,4 +1,8 @@
 // src/components/live/Scoreboard.tsx
+import { Pencil } from 'lucide-react';
+import { db } from '../../db/db';
+import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
+
 interface ScoreboardProps {
     localName: string;
     visitorName: string;
@@ -10,6 +14,9 @@ interface ScoreboardProps {
     isTimerRunning: boolean;
     showTimer?: boolean;
     showFouls?: boolean;
+    onTimerClick?: () => void;
+    localTeamId?: number;
+    visitorTeamId?: number;
 }
 
 const formatTime = (seconds: number) => {
@@ -25,14 +32,41 @@ export function Scoreboard({
     localFouls, visitorFouls,
     timeLeft, isTimerRunning,
     showTimer = true,
-    showFouls = true
+    showFouls = true,
+    onTimerClick,
+    localTeamId,
+    visitorTeamId
 }: ScoreboardProps) {
+    const { match } = useLiveMatch();
+    const resolvedLocalId = localTeamId ?? match?.localTeamId;
+    const resolvedVisitorId = visitorTeamId ?? match?.visitorTeamId;
+
+    const handleRenameTeam = async (teamId: number | undefined, currentName: string) => {
+        if (!teamId) return;
+        const newName = window.prompt('Nuevo nombre del equipo:', currentName);
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (!trimmed || trimmed === currentName) return;
+
+        try {
+            await db.teams.update(teamId, { name: trimmed });
+        } catch (err) {
+            console.error('Error renombrando equipo:', err);
+        }
+    };
+
+    const canEditTimer = Boolean(onTimerClick) && !isTimerRunning;
 
     return (
         <section className="scoreboard-container">
             {/* Reloj Central (Píldora Digital) */}
             {showTimer && (
-                <div className={`timer-pill ${isTimerRunning ? 'running' : ''}`}>
+                <div
+                    className={`timer-pill ${isTimerRunning ? 'running' : ''}`}
+                    onClick={canEditTimer ? onTimerClick : undefined}
+                    style={canEditTimer ? { cursor: 'pointer' } : undefined}
+                    title={canEditTimer ? 'Toca para ajustar el reloj (en pausa)' : undefined}
+                >
                     {formatTime(timeLeft)}
                 </div>
             )}
@@ -40,7 +74,25 @@ export function Scoreboard({
             {/* Card Local */}
             <div className="score-card local">
                 <span className="score-card-role">HOME // LOCAL</span>
-                <h2 className="team-name">{localName}</h2>
+                <h2
+                    className="team-name"
+                    onClick={() => handleRenameTeam(resolvedLocalId, localName)}
+                    style={{
+                        cursor: resolvedLocalId ? 'pointer' : undefined,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem'
+                    }}
+                    title="Toca para editar el nombre del equipo"
+                >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {localName}
+                    </span>
+                    {resolvedLocalId && (
+                        <Pencil size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
+                    )}
+                </h2>
                 <div className="score-big">{localScore}</div>
                 
                 {showFouls && (
@@ -58,7 +110,25 @@ export function Scoreboard({
             {/* Card Visitante */}
             <div className="score-card visitor">
                 <span className="score-card-role">AWAY // VISITA</span>
-                <h2 className="team-name">{visitorName}</h2>
+                <h2
+                    className="team-name"
+                    onClick={() => handleRenameTeam(resolvedVisitorId, visitorName)}
+                    style={{
+                        cursor: resolvedVisitorId ? 'pointer' : undefined,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem'
+                    }}
+                    title="Toca para editar el nombre del equipo"
+                >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {visitorName}
+                    </span>
+                    {resolvedVisitorId && (
+                        <Pencil size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
+                    )}
+                </h2>
                 <div className="score-big">{visitorScore}</div>
                 
                 {showFouls && (

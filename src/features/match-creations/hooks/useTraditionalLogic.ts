@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useMatchTimer } from '../../../hooks/useMatchTimer';
 import type { Match } from '../../../db/models/Match';
 import { db } from '../../../db/db';
@@ -15,10 +15,11 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
   // 2. Estado local para modales
   const [showQuarterEndModal, setShowQuarterEndModal] = useState(false);
   const [showMatchEndModal, setShowMatchEndModal] = useState(false);
+  const zeroHandledQuarterRef = useRef<number | null>(null);
 
   // 3. Timer Hook: Pasamos el OBJETO match, no los segundos.
   // El hook se encarga de calcular el tiempo restante basado en la BD.
-  const { timeLeft, isRunning, toggleTimer, resetTimer } = useMatchTimer(match);
+  const { timeLeft, isRunning, toggleTimer, resetTimer, adjustTime } = useMatchTimer(match);
 
   // Helper para formato de tiempo (MM:SS)
   const formatTime = (seconds: number) => {
@@ -41,14 +42,21 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
 
   // 4. Efecto: Detectar cuando el reloj llega a cero
   useEffect(() => {
+    const currentQ = match.currentQuarter || 1;
+
+    if (timeLeft > 0) {
+      zeroHandledQuarterRef.current = null;
+      return;
+    }
+
     // Si el tiempo se acabó, no está corriendo y el partido no ha terminado...
     if (timeLeft <= 0 && !isRunning && match.status !== 'finished') {
-      // Evitar abrir el modal si ya está abierto
-      if (!showQuarterEndModal && !showMatchEndModal) {
+      if (zeroHandledQuarterRef.current !== currentQ && !showQuarterEndModal && !showMatchEndModal) {
+        zeroHandledQuarterRef.current = currentQ;
         handleTimerZero();
       }
     }
-  }, [timeLeft, isRunning, match.status, showQuarterEndModal, showMatchEndModal, handleTimerZero]);
+  }, [timeLeft, isRunning, match.status, match.currentQuarter, showQuarterEndModal, showMatchEndModal, handleTimerZero]);
 
   // 5. Acción: Siguiente Cuarto
   const nextQuarter = useCallback(async () => {
@@ -94,6 +102,7 @@ export const useTraditionalLogic = ({ match }: UseTraditionalLogicProps) => {
     isTimerRunning: isRunning,
     toggleTimer,
     resetCurrentQuarter: resetTimer,
+    adjustTime,
     
     currentQuarter: match.currentQuarter || 1,
     totalQuarters: quartersConfig,

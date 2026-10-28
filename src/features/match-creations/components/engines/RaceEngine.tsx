@@ -13,7 +13,7 @@ import { Target, Trophy, RotateCcw, Flag, Users } from 'lucide-react';
 export const RaceEngine: React.FC = () => {
     const navigate = useNavigate();
     const { match, localTeam, visitorTeam } = useLiveMatch();
-    const { addScore, addFoul } = useGameActions();
+    const { addScore, addFoul, undoLastAction } = useGameActions();
     const [trackPlayers, setTrackPlayers] = useState(false);
 
     if (!match || !localTeam || !visitorTeam) return null;
@@ -21,11 +21,15 @@ export const RaceEngine: React.FC = () => {
     const {
         targetScore,
         hasRematches,
+        winByTwo,
+        scoringSystem,
         showMatchEndModal,
         endMatch,
         handleRematch,
         winnerTeamId
     } = useRaceLogic({ match });
+
+    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
 
     useEffect(() => {
         if (match.status === 'finished') {
@@ -83,7 +87,9 @@ export const RaceEngine: React.FC = () => {
                         <Target size={16} color="var(--primary)" />
                         Meta del Juego
                     </span>
-                    <span className="race-info-value">{targetScore} PTS</span>
+                    <span className="race-info-value">
+                        {targetScore} PTS {winByTwo ? '• DIF +2' : ''}
+                    </span>
                 </div>
             </div>
 
@@ -105,6 +111,7 @@ export const RaceEngine: React.FC = () => {
                     <div className="team-column">
                         <GameActionControls
                             simpleScoring={true}
+                            scoringOptions={scoringOptions}
                             variant="local"
                             onScore={(pts) => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
                             onFoul={() => requestAction(localTeam.id!, localTeam.name, localTeam.players, { type: 'foul' })}
@@ -116,9 +123,10 @@ export const RaceEngine: React.FC = () => {
                     <div className="team-column">
                         <GameActionControls
                             simpleScoring={true}
+                            scoringOptions={scoringOptions}
                             variant="visitor"
                             onScore={(pts) => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'score', points: pts as 1 | 2 | 3 })}
-                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.players ? visitorTeam.name : visitorTeam.name, visitorTeam.players, { type: 'foul' })}
+                            onFoul={() => requestAction(visitorTeam.id!, visitorTeam.name, visitorTeam.players, { type: 'foul' })}
                             disabled={showMatchEndModal}
                         />
                     </div>
@@ -180,7 +188,7 @@ export const RaceEngine: React.FC = () => {
                             {winnerTeamId === localTeam.id ? localTeam.name : visitorTeam.name}
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                            Ha alcanzado la meta de {targetScore} puntos.
+                            Ha alcanzado la meta de {targetScore} puntos ({match.localScore} - {match.visitorScore}).
                         </p>
 
                         <div className="modal-actions">
@@ -197,6 +205,10 @@ export const RaceEngine: React.FC = () => {
 
                             <button onClick={endMatch} className="btn-modal-primary btn-finish">
                                 Finalizar Partido
+                            </button>
+
+                            <button onClick={undoLastAction} className="btn-modal-secondary">
+                                Deshacer último punto (Corregir)
                             </button>
                         </div>
                     </div>

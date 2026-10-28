@@ -47,17 +47,27 @@ const validateMatchIsActive = (match: Match) => {
 
 const validateScoreWindow = (match: Match) => {
   const mode = getMode(match);
+  const localScore = match.localScore || 0;
+  const visitorScore = match.visitorScore || 0;
 
   if (mode === 'race') {
     const targetScore = match.config?.race?.targetScore || 21;
-    if ((match.localScore || 0) >= targetScore || (match.visitorScore || 0) >= targetScore) {
+    const winByTwo = match.config?.race?.winByTwo ?? false;
+    const localHasWon = localScore >= targetScore && (!winByTwo || localScore - visitorScore >= 2);
+    const visitorHasWon = visitorScore >= targetScore && (!winByTwo || visitorScore - localScore >= 2);
+
+    if (localHasWon || visitorHasWon) {
       throw new Error('Este juego ya tiene ganador. Finaliza o da la vuelta antes de registrar más puntos.');
     }
   }
 
   if (mode === 'best-of-series') {
     const targetScore = match.config?.bestOf?.targetScorePerGame || 21;
-    if ((match.localScore || 0) >= targetScore || (match.visitorScore || 0) >= targetScore) {
+    const winByTwo = match.config?.bestOf?.winByTwo ?? false;
+    const localHasWon = localScore >= targetScore && (!winByTwo || localScore - visitorScore >= 2);
+    const visitorHasWon = visitorScore >= targetScore && (!winByTwo || visitorScore - localScore >= 2);
+
+    if (localHasWon || visitorHasWon) {
       throw new Error('Este set ya terminó. Confirma el set antes de registrar más puntos.');
     }
   }
@@ -116,9 +126,13 @@ export const useGameActions = () => {
 
         await db.scores.add(newScore as Score);
 
-        const updateData = side === 'local'
+        const updateData: Partial<Match> = side === 'local'
           ? { localScore: (currentMatch.localScore || 0) + normalizedPoints }
           : { visitorScore: (currentMatch.visitorScore || 0) + normalizedPoints };
+
+        if (currentMatch.status === 'created') {
+          updateData.status = 'playing';
+        }
 
         await db.matches.update(currentMatch.id!, updateData);
       });
@@ -153,10 +167,14 @@ export const useGameActions = () => {
 
         await db.fouls.add(newFoul as Foul);
 
-        const updateData = side === 'local'
+        const updateData: Partial<Match> = side === 'local'
           ? { localFouls: (currentMatch.localFouls || 0) + 1 }
           : { visitorFouls: (currentMatch.visitorFouls || 0) + 1 };
-          
+
+        if (currentMatch.status === 'created') {
+          updateData.status = 'playing';
+        }
+
         await db.matches.update(currentMatch.id!, updateData);
       });
     } catch (error) {

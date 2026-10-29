@@ -51,18 +51,12 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
 
   // 2. EFECTO UNIFICADO: Controla la visibilidad del modal
   useEffect(() => {
-    // Si el partido ya terminó (status 'finished'), el modal debe estar CERRADO.
-    if (match.status === 'finished') {
-      setShowMatchEndModal(false);
-      return;
-    }
-
-    // Si hay un ganador reglamentario (y el partido sigue activo), ABRIR modal.
-    if (winnerTeamId) {
-      if (!showMatchEndModal) setShowMatchEndModal(true);
-    } else {
-      // Si NO hay ganador (ej: se dio vuelta a los scores o se deshizo el último punto), CERRAR modal.
-      if (showMatchEndModal) setShowMatchEndModal(false);
+    const shouldShow = match.status !== 'finished' && Boolean(winnerTeamId);
+    if (showMatchEndModal !== shouldShow) {
+      const timerId = window.setTimeout(() => {
+        setShowMatchEndModal(shouldShow);
+      }, 0);
+      return () => window.clearTimeout(timerId);
     }
   }, [match.status, winnerTeamId, showMatchEndModal]);
 

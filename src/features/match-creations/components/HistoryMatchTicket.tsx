@@ -11,6 +11,7 @@ interface Props {
 
 export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: Props) => {
     const mode = match.config?.mode || 'traditional';
+    const isFinished = match.status === 'finished';
 
     const formatDate = (date: Date) => {
         try {
@@ -25,6 +26,8 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
     let visitorDisplayScore = match.visitorScore;
     let modeIcon = <Clock size={12} />;
     let isRaceWithGames = false;
+    let localWon = isFinished && localDisplayScore > visitorDisplayScore;
+    let visitorWon = isFinished && visitorDisplayScore > localDisplayScore;
 
     if (mode === 'best-of-series') {
         const storedSets = match.gameHistory || [];
@@ -32,6 +35,8 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
         const histVisitorWins = storedSets.filter(g => g.winner === 'visitor').length;
         localDisplayScore = Math.max(match.config.bestOf?.wins?.local || 0, histLocalWins);
         visitorDisplayScore = Math.max(match.config.bestOf?.wins?.visitor || 0, histVisitorWins);
+        localWon = isFinished && localDisplayScore > visitorDisplayScore;
+        visitorWon = isFinished && visitorDisplayScore > localDisplayScore;
         modeIcon = <Trophy size={12} color="var(--success)" />;
     } else if (mode === 'race') {
         modeIcon = <Target size={12} color="var(--primary)" />;
@@ -39,10 +44,9 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
         localDisplayScore = raceSummary.localDisplayScore;
         visitorDisplayScore = raceSummary.visitorDisplayScore;
         isRaceWithGames = raceSummary.isMultiGame;
+        localWon = raceSummary.localWon;
+        visitorWon = raceSummary.visitorWon;
     }
-
-    const localWon = localDisplayScore > visitorDisplayScore;
-    const visitorWon = visitorDisplayScore > localDisplayScore;
 
     return (
         <div className="match-ticket cursor-pointer" onClick={onClick}>

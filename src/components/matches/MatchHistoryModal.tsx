@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { X, Calendar, BarChart2, Users, Target, Layers, Trash2, Share2, Download, CheckCircle2 } from 'lucide-react';
 import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
-import { resolveRaceGameResult } from '../../utils/raceLogicHelpers';
+import { buildRaceReportProjection } from '../../utils/raceLogicHelpers';
 import {
     shareOrDownloadMatchCard,
     downloadMatchCardPng,
@@ -107,79 +107,25 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             });
         }
 
-        // C2. Reta (Race): Construir effectiveHistory unificado
-        const effectiveHistory = [...(match.gameHistory || [])];
-        const currentRaceGame = match.config?.race?.currentGame || 1;
-        const targetScore = match.config?.race?.targetScore || 21;
-        const winByTwo = match.config?.race?.winByTwo ?? false;
-        const isFinished = match.status === 'finished';
-
-        if (
-            mode === 'race' &&
-            ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
-            !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
-        ) {
-            const outcome = resolveRaceGameResult(
-                match.localScore || 0,
-                match.visitorScore || 0,
-                targetScore,
-                winByTwo,
-                isFinished
-            );
-
-            // Si no tiene ganador reglamentario y sigue activo, 'tie' provisional sin otorgar victoria indebida
-            const resolvedWinner: 'local' | 'visitor' | 'tie' =
-                outcome === 'unresolved' ? 'tie' : outcome;
-
-            effectiveHistory.push({
-                gameNumber: currentRaceGame,
-                localScore: match.localScore || 0,
-                visitorScore: match.visitorScore || 0,
-                winner: resolvedWinner,
-                finishedAt: new Date()
-            });
-        }
-
-        // REGLA ESTRICTA RACE:
-        // 1 solo juego = Muestra Puntos (FINAL)
-        // 2 o más juegos (revanchas) = Muestra Juegos Ganados (JUEGOS) y desglose por juego en la tabla
-        const isRaceWithGames = mode === 'race' && effectiveHistory.length > 1;
-
+        // C2. Reta (Race): Usar proyección centralizada sin empates ni finishedAt ficticios (C-03)
+        let isRaceWithGames = false;
         let localTotalCell: number = mainLocalScore;
         let visitorTotalCell: number = mainVisitorScore;
         let totalHeader = 'Total';
 
         if (mode === 'race') {
-            if (isRaceWithGames) {
-                const sortedGames = [...effectiveHistory].sort((a, b) => a.gameNumber - b.gameNumber);
-                mainLocalScore = sortedGames.filter(g => g.winner === 'local').length;
-                mainVisitorScore = sortedGames.filter(g => g.winner === 'visitor').length;
-                periodStats = sortedGames.map(g => ({
-                    period: g.gameNumber,
-                    local: g.localScore,
-                    visitor: g.visitorScore
-                }));
-                localTotalCell = mainLocalScore;
-                visitorTotalCell = mainVisitorScore;
-                totalHeader = 'Ganados';
-            } else {
-                const singleGameLocal =
-                    effectiveHistory[0]?.localScore || localPointsTotal || match.localScore || 0;
-                const singleGameVisitor =
-                    effectiveHistory[0]?.visitorScore || visitorPointsTotal || match.visitorScore || 0;
-                mainLocalScore = singleGameLocal;
-                mainVisitorScore = singleGameVisitor;
-                periodStats = [
-                    {
-                        period: 1,
-                        local: singleGameLocal,
-                        visitor: singleGameVisitor
-                    }
-                ];
-                localTotalCell = singleGameLocal;
-                visitorTotalCell = singleGameVisitor;
-                totalHeader = 'Total';
-            }
+            const raceProjection = buildRaceReportProjection(match, safeScores);
+            mainLocalScore = raceProjection.mainLocalScore;
+            mainVisitorScore = raceProjection.mainVisitorScore;
+            localTotalCell = raceProjection.localTotalCell;
+            visitorTotalCell = raceProjection.visitorTotalCell;
+            totalHeader = raceProjection.totalHeader;
+            isRaceWithGames = raceProjection.isRaceWithGames;
+            periodStats = raceProjection.periodStats.map(p => ({
+                period: p.period,
+                local: p.local,
+                visitor: p.visitor
+            }));
         }
 
         // C3. Series (best-of-series): Priorizar gameHistory combinado con safeScores por Set
@@ -292,8 +238,9 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     if (!data || !stats) return null;
     const { match, localTeam, visitorTeam } = data;
 
-    const localWon = stats.mainLocalScore > stats.mainVisitorScore;
-    const visitorWon = stats.mainVisitorScore > stats.mainLocalScore;
+    const isFinished = match.status === 'finished';
+    const localWon = isFinished && stats.mainLocalScore > stats.mainVisitorScore;
+    const visitorWon = isFinished && stats.mainVisitorScore > stats.mainLocalScore;
 
     const formatDate = (date: Date) => {
         try {
@@ -322,7 +269,13 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     };
 
     const scoreUnitLabel =
-        stats.mode === 'best-of-series' ? 'SETS' : stats.isRaceWithGames ? 'JUEGOS' : 'FINAL';
+        stats.mode === 'best-of-series'
+            ? 'SETS'
+            : stats.isRaceWithGames
+              ? 'JUEGOS'
+              : isFinished
+                ? 'FINAL'
+                : 'EN CURSO';
 
     const buildCardPayload = (): ShareMatchCardInput => {
         const mappedPeriods = stats.periodStats.map(qs => ({
@@ -333,6 +286,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
         return {
             mode: stats.mode,
+            isFinished,
             dateStr: formatDate(match.createdAt),
             localName: localTeam?.name || 'Local',
             visitorName: visitorTeam?.name || 'Visita',

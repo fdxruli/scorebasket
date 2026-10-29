@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import type { Match } from '../db/models';
 import { TeamsRepository } from '../db/teams.repository';
 import { Play, AlertCircle, Trophy, Zap, Shield } from 'lucide-react';
 import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
@@ -72,11 +73,12 @@ export function NewMatch() {
     setIsCreating(true);
 
     try {
-      const matchData: any = {
+      const matchData: Omit<Match, 'id'> = {
         localTeamId: Number(localTeamId),
         visitorTeamId: Number(visitorTeamId),
         status: 'created',
         createdAt: new Date(),
+        eventsProvenance: 'live_session',
         config: config,
         localScore: 0,
         visitorScore: 0,

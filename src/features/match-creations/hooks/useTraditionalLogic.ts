@@ -9,10 +9,79 @@ interface UseTraditionalLogicProps {
   isActionModalOpen?: boolean;
 }
 
+/**
+ * Avanza al siguiente cuarto reglamentario en modo Traditional (C-04).
+ * - Incrementa currentQuarter si aún no se alcanzó totalQuarters.
+ * - Reinicia timerSecondsRemaining a minutesPerQuarter * 60 y pausa el reloj (timerLastStart = undefined).
+ * - Reinicia tiempos fuera (localTimeouts = 0, visitorTimeouts = 0) ÚNICAMENTE en el cambio de mitad (Q2 -> Q3).
+ * - Conserva tiempos fuera en transiciones dentro de la misma mitad (ej. Q1 -> Q2, Q3 -> Q4).
+ */
+export async function advanceTraditionalQuarter(matchId: number): Promise<boolean> {
+  return db.transaction('rw', db.matches, async () => {
+    const currentMatch = await db.matches.get(matchId);
+    if (!currentMatch || currentMatch.status === 'finished') {
+      return false;
+    }
+
+    const quartersConfig =
+      currentMatch.config?.traditional?.totalQuarters || currentMatch.totalQuarters || 4;
+    const minutesPerQuarter =
+      currentMatch.config?.traditional?.minutesPerQuarter || currentMatch.quarterDuration || 10;
+    const currentQ = currentMatch.currentQuarter || 1;
+
+    if (currentQ >= quartersConfig) {
+      return false;
+    }
+
+    const nextQ = currentQ + 1;
+    const isNewHalf = currentQ === 2 && nextQ === 3;
+
+    await db.matches.update(matchId, {
+      currentQuarter: nextQ,
+      timerSecondsRemaining: minutesPerQuarter * 60, // Reiniciar tiempo en BD
+      timerLastStart: undefined, // Asegurar que inicie pausado
+      ...(isNewHalf ? { localTimeouts: 0, visitorTimeouts: 0 } : {})
+    });
+
+    return true;
+  });
+}
+
+/**
+ * Inicia un periodo de Tiempo Extra (OT) en modo Traditional (C-04).
+ * - Avanza currentQuarter al siguiente periodo (quartersConfig + n).
+ * - Establece timerSecondsRemaining a overtimeMinutes * 60 e inicia pausado.
+ * - Reinicia los contadores de tiempos fuera (localTimeouts = 0, visitorTimeouts = 0).
+ */
+export async function startTraditionalOvertime(
+  matchId: number,
+  overtimeMinutes = 5
+): Promise<boolean> {
+  return db.transaction('rw', db.matches, async () => {
+    const currentMatch = await db.matches.get(matchId);
+    if (!currentMatch || currentMatch.status === 'finished') {
+      return false;
+    }
+
+    const quartersConfig =
+      currentMatch.config?.traditional?.totalQuarters || currentMatch.totalQuarters || 4;
+    const nextQ = (currentMatch.currentQuarter || quartersConfig) + 1;
+
+    await db.matches.update(matchId, {
+      currentQuarter: nextQ,
+      timerSecondsRemaining: overtimeMinutes * 60,
+      timerLastStart: undefined, // Inicia pausado
+      localTimeouts: 0,
+      visitorTimeouts: 0
+    });
+
+    return true;
+  });
+}
+
 export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTraditionalLogicProps) => {
   // 1. Extraer configuración con fallbacks seguros para partidos legacy
   const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
-  const minutesPerQuarter = match.config?.traditional?.minutesPerQuarter || match.quarterDuration || 10;
 
   // 2. Estado local para modales
   const [showQuarterEndModal, setShowQuarterEndModal] = useState(false);
@@ -61,7 +130,10 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
 
       if (zeroHandledQuarterRef.current !== currentQ && !showQuarterEndModal && !showMatchEndModal) {
         zeroHandledQuarterRef.current = currentQ;
-        handleTimerZero();
+        const timerId = window.setTimeout(() => {
+          handleTimerZero();
+        }, 0);
+        return () => window.clearTimeout(timerId);
       }
     }
   }, [
@@ -75,23 +147,14 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     isActionModalOpen
   ]);
 
-  // 5. Acción: Siguiente Cuarto
+  // 5. Acción: Siguiente Cuarto (invoca la función real de dominio advanceTraditionalQuarter)
   const nextQuarter = useCallback(async () => {
-    const currentQ = match.currentQuarter || 1;
-
-    if (currentQ < quartersConfig) {
-      const nextQ = currentQ + 1;
-      const isNewHalf = currentQ === 2 && nextQ === 3;
-
-      await db.matches.update(match.id!, {
-        currentQuarter: nextQ,
-        timerSecondsRemaining: minutesPerQuarter * 60, // Reiniciar tiempo en BD
-        timerLastStart: undefined, // Asegurar que inicie pausado
-        ...(isNewHalf ? { localTimeouts: 0, visitorTimeouts: 0 } : {})
-      });
+    if (!match.id) return;
+    const advanced = await advanceTraditionalQuarter(match.id);
+    if (advanced) {
       setShowQuarterEndModal(false);
     }
-  }, [match, quartersConfig, minutesPerQuarter]);
+  }, [match.id]);
 
   // 6. Acción: Finalizar Partido
   const endMatch = useCallback(async () => {
@@ -104,18 +167,15 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     setShowQuarterEndModal(false);
   }, [match.id]);
 
-  // 7. Acción: Iniciar Tiempo Extra (OT). Cada OT es un periodo adicional (quartersConfig + n).
+  // 7. Acción: Iniciar Tiempo Extra (OT) (invoca la función real de dominio startTraditionalOvertime)
   const startOvertime = useCallback(async (overtimeMinutes = 5) => {
-    await db.matches.update(match.id!, {
-      currentQuarter: (match.currentQuarter || quartersConfig) + 1,
-      timerSecondsRemaining: overtimeMinutes * 60,
-      timerLastStart: undefined, // Inicia pausado
-      localTimeouts: 0,
-      visitorTimeouts: 0
-    });
-    setShowMatchEndModal(false);
-    setShowQuarterEndModal(false);
-  }, [match.id, match.currentQuarter, quartersConfig]);
+    if (!match.id) return;
+    const started = await startTraditionalOvertime(match.id, overtimeMinutes);
+    if (started) {
+      setShowMatchEndModal(false);
+      setShowQuarterEndModal(false);
+    }
+  }, [match.id]);
 
   const isTied = (match.localScore || 0) === (match.visitorScore || 0);
 

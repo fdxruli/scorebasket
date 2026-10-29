@@ -1,9 +1,11 @@
 // src/utils/shareCardGenerator.ts
 import { db } from '../db/db';
 import { formatPeriodLabel } from './matchHelpers';
+import { buildRaceReportProjection } from './raceLogicHelpers';
 
 export interface ShareMatchCardInput {
   mode: 'traditional' | 'race' | 'best-of-series';
+  isFinished?: boolean;
   dateStr: string;
   localName: string;
   visitorName: string;
@@ -274,9 +276,10 @@ export async function generateMatchShareCardBlob(input: ShareMatchCardInput): Pr
   const localCardX = PAD_X;
   const visitorCardX = CANVAS_W - PAD_X - cardW;
 
-  const localWon = input.mainLocalScore > input.mainVisitorScore;
-  const visitorWon = input.mainVisitorScore > input.mainLocalScore;
-  const isTied = input.mainLocalScore === input.mainVisitorScore;
+  const isFinished = input.isFinished ?? true;
+  const localWon = isFinished && input.mainLocalScore > input.mainVisitorScore;
+  const visitorWon = isFinished && input.mainVisitorScore > input.mainLocalScore;
+  const isTied = isFinished && input.mainLocalScore === input.mainVisitorScore;
 
   const drawTeamJumboCard = (
     x: number,
@@ -1108,63 +1111,26 @@ export async function buildShareMatchCardInputFromDb(
     });
   }
 
-  // Construir effectiveHistory para modo race (incluyendo juego en vivo si aún no se guardó en gameHistory)
-  const effectiveHistory = [...(match.gameHistory || [])];
-  const currentRaceGame = match.config?.race?.currentGame || 1;
-  if (
-    mode === 'race' &&
-    ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
-    !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
-  ) {
-    effectiveHistory.push({
-      gameNumber: currentRaceGame,
-      localScore: match.localScore || 0,
-      visitorScore: match.visitorScore || 0,
-      winner: (match.localScore || 0) >= (match.visitorScore || 0) ? 'local' : 'visitor',
-      finishedAt: new Date()
-    });
-  }
-
-  // REGLA ESTRICTA RACE:
-  // 1 solo juego = Muestra Puntos (FINAL)
-  // 2 o más juegos (revanchas) = Muestra Juegos Ganados (JUEGOS) y desglose por juego en la tabla
-  const isRaceWithGames = mode === 'race' && effectiveHistory.length > 1;
-
+  // Usar proyección centralizada para modo race sin entradas ni finishedAt ficticios (C-03)
+  const isFinished = match.status === 'finished';
+  let isRaceWithGames = false;
   let localTotalCell = mainLocalScore;
   let visitorTotalCell = mainVisitorScore;
   let totalHeader = 'Total';
 
   if (mode === 'race') {
-    if (isRaceWithGames) {
-      const sortedGames = [...effectiveHistory].sort((a, b) => a.gameNumber - b.gameNumber);
-      mainLocalScore = sortedGames.filter(g => g.winner === 'local').length;
-      mainVisitorScore = sortedGames.filter(g => g.winner === 'visitor').length;
-      rawPeriods = sortedGames.map(g => ({
-        period: g.gameNumber,
-        local: g.localScore,
-        visitor: g.visitorScore
-      }));
-      localTotalCell = mainLocalScore;
-      visitorTotalCell = mainVisitorScore;
-      totalHeader = 'Ganados';
-    } else {
-      const singleGameLocal =
-        effectiveHistory[0]?.localScore || localPointsTotal || match.localScore || 0;
-      const singleGameVisitor =
-        effectiveHistory[0]?.visitorScore || visitorPointsTotal || match.visitorScore || 0;
-      mainLocalScore = singleGameLocal;
-      mainVisitorScore = singleGameVisitor;
-      rawPeriods = [
-        {
-          period: 1,
-          local: singleGameLocal,
-          visitor: singleGameVisitor
-        }
-      ];
-      localTotalCell = singleGameLocal;
-      visitorTotalCell = singleGameVisitor;
-      totalHeader = 'Total';
-    }
+    const raceProjection = buildRaceReportProjection(match, safeScores);
+    mainLocalScore = raceProjection.mainLocalScore;
+    mainVisitorScore = raceProjection.mainVisitorScore;
+    localTotalCell = raceProjection.localTotalCell;
+    visitorTotalCell = raceProjection.visitorTotalCell;
+    totalHeader = raceProjection.totalHeader;
+    isRaceWithGames = raceProjection.isRaceWithGames;
+    rawPeriods = raceProjection.periodStats.map(p => ({
+      period: p.period,
+      local: p.local,
+      visitor: p.visitor
+    }));
   }
 
   if (mode === 'best-of-series') {
@@ -1245,7 +1211,13 @@ export async function buildShareMatchCardInputFromDb(
   const periodHeaders = periodStats.map(ps => ps.label);
 
   const scoreUnitLabel =
-    mode === 'best-of-series' ? 'SETS' : isRaceWithGames ? 'JUEGOS' : 'FINAL';
+    mode === 'best-of-series'
+      ? 'SETS'
+      : isRaceWithGames
+        ? 'JUEGOS'
+        : isFinished
+          ? 'FINAL'
+          : 'EN CURSO';
 
   const buildTeamPlayerStats = (teamId: number) => {
     return safePlayers
@@ -1282,6 +1254,7 @@ export async function buildShareMatchCardInputFromDb(
 
   return {
     mode,
+    isFinished,
     dateStr,
     localName: localTeam?.name || 'Local',
     visitorName: visitorTeam?.name || 'Visitante',

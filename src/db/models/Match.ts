@@ -2,6 +2,7 @@
 import type { MatchConfig, GameResult } from './MatchConfig';
 
 export type MatchStatus = 'created' | 'playing' | 'paused' | 'finished';
+export type MatchEventsProvenance = 'live_session' | 'unverified';
 
 export interface Match {
   id?: number;
@@ -14,6 +15,9 @@ export interface Match {
   status: MatchStatus;
   createdAt: Date;
   finishedAt?: Date;
+  
+  // Evidencia de procedencia y trazabilidad de eventos (R1.5)
+  eventsProvenance?: MatchEventsProvenance;
   
   // 🆕 Configuración del partido (reemplaza campos individuales)
   config: MatchConfig;

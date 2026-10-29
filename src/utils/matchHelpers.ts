@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { TeamsRepository } from '../db/teams.repository';
 import type { Match } from '../db/models/Match';
 import type { MatchConfig } from '../db/models/MatchConfig';
 
@@ -49,34 +50,20 @@ export function formatPeriodLabel(currentQuarter: number, totalQuarters: number)
 /**
  * Renombra un equipo validando nombre vacío, igualdad con el rival del partido
  * y duplicados contra otros equipos activos (case-insensitive).
+ * Centralizado a través de TeamsRepository.rename.
  */
 export async function renameTeamSafely(
   teamId: number,
   newName: string,
   rivalTeamId?: number
 ): Promise<{ ok: boolean; error?: string }> {
-  const trimmed = newName.trim();
-  if (!trimmed) {
-    return { ok: false, error: 'El nombre no puede estar vacío.' };
+  try {
+    await TeamsRepository.rename(teamId, newName, rivalTeamId);
+    return { ok: true };
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : 'No se pudo renombrar el equipo.';
+    return { ok: false, error };
   }
-  const lower = trimmed.toLowerCase();
-
-  if (rivalTeamId !== undefined) {
-    const rival = await db.teams.get(rivalTeamId);
-    if (rival && rival.name.trim().toLowerCase() === lower) {
-      return { ok: false, error: 'Ambos equipos no pueden tener el mismo nombre.' };
-    }
-  }
-
-  const duplicate = await db.teams
-    .filter(t => !t.isArchived && t.id !== teamId && t.name.trim().toLowerCase() === lower)
-    .first();
-  if (duplicate) {
-    return { ok: false, error: 'Ya existe otro equipo activo con ese nombre.' };
-  }
-
-  await db.teams.update(teamId, { name: trimmed });
-  return { ok: true };
 }
 
 /**
@@ -97,13 +84,13 @@ export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
 
       if (existing?.id !== undefined) {
         const teamId = existing.id;
-        // localTeamId / visitorTeamId no están indexados en matches: se filtra.
-        const [playersCount, matchesCount] = await Promise.all([
+        // Consultas optimizadas con los índices v8 (localTeamId y visitorTeamId)
+        const [playersCount, localMatchesCount, visitorMatchesCount] = await Promise.all([
           db.players.where({ teamId }).count(),
-          db.matches
-            .filter(m => m.localTeamId === teamId || m.visitorTeamId === teamId)
-            .count()
+          db.matches.where('localTeamId').equals(teamId).count(),
+          db.matches.where('visitorTeamId').equals(teamId).count()
         ]);
+        const matchesCount = localMatchesCount + visitorMatchesCount;
 
         // Equipo genérico limpio (sin jugadores ni partidos): se reutiliza.
         if (playersCount === 0 && matchesCount === 0) {
@@ -131,6 +118,7 @@ export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: {

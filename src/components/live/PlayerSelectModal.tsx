@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useContext } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
+import { PlayersRepository } from '../../db/players.repository';
 import { LiveMatchContext } from '../../features/match-creations/components/context/LiveMatchContext';
 import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { Trophy, AlertCircle, UserX, Shirt, Plus, X, Check, UserPlus } from 'lucide-react';
@@ -90,24 +91,10 @@ export function PlayerSelectModal({
         setIsAdding(true);
         setAddError(null);
         try {
-            const parsedNum = newNumber.trim() !== '' ? parseInt(newNumber.trim(), 10) : undefined;
-
-            if (parsedNum !== undefined && !isNaN(parsedNum)) {
-                const duplicated = await db.players
-                    .where({ teamId: resolvedTeamId })
-                    .filter(p => !p.isArchived && p.number === parsedNum)
-                    .first();
-                if (duplicated) {
-                    setAddError(`El dorsal #${parsedNum} ya lo tiene ${duplicated.name} en ${teamName}.`);
-                    return;
-                }
-            }
-            const newId = await db.players.add({
-                name: trimmedName,
-                number: parsedNum !== undefined && !isNaN(parsedNum) ? parsedNum : undefined,
+            const newId = await PlayersRepository.create({
                 teamId: resolvedTeamId,
-                createdAt: new Date(),
-                isArchived: false
+                name: trimmedName,
+                number: newNumber
             });
 
             setNewName('');
@@ -117,8 +104,9 @@ export function PlayerSelectModal({
             if (assignImmediately && typeof newId === 'number') {
                 onSelect(newId, activeAction);
             }
-        } catch (err) {
-            console.error('Error al agregar jugador rápido:', err);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error al agregar jugador rápido.';
+            setAddError(msg);
         } finally {
             setIsAdding(false);
         }

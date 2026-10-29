@@ -64,6 +64,6 @@ export interface GameResult {
   localScore: number;
   visitorScore: number;
   winner: 'local' | 'visitor' | 'tie';
-  finishedAt: Date;
+  finishedAt?: Date;
   duration?: number;            // Duración en segundos (opcional)
 }

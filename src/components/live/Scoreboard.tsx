@@ -1,9 +1,10 @@
 // src/components/live/Scoreboard.tsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Pencil, Clock, Check, X } from 'lucide-react';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
 import { db } from '../../db/db';
+import { TimeoutService } from '../../db/timeout.service';
 import { unlockAudioContext, playWhistle } from '../../utils/soundEffects';
 
 interface ScoreboardProps {
@@ -40,7 +41,6 @@ export function Scoreboard({
     showFouls = true,
     showCenterTimer = false,
     onTimerClick,
-    onToggleTimer,
     localTeamId,
     visitorTeamId
 }: ScoreboardProps) {
@@ -51,6 +51,7 @@ export function Scoreboard({
     const [editingSide, setEditingSide] = useState<'local' | 'visitor' | null>(null);
     const [draftName, setDraftName] = useState('');
     const [renameError, setRenameError] = useState<string | null>(null);
+    const timeoutInFlightRef = useRef(false);
 
     const startEditing = (side: 'local' | 'visitor', currentName: string) => {
         const teamId = side === 'local' ? resolvedLocalId : resolvedVisitorId;
@@ -101,42 +102,33 @@ export function Scoreboard({
     const maxTimeouts = match?.config?.traditional?.timeoutsPerTeam ?? 3;
 
     const handleTimeoutClick = async (side: 'local' | 'visitor') => {
-        if (!match?.id) return;
-        unlockAudioContext();
+        if (!match?.id || timeoutInFlightRef.current) return;
 
         const currentCount = (side === 'local' ? match.localTimeouts : match.visitorTimeouts) ?? 0;
 
-        // Si ya llegó al máximo, un toque adicional permite reiniciarlo a 0
-        if (currentCount >= maxTimeouts) {
-            await db.matches.update(
-                match.id,
-                side === 'local' ? { localTimeouts: 0 } : { visitorTimeouts: 0 }
-            );
+        // Si ya llegó al máximo o el partido finalizó, NO permitir incrementos ni reiniciar a 0
+        if (currentCount >= maxTimeouts || match.status === 'finished') {
             return;
         }
 
-        // 1. Si el reloj está corriendo, pausarlo automáticamente
-        if (isTimerRunning) {
-            if (onToggleTimer) {
-                await onToggleTimer();
-            } else if (match.timerLastStart) {
-                const elapsed = (Date.now() - match.timerLastStart.getTime()) / 1000;
-                await db.matches.update(match.id, {
-                    timerLastStart: undefined,
-                    timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
-                });
-            }
+        // R1.3-A: Desbloquear AudioContext síncronamente en el evento directo del usuario
+        // antes de la primera espera asíncrona (IndexedDB transaction), para preservar el token
+        // de user activation en navegadores móviles (iOS Safari, Chrome Android).
+        unlockAudioContext();
+
+        timeoutInFlightRef.current = true;
+        try {
+            // La validación de estado/límites, el incremento del contador y la pausa idempotente
+            // del cronómetro ocurren de forma transaccional dentro de TimeoutService.requestTimeout().
+            // Nunca se invoca toggleTimer() y el silbato solo se emite si la solicitud fue concedida (R1.2-B / R1.3-A).
+            await TimeoutService.requestTimeout(match.id, side, {
+                onGranted: () => {
+                    playWhistle();
+                }
+            });
+        } finally {
+            timeoutInFlightRef.current = false;
         }
-
-        // 2. Sonar silbato de árbitro
-        playWhistle();
-
-        // 3. Incrementar contador de tiempos fuera del equipo
-        const nextCount = currentCount + 1;
-        await db.matches.update(
-            match.id,
-            side === 'local' ? { localTimeouts: nextCount } : { visitorTimeouts: nextCount }
-        );
     };
 
     const canEditTimer = Boolean(onTimerClick) && !isTimerRunning;
@@ -257,10 +249,11 @@ export function Scoreboard({
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('local')}
+                                disabled={localTimeouts >= maxTimeouts || match?.status === 'finished'}
                                 className={`btn-timeout-card local ${localTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
                                     localTimeouts >= maxTimeouts
-                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        ? 'Tiempos fuera agotados'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >
@@ -364,10 +357,11 @@ export function Scoreboard({
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('visitor')}
+                                disabled={visitorTimeouts >= maxTimeouts || match?.status === 'finished'}
                                 className={`btn-timeout-card visitor ${visitorTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
                                     visitorTimeouts >= maxTimeouts
-                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        ? 'Tiempos fuera agotados'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >

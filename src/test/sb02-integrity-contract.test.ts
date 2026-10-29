@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '../db/db';
 import { GameActionsRepository } from '../db/gameActions.repository';
-import { ScoreIntegrityService } from '../db/scoreIntegrity.service';
-import type { Score } from '../db/models';
+import { ScoreIntegrityService, validateGameHistoryContinuity, isFinitePositiveInteger } from '../db/scoreIntegrity.service';
+import type { Score, Match } from '../db/models';
 
 describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenarios Obligatorios)', () => {
   let localTeamId: number;
@@ -35,6 +35,7 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 10,
@@ -132,10 +133,12 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: { targetScore: 21, currentGame: 2, hasRematches: true },
       },
+      currentQuarter: 2,
       localScore: 5, // Puntos de juego 2
       visitorScore: 2,
       localFouls: 0,
@@ -201,10 +204,12 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: { targetScore: 21, currentGame: 2, hasRematches: true },
       },
+      currentQuarter: 2,
       localScore: 3,
       visitorScore: 0,
       localFouls: 0,
@@ -315,6 +320,7 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'best-of-series',
         bestOf: {
@@ -475,6 +481,7 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 3,
@@ -524,6 +531,7 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 5,
@@ -672,6 +680,7 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'best-of-series',
         bestOf: {
@@ -1361,6 +1370,549 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
 
       // Marcador del juego actual no fue alterado
       expect(matchAfter.localScore).toBe(4);
+    });
+  });
+
+  describe('R1.5.1: Corrección Final — Garantía de Completitud y Validación Estricta de Periodos (C-01, C-02, C-03)', () => {
+    // --- C-01: Garantía de completitud aplicada efectivamente ---
+    it('C-01.1: Traditional legacy matemáticamente consistente pero isCompleteHistory: false rechaza eliminación sin mutar BD', async () => {
+      // Partido legado sin eventsProvenance (isCompleteHistory: false)
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        // eventsProvenance no definido (registro legado)
+        config: { mode: 'traditional' },
+        currentQuarter: 1,
+        localScore: 6,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 2000),
+      });
+
+      const score2Id = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 1000),
+      })) as number;
+
+      const matchBefore = (await db.matches.get(matchId))!;
+      const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
+
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(matchBefore, scoresBefore);
+      expect(integrity.status).toBe('CONSISTENT');
+      expect(integrity.isCompleteHistory).toBe(false);
+
+      // La eliminación destructiva DEBE ser rechazada íntegramente
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: score2Id,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable: la eliminación está bloqueada porque no se pudo acreditar la completitud y procedencia de los eventos/i);
+
+      // Verificación de ausencia total de modificaciones en IndexedDB
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.localScore).toBe(6);
+      expect(matchAfter.eventsProvenance).toBeUndefined(); // NO se fabricó evidencia retroactivamente
+
+      const scoresAfter = await db.scores.where('matchId').equals(matchId).toArray();
+      expect(scoresAfter).toHaveLength(2);
+      const score2StillExists = await db.scores.get(score2Id);
+      expect(score2StillExists).toBeDefined();
+    });
+
+    it('C-01.2: undoLastAction en partido legacy sin procedencia acreditada es rechazado sin modificar nada', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        // eventsProvenance no definido
+        config: { mode: 'traditional' },
+        currentQuarter: 1,
+        localScore: 4,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 2000),
+      });
+      const lastScoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 1000),
+      })) as number;
+
+      await expect(
+        GameActionsRepository.undoLastAction(matchId)
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.localScore).toBe(4);
+      const lastScoreStillExists = await db.scores.get(lastScoreId);
+      expect(lastScoreStillExists).toBeDefined();
+    });
+
+    it('C-01.3: Race legacy con marcador consistente en juego activo pero isCompleteHistory: false rechaza eliminación', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        // eventsProvenance ausente
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 2, hasRematches: true },
+        },
+        currentQuarter: 2,
+        localScore: 5,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 16, winner: 'local', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 2,
+        createdAt: new Date(Date.now() - 2000),
+      });
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 2,
+        createdAt: new Date(Date.now() - 1000),
+      })) as number;
+
+      const matchBefore = (await db.matches.get(matchId))!;
+      const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(matchBefore, scoresBefore);
+      expect(integrity.status).toBe('CONSISTENT');
+      expect(integrity.isCompleteHistory).toBe(false);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.localScore).toBe(5);
+      expect(matchAfter.gameHistory).toHaveLength(1);
+    });
+
+    it('C-01.4: Best-of-Series legacy con marcador consistente pero isCompleteHistory: false rechaza eliminación', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        // eventsProvenance ausente
+        config: {
+          mode: 'best-of-series',
+          bestOf: {
+            totalGames: 3,
+            targetScorePerGame: 21,
+            currentGame: 2,
+            wins: { local: 1, visitor: 0 },
+          },
+        },
+        currentQuarter: 2,
+        localScore: 3,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 19, winner: 'local', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 2,
+        createdAt: new Date(),
+      })) as number;
+
+      const matchBefore = (await db.matches.get(matchId))!;
+      const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(matchBefore, scoresBefore);
+      expect(integrity.status).toBe('CONSISTENT');
+      expect(integrity.isCompleteHistory).toBe(false);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.localScore).toBe(3);
+    });
+
+    // --- C-02: Validación estricta del primer periodo ---
+    it('C-02.1: En periodo 1, cualquier entrada en gameHistory invalida el historial (0, -1, fraccionario, futuros o malformados)', () => {
+      // 1. gameNumber: 0
+      const resZero = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [{ gameNumber: 0, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resZero.isValid).toBe(false);
+      expect(resZero.reason).toMatch(/se disputa el periodo #1 pero gameHistory contiene 1 entrada\(s\)/i);
+
+      // 2. gameNumber: -1 (negativo)
+      const resNeg = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [{ gameNumber: -1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resNeg.isValid).toBe(false);
+
+      // 3. gameNumber: 0.5 (fraccionario)
+      const resFrac = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [{ gameNumber: 0.5 as unknown as number, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resFrac.isValid).toBe(false);
+
+      // 4. gameNumber: 1 (mismo periodo)
+      const resSame = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [{ gameNumber: 1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resSame.isValid).toBe(false);
+
+      // 5. gameNumber: 2 (futuro)
+      const resFuture = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [{ gameNumber: 2, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resFuture.isValid).toBe(false);
+
+      // 6. gameNumber: NaN
+      const resNaN = validateGameHistoryContinuity({
+        mode: 'best-of-series',
+        effectivePeriod: 1,
+        history: [{ gameNumber: NaN, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() }],
+      });
+      expect(resNaN.isValid).toBe(false);
+
+      // 7. Historial vacío o ausente: VÁLIDO en periodo 1
+      const resEmpty = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: [],
+      });
+      expect(resEmpty.isValid).toBe(true);
+
+      const resUndef = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod: 1,
+        history: undefined,
+      });
+      expect(resUndef.isValid).toBe(true);
+    });
+
+    it('C-02.2: Partido en periodo 1 con gameHistory anómalo devuelve UNVERIFIED y bloquea eliminación', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        eventsProvenance: 'live_session',
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 1, hasRematches: false },
+        },
+        localScore: 2,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          // Anómalo: el partido está en juego 1 pero tiene una entrada en gameHistory con gameNumber 0
+          { gameNumber: 0, localScore: 0, visitorScore: 0, winner: 'local', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 1,
+        createdAt: new Date(),
+      })) as number;
+
+      const match = (await db.matches.get(matchId))!;
+      const scores = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, scores);
+
+      expect(integrity.status).toBe('UNVERIFIED');
+      expect(integrity.isCompleteHistory).toBe(false);
+      expect(integrity.reason).toMatch(/periodo #1 pero gameHistory contiene 1 entrada/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      const matchAfter = await db.matches.get(matchId);
+      expect(matchAfter?.localScore).toBe(2);
+    });
+
+    // --- C-03: Validación exhaustiva de números de periodo finitos y enteros positivos ---
+    it('C-03.1: isFinitePositiveInteger valida estrictamente enteros positivos finitos', () => {
+      // Inválidos
+      expect(isFinitePositiveInteger(0)).toBe(false);
+      expect(isFinitePositiveInteger(-1)).toBe(false);
+      expect(isFinitePositiveInteger(-100)).toBe(false);
+      expect(isFinitePositiveInteger(2.5)).toBe(false);
+      expect(isFinitePositiveInteger(0.1)).toBe(false);
+      expect(isFinitePositiveInteger(NaN)).toBe(false);
+      expect(isFinitePositiveInteger(Infinity)).toBe(false);
+      expect(isFinitePositiveInteger(-Infinity)).toBe(false);
+      expect(isFinitePositiveInteger(undefined)).toBe(false);
+      expect(isFinitePositiveInteger(null)).toBe(false);
+      expect(isFinitePositiveInteger('1')).toBe(false);
+      expect(isFinitePositiveInteger(true)).toBe(false);
+      expect(isFinitePositiveInteger({})).toBe(false);
+      expect(isFinitePositiveInteger([])).toBe(false);
+
+      // Válidos
+      expect(isFinitePositiveInteger(1)).toBe(true);
+      expect(isFinitePositiveInteger(2)).toBe(true);
+      expect(isFinitePositiveInteger(10)).toBe(true);
+      expect(isFinitePositiveInteger(999)).toBe(true);
+    });
+
+    it('C-03.2: resolveEffectivePeriod en Race rechaza 0, -1, 2.5, NaN, Infinity y valores ausentes', () => {
+      const baseMatch: Match = {
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 1, hasRematches: false },
+        },
+      };
+
+      const testCases = [0, -1, 2.5, NaN, Infinity, -Infinity, undefined];
+
+      for (const val of testCases) {
+        const testMatch: Match = {
+          ...baseMatch,
+          config: {
+            mode: 'race',
+            race: { targetScore: 21, currentGame: val as unknown as number, hasRematches: false },
+          },
+        };
+
+        const res = ScoreIntegrityService.resolveEffectivePeriod(testMatch);
+        expect(res.isAmbiguous).toBe(true);
+        expect(res.reason).toMatch(/entero positivo finito/i);
+      }
+
+      // Valores válidos
+      const valid1 = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        config: { mode: 'race', race: { targetScore: 21, currentGame: 1, hasRematches: false } },
+      });
+      expect(valid1.isAmbiguous).toBe(false);
+      expect(valid1.period).toBe(1);
+
+      const valid3 = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        config: { mode: 'race', race: { targetScore: 21, currentGame: 3, hasRematches: false } },
+      });
+      expect(valid3.isAmbiguous).toBe(false);
+      expect(valid3.period).toBe(3);
+    });
+
+    it('C-03.3: resolveEffectivePeriod en Best-of-Series rechaza periodos no enteros finitos o ausentes', () => {
+      const baseMatch: Match = {
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        config: {
+          mode: 'best-of-series',
+          bestOf: { totalGames: 3, targetScorePerGame: 21, currentGame: 1, wins: { local: 0, visitor: 0 } },
+        },
+      };
+
+      const invalidValues = [0, -1, 2.5, NaN, Infinity, -Infinity];
+
+      // Probar en currentQuarter
+      for (const val of invalidValues) {
+        const testMatch: Match = {
+          ...baseMatch,
+          currentQuarter: val as unknown as number,
+        };
+        const res = ScoreIntegrityService.resolveEffectivePeriod(testMatch);
+        expect(res.isAmbiguous).toBe(true);
+        expect(res.reason).toMatch(/entero positivo finito/i);
+      }
+
+      // Probar en config.bestOf.currentGame
+      for (const val of invalidValues) {
+        const testMatch: Match = {
+          ...baseMatch,
+          currentQuarter: undefined,
+          config: {
+            mode: 'best-of-series',
+            bestOf: { totalGames: 3, targetScorePerGame: 21, currentGame: val as unknown as number, wins: { local: 0, visitor: 0 } },
+          },
+        };
+        const res = ScoreIntegrityService.resolveEffectivePeriod(testMatch);
+        expect(res.isAmbiguous).toBe(true);
+        expect(res.reason).toMatch(/entero positivo finito/i);
+      }
+
+      // Ambos ausentes
+      const testMatchBothMissing: Match = {
+        ...baseMatch,
+        currentQuarter: undefined,
+        config: {
+          mode: 'best-of-series',
+          bestOf: { totalGames: 3, targetScorePerGame: 21, currentGame: undefined as unknown as number, wins: { local: 0, visitor: 0 } },
+        },
+      };
+      const resMissing = ScoreIntegrityService.resolveEffectivePeriod(testMatchBothMissing);
+      expect(resMissing.isAmbiguous).toBe(true);
+      expect(resMissing.reason).toMatch(/ni currentQuarter ni config\.bestOf\.currentGame están definidos/i);
+
+      // Contradictorios
+      const resContradictory = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        currentQuarter: 1,
+        config: {
+          mode: 'best-of-series',
+          bestOf: { totalGames: 3, targetScorePerGame: 21, currentGame: 2, wins: { local: 0, visitor: 0 } },
+        },
+      });
+      expect(resContradictory.isAmbiguous).toBe(true);
+      expect(resContradictory.reason).toMatch(/Contradicción en Best-of-Series/i);
+
+      // Coincidentes y válidos
+      const resValid = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        currentQuarter: 2,
+        config: {
+          mode: 'best-of-series',
+          bestOf: { totalGames: 3, targetScorePerGame: 21, currentGame: 2, wins: { local: 0, visitor: 0 } },
+        },
+      });
+      expect(resValid.isAmbiguous).toBe(false);
+      expect(resValid.period).toBe(2);
+    });
+
+    it('C-03.4: resolveEffectivePeriod en Traditional valida enteros positivos finitos y tolera undefined', () => {
+      const baseMatch: Match = {
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        config: { mode: 'traditional' },
+      };
+
+      const invalidValues = [0, -1, 2.5, NaN, Infinity, -Infinity];
+      for (const val of invalidValues) {
+        const testMatch: Match = {
+          ...baseMatch,
+          currentQuarter: val as unknown as number,
+        };
+        const res = ScoreIntegrityService.resolveEffectivePeriod(testMatch);
+        expect(res.isAmbiguous).toBe(true);
+        expect(res.reason).toMatch(/entero positivo finito/i);
+      }
+
+      // undefined es la regla deportiva estándar para periodo 1 en Traditional
+      const resUndef = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        currentQuarter: undefined,
+      });
+      expect(resUndef.isAmbiguous).toBe(false);
+      expect(resUndef.period).toBe(1);
+
+      // Valor válido
+      const resValid = ScoreIntegrityService.resolveEffectivePeriod({
+        ...baseMatch,
+        currentQuarter: 3,
+      });
+      expect(resValid.isAmbiguous).toBe(false);
+      expect(resValid.period).toBe(3);
+    });
+
+    it('C-03.5: undoLastAction rechaza inmediatamente ante un periodo ambiguo o inválido', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        eventsProvenance: 'live_session',
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 2.5 as unknown as number, hasRematches: false },
+        },
+        localScore: 2,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      await expect(
+        GameActionsRepository.undoLastAction(matchId)
+      ).rejects.toThrow(/Periodo no verificable/i);
     });
   });
 });

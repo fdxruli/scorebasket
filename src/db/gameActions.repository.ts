@@ -124,6 +124,13 @@ export const GameActionsRepository = {
           throw new Error(`Historial no verificable: la eliminación está bloqueada porque no se pudo acreditar la integridad (${integrity.reason ?? 'estado no verificable'}).`);
         }
 
+        // C-01 (R1.5.1): Exigir acreditación fehaciente de procedencia y completitud histórica.
+        // Si el marcador es matemáticamente consistente pero no cuenta con procedencia acreditada (isCompleteHistory === false),
+        // rechazar la eliminación destructiva sin modificar IndexedDB.
+        if (!integrity.isCompleteHistory) {
+          throw new Error(`Historial no verificable: la eliminación está bloqueada porque no se pudo acreditar la completitud y procedencia de los eventos (${integrity.reason ?? 'procedencia no acreditada'}).`);
+        }
+
         // 11. Borrar la anotación y actualizar el marcador atómicamente
         await db.scores.delete(actionId);
 
@@ -153,8 +160,8 @@ export const GameActionsRepository = {
         const remainingScores = await db.scores.where('matchId').equals(matchId).toArray();
         const postIntegrity = ScoreIntegrityService.verifyScoreIntegrity(updatedMatch, remainingScores);
 
-        if (postIntegrity.status !== 'CONSISTENT') {
-          throw new Error(`Inconsistencia posterior detectada: la eliminación produce un estado inválido (${postIntegrity.reason ?? 'marcador no consistente'}).`);
+        if (postIntegrity.status !== 'CONSISTENT' || !postIntegrity.isCompleteHistory) {
+          throw new Error(`Inconsistencia posterior detectada: la eliminación produce un estado inválido (${postIntegrity.reason ?? 'marcador no consistente o procedencia no acreditada'}).`);
         }
 
         return {
@@ -224,7 +231,11 @@ export const GameActionsRepository = {
         throw new Error('El partido ya finalizó');
       }
 
-      const currentPeriod = getCurrentActionPeriod(currentMatch);
+      const periodRes = ScoreIntegrityService.resolveEffectivePeriod(currentMatch);
+      if (periodRes.isAmbiguous) {
+        throw new Error(`Periodo no verificable: ${periodRes.reason}`);
+      }
+      const currentPeriod = periodRes.period;
 
       const [scores, fouls] = await Promise.all([
         db.scores.where('matchId').equals(matchId).toArray(),

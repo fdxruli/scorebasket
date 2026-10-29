@@ -32,6 +32,7 @@ describe('SB-02: Eliminación Atómica e Idempotente de Jugadas', () => {
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 0,

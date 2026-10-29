@@ -33,6 +33,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 10, // DISCREPANCIA INTENCIONAL: marcador almacenado = 10
@@ -86,6 +87,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: { mode: 'traditional' },
       currentQuarter: 1,
       localScore: 1, // Marcador corrupto menor que la jugada real (3 pts)
@@ -124,6 +126,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: {
@@ -228,6 +231,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'best-of-series',
         bestOf: {
@@ -288,6 +292,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: { targetScore: 21, currentGame: 2, hasRematches: true },
@@ -326,6 +331,7 @@ describe('R1.3-B: Diagnóstico de Autoridad de Marcadores y Riesgos SB-02', () =
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'traditional',
         traditional: { totalQuarters: 4, minutesPerQuarter: 10, timeoutsPerTeam: 3 },

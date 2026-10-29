@@ -27,8 +27,16 @@ export interface HistoryValidationResult {
 }
 
 /**
- * Valida la identidad, continuidad e integridad del historial de juegos/sets (R1.5).
+ * Validador de periodos como enteros positivos finitos (>= 1) (R1.5.1 / C-03).
+ */
+export function isFinitePositiveInteger(val: unknown): val is number {
+  return typeof val === 'number' && Number.isFinite(val) && Number.isInteger(val) && val >= 1;
+}
+
+/**
+ * Valida la identidad, continuidad e integridad del historial de juegos/sets (R1.5 / R1.5.1).
  * - Identificadores enteros, positivos y únicos.
+ * - En periodo 1: cualquier entrada no vacía en gameHistory invalida el historial (C-02).
  * - Todos los periodos anteriores (1 .. effectivePeriod - 1) presentes exactamente una vez (sin huecos).
  * - Periodo actual no cerrado.
  * - Sin entradas futuras (gameNumber > effectivePeriod).
@@ -44,15 +52,14 @@ export function validateGameHistoryContinuity(params: {
 }): HistoryValidationResult {
   const { mode, effectivePeriod, history, bestOfWins } = params;
 
-  // Si estamos en el primer periodo (1), el historial debe estar vacío o no definido
+  // Si estamos en el primer periodo (1), el historial debe estar vacío o no definido (C-02 / R1.5.1)
+  // Cualquier entrada (números negativos, cero, fraccionarios, futuros o malformados) invalida el historial
   if (effectivePeriod === 1) {
     if (history && history.length > 0) {
-      if (history.some(g => g.gameNumber >= 1)) {
-        return {
-          isValid: false,
-          reason: `Historial anómalo: se disputa el periodo #1 pero gameHistory ya contiene entradas cerradas (${history.map(g => g.gameNumber).join(', ')}).`,
-        };
-      }
+      return {
+        isValid: false,
+        reason: `Historial anómalo: se disputa el periodo #1 pero gameHistory contiene ${history.length} entrada(s). En el periodo 1 el historial debe estar vacío.`,
+      };
     }
     return { isValid: true };
   }
@@ -70,8 +77,8 @@ export function validateGameHistoryContinuity(params: {
   let recordedVisitorWins = 0;
 
   for (const g of history) {
-    // 1. Identificador entero y positivo
-    if (typeof g.gameNumber !== 'number' || !Number.isInteger(g.gameNumber) || g.gameNumber <= 0) {
+    // 1. Identificador entero y positivo finito
+    if (!isFinitePositiveInteger(g.gameNumber)) {
       return {
         isValid: false,
         reason: `Identificador de juego inválido en gameHistory: "${g.gameNumber}" no es un entero positivo.`,
@@ -81,9 +88,11 @@ export function validateGameHistoryContinuity(params: {
     // 2. Resultados malformados: puntuaciones
     if (
       typeof g.localScore !== 'number' ||
+      !Number.isFinite(g.localScore) ||
       !Number.isInteger(g.localScore) ||
       g.localScore < 0 ||
       typeof g.visitorScore !== 'number' ||
+      !Number.isFinite(g.visitorScore) ||
       !Number.isInteger(g.visitorScore) ||
       g.visitorScore < 0
     ) {
@@ -218,20 +227,21 @@ function hasVerifiableEventEvidence(params: {
 
 export const ScoreIntegrityService = {
   /**
-   * Resuelve el periodo vigente para registro o verificación de jugadas.
+   * Resuelve el periodo vigente para registro o verificación de jugadas (R1.5 / R1.5.1).
+   * Valida que los números de periodo sean enteros positivos y finitos (C-03).
    * En Best-of-Series valida la coherencia entre currentQuarter y config.bestOf.currentGame.
-   * Si son contradictorios, marca el resultado como ambiguo (isAmbiguous = true).
+   * Si son contradictorios o no válidos, marca el resultado como ambiguo (isAmbiguous = true).
    */
   resolveEffectivePeriod(match: Match): PeriodResolutionResult {
     const mode = match.config?.mode || 'traditional';
 
     if (mode === 'race') {
       const currentGame = match.config?.race?.currentGame;
-      if (typeof currentGame !== 'number' || currentGame < 1) {
+      if (!isFinitePositiveInteger(currentGame)) {
         return {
           period: 1,
           isAmbiguous: true,
-          reason: 'Configuración de Race inválida: currentGame debe ser un entero >= 1.',
+          reason: `Configuración de Race inválida: currentGame debe ser un entero positivo finito (recibido: ${currentGame}).`,
         };
       }
       return { period: currentGame, isAmbiguous: false };
@@ -240,6 +250,30 @@ export const ScoreIntegrityService = {
     if (mode === 'best-of-series') {
       const q = match.currentQuarter;
       const bg = match.config?.bestOf?.currentGame;
+
+      if (q === undefined && bg === undefined) {
+        return {
+          period: 1,
+          isAmbiguous: true,
+          reason: 'No fue posible identificar el set actual en Best-of-Series: ni currentQuarter ni config.bestOf.currentGame están definidos.',
+        };
+      }
+
+      if (q !== undefined && !isFinitePositiveInteger(q)) {
+        return {
+          period: 1,
+          isAmbiguous: true,
+          reason: `Configuración de Best-of-Series inválida: currentQuarter debe ser un entero positivo finito (recibido: ${q}).`,
+        };
+      }
+
+      if (bg !== undefined && !isFinitePositiveInteger(bg)) {
+        return {
+          period: 1,
+          isAmbiguous: true,
+          reason: `Configuración de Best-of-Series inválida: config.bestOf.currentGame debe ser un entero positivo finito (recibido: ${bg}).`,
+        };
+      }
 
       if (q !== undefined && bg !== undefined && q !== bg) {
         return {
@@ -250,7 +284,7 @@ export const ScoreIntegrityService = {
       }
 
       const resolved = q ?? bg;
-      if (typeof resolved !== 'number' || resolved < 1) {
+      if (!isFinitePositiveInteger(resolved)) {
         return {
           period: 1,
           isAmbiguous: true,
@@ -262,8 +296,17 @@ export const ScoreIntegrityService = {
     }
 
     // Traditional
+    const q = match.currentQuarter;
+    if (q !== undefined && !isFinitePositiveInteger(q)) {
+      return {
+        period: 1,
+        isAmbiguous: true,
+        reason: `Configuración de Traditional inválida: currentQuarter debe ser un entero positivo finito (recibido: ${q}).`,
+      };
+    }
+
     return {
-      period: match.currentQuarter || 1,
+      period: q ?? 1,
       isAmbiguous: false,
     };
   },
@@ -373,7 +416,9 @@ export const ScoreIntegrityService = {
         storedScore,
         computedScore,
         discrepancy,
-        reason: isConsistent ? undefined : 'Discrepancia entre marcador almacenado y suma de anotaciones.',
+        reason: isConsistent
+          ? (!isCompleteHistory ? 'Marcador consistente aritméticamente pero procedencia de eventos no acreditada.' : undefined)
+          : 'Discrepancia entre marcador almacenado y suma de anotaciones.',
         isCompleteHistory,
       };
     }
@@ -456,7 +501,9 @@ export const ScoreIntegrityService = {
         storedScore,
         computedScore,
         discrepancy,
-        reason: isConsistent ? undefined : 'Discrepancia entre marcador del juego actual y jugadas del periodo.',
+        reason: isConsistent
+          ? (!isCompleteHistory ? 'Marcador del juego actual consistente aritméticamente pero procedencia de eventos no acreditada.' : undefined)
+          : 'Discrepancia entre marcador del juego actual y jugadas del periodo.',
         isCompleteHistory,
       };
     }
@@ -540,7 +587,9 @@ export const ScoreIntegrityService = {
         storedScore,
         computedScore,
         discrepancy,
-        reason: isConsistent ? undefined : 'Discrepancia entre marcador del set actual y jugadas del periodo.',
+        reason: isConsistent
+          ? (!isCompleteHistory ? 'Marcador del set actual consistente aritméticamente pero procedencia de eventos no acreditada.' : undefined)
+          : 'Discrepancia entre marcador del set actual y jugadas del periodo.',
         isCompleteHistory,
       };
     }

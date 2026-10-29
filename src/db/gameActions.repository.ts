@@ -1,6 +1,7 @@
 // src/db/gameActions.repository.ts
 import { db } from './db';
 import type { Score, Match } from './models';
+import { ScoreIntegrityService } from './scoreIntegrity.service';
 
 export interface DeleteActionResult {
   success: boolean;
@@ -13,17 +14,8 @@ export interface DeleteActionResult {
 }
 
 export function getCurrentActionPeriod(match: Match): number {
-  const mode = match.config?.mode || 'traditional';
-
-  if (mode === 'race') {
-    return match.config?.race?.currentGame || 1;
-  }
-
-  if (mode === 'best-of-series') {
-    return match.currentQuarter || match.config?.bestOf?.currentGame || 1;
-  }
-
-  return match.currentQuarter || 1;
+  const periodRes = ScoreIntegrityService.resolveEffectivePeriod(match);
+  return periodRes.period;
 }
 
 const getLatestByCreatedAt = <T extends { createdAt: Date }>(items: T[]): T | undefined => {
@@ -32,9 +24,14 @@ const getLatestByCreatedAt = <T extends { createdAt: Date }>(items: T[]): T | un
 
 export const GameActionsRepository = {
   /**
-   * Eliminación atómica e idempotente de una anotación o falta.
-   * Garantiza que la acción exista antes de descontar del marcador y que no se apliquen
-   * descuentos duplicados si se llama dos veces para la misma acción.
+   * Eliminación atómica, idempotente y con validación de contrato de integridad (SB-02 / R1.4).
+   * 1. Abre transacción de escritura en matches, scores y fouls.
+   * 2. Verifica la existencia del partido y la acción solicitada (idempotente si ya fue borrada).
+   * 3. Valida pertenencia al partido y equipos involucrados.
+   * 4. Resuelve periodo vigente según modalidad y rechaza periodos cerrados o registrados en gameHistory.
+   * 5. Evalúa el contrato de integridad del marcador: rechaza discrepancias preexistentes e historiales no acreditables.
+   * 6. Rechaza subdesbordamientos (marcador inferior a la anotación).
+   * 7. Borra la acción y descuenta del marcador de forma atómica y consistente.
    */
   async deleteActionSafely(params: {
     matchId: number;
@@ -55,8 +52,7 @@ export const GameActionsRepository = {
         ? await db.scores.get(actionId)
         : await db.fouls.get(actionId);
 
-      // 6. Verificar que la acción todavía existe
-      // Si ya no existe (ej. llamada duplicada o concurrente), retornar sin modificar nada
+      // Si ya no existe (ej. llamada duplicada o concurrente), retornar sin modificar nada (idempotente)
       if (!action) {
         return {
           success: false,
@@ -75,28 +71,68 @@ export const GameActionsRepository = {
         throw new Error('El equipo de la acción no corresponde a este partido.');
       }
 
-      // 5. Comprobar que se permite corregir ese periodo según la modalidad
+      // 5. Resolver modalidad y periodo efectivo
       const mode = match.config?.mode || 'traditional';
-      const currentPeriod = getCurrentActionPeriod(match);
+      const periodRes = ScoreIntegrityService.resolveEffectivePeriod(match);
+      if (periodRes.isAmbiguous) {
+        throw new Error(`Periodo no verificable: ${periodRes.reason}`);
+      }
+      const currentPeriod = periodRes.period;
 
+      // 6. Rechazar periodos cerrados en Race y Best-of-Series
       if ((mode === 'race' || mode === 'best-of-series') && action.quarter !== currentPeriod) {
         throw new Error('No se pueden eliminar acciones de juegos o sets anteriores ya cerrados.');
       }
 
+      // Rechazar modificaciones de Race / Series si el partido ya finalizó
+      if ((mode === 'race' || mode === 'best-of-series') && match.status === 'finished') {
+        throw new Error('No se pueden eliminar acciones de un partido finalizado en esta modalidad deportiva.');
+      }
+
+      // 7. Verificar si el juego o set está registrado en gameHistory
+      if (match.gameHistory?.some(g => g.gameNumber === action.quarter)) {
+        throw new Error('No se pueden eliminar acciones de un juego o set ya registrado y cerrado en el historial.');
+      }
+
       const isLocal = action.teamId === match.localTeamId;
 
-      // 7. Eliminar el registro
-      // 8. Actualizar el marcador o contador correspondiente (sin permitir negativos)
+      // 8, 9, 10, 11, 12: Integridad y actualización
       if (type === 'score') {
         const scoreItem = action as Score;
-        await db.scores.delete(actionId);
-
-        const currentLocal = match.localScore || 0;
-        const currentVisitor = match.visitorScore || 0;
+        const currentLocal = match.localScore ?? 0;
+        const currentVisitor = match.visitorScore ?? 0;
         const points = scoreItem.points || 0;
 
-        const newLocal = isLocal ? Math.max(0, currentLocal - points) : currentLocal;
-        const newVisitor = !isLocal ? Math.max(0, currentVisitor - points) : currentVisitor;
+        // Detección de subdesbordamiento: no permitir que el marcador sea menor que los puntos
+        const relevantStoredScore = isLocal ? currentLocal : currentVisitor;
+        if (relevantStoredScore < points) {
+          throw new Error('Subdesbordamiento de marcador detectado: los puntos almacenados son inferiores a la anotación a eliminar.');
+        }
+
+        // 8. Comprobar integridad del marcador antes de modificarlo
+        const matchScores = await db.scores.where('matchId').equals(matchId).toArray();
+        const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, matchScores);
+
+        // 9. Rechazar operaciones que partan de una discrepancia comprobada
+        if (integrity.status === 'INCONSISTENT') {
+          throw new Error(`Discrepancia detectada en el marcador: la eliminación de anotaciones está bloqueada para preservar la integridad (${integrity.reason ?? 'marcador desincronizado'}).`);
+        }
+
+        // 10. No modificar el marcador ni la anotación si la integridad no puede acreditarse
+        if (integrity.status === 'UNVERIFIED') {
+          throw new Error(`Historial no verificable: la eliminación está bloqueada porque no se pudo acreditar la integridad (${integrity.reason ?? 'estado no verificable'}).`);
+        }
+
+        // 11. Cuando la operación está autorizada, borrar la anotación y actualizar el marcador atómicamente
+        await db.scores.delete(actionId);
+
+        const newLocal = isLocal ? currentLocal - points : currentLocal;
+        const newVisitor = !isLocal ? currentVisitor - points : currentVisitor;
+
+        // 12. Verificar que el estado posterior conserva la consistencia (sin números negativos)
+        if (newLocal < 0 || newVisitor < 0) {
+          throw new Error('Invariante violado: el marcador resultante contiene valores negativos.');
+        }
 
         await db.matches.update(matchId, {
           localScore: newLocal,
@@ -110,13 +146,23 @@ export const GameActionsRepository = {
           newScore: { local: newLocal, visitor: newVisitor }
         };
       } else {
+        // Manejo de Faltas
+        const currentLocalFouls = match.localFouls ?? 0;
+        const currentVisitorFouls = match.visitorFouls ?? 0;
+
+        const relevantFouls = isLocal ? currentLocalFouls : currentVisitorFouls;
+        if (relevantFouls < 1) {
+          throw new Error('Subdesbordamiento de faltas detectado: el contador actual es inferior a 1.');
+        }
+
         await db.fouls.delete(actionId);
 
-        const currentLocalFouls = match.localFouls || 0;
-        const currentVisitorFouls = match.visitorFouls || 0;
+        const newLocalFouls = isLocal ? currentLocalFouls - 1 : currentLocalFouls;
+        const newVisitorFouls = !isLocal ? currentVisitorFouls - 1 : currentVisitorFouls;
 
-        const newLocalFouls = isLocal ? Math.max(0, currentLocalFouls - 1) : currentLocalFouls;
-        const newVisitorFouls = !isLocal ? Math.max(0, currentVisitorFouls - 1) : currentVisitorFouls;
+        if (newLocalFouls < 0 || newVisitorFouls < 0) {
+          throw new Error('Invariante violado: el contador de faltas resultante es negativo.');
+        }
 
         await db.matches.update(matchId, {
           localFouls: newLocalFouls,

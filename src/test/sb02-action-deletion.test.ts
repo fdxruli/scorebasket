@@ -70,6 +70,13 @@ describe('SB-02: Eliminación Atómica e Idempotente de Jugadas', () => {
   });
 
   it('Eliminar una anotación de 2 puntos descuenta exactamente 2 puntos', async () => {
+    await db.scores.bulkAdd([
+      { matchId, teamId: visitorTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 4000) },
+      { matchId, teamId: visitorTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 3000) },
+      { matchId, teamId: visitorTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+      { matchId, teamId: visitorTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+    ]);
+
     const scoreId = (await db.scores.add({
       matchId,
       teamId: visitorTeamId,
@@ -94,6 +101,13 @@ describe('SB-02: Eliminación Atómica e Idempotente de Jugadas', () => {
   });
 
   it('Eliminar una anotación de 3 puntos descuenta exactamente 3 puntos', async () => {
+    await db.scores.bulkAdd([
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 4000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 3000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+    ]);
+
     const scoreId = (await db.scores.add({
       matchId,
       teamId: localTeamId,
@@ -141,6 +155,13 @@ describe('SB-02: Eliminación Atómica e Idempotente de Jugadas', () => {
   });
 
   it('Idempotencia: eliminar dos veces la misma anotación NO descuenta puntos dos veces', async () => {
+    await db.scores.bulkAdd([
+      { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 4000) },
+      { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 3000) },
+      { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+      { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+    ]);
+
     const scoreId = (await db.scores.add({
       matchId,
       teamId: localTeamId,
@@ -206,6 +227,15 @@ describe('SB-02: Eliminación Atómica e Idempotente de Jugadas', () => {
   });
 
   it('Dos solicitudes concurrentes sobre la misma acción solo descuentan una vez', async () => {
+    await db.scores.bulkAdd([
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 5000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 4000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 3000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+      { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 1500) },
+      { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+    ]);
+
     const scoreId = (await db.scores.add({
       matchId,
       teamId: localTeamId,

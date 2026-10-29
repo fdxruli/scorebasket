@@ -111,14 +111,18 @@ export function Scoreboard({
             return;
         }
 
+        // R1.3-A: Desbloquear AudioContext síncronamente en el evento directo del usuario
+        // antes de la primera espera asíncrona (IndexedDB transaction), para preservar el token
+        // de user activation en navegadores móviles (iOS Safari, Chrome Android).
+        unlockAudioContext();
+
         timeoutInFlightRef.current = true;
         try {
             // La validación de estado/límites, el incremento del contador y la pausa idempotente
             // del cronómetro ocurren de forma transaccional dentro de TimeoutService.requestTimeout().
-            // Nunca se invoca toggleTimer() y el sonido solo se emite si la solicitud fue concedida (R1.2-B).
+            // Nunca se invoca toggleTimer() y el silbato solo se emite si la solicitud fue concedida (R1.2-B / R1.3-A).
             await TimeoutService.requestTimeout(match.id, side, {
                 onGranted: () => {
-                    unlockAudioContext();
                     playWhistle();
                 }
             });

@@ -8,9 +8,34 @@ interface UseMatchTimerReturn {
   timeLeft: number;
   isRunning: boolean;
   toggleTimer: () => Promise<void>;
+  pauseTimer: () => Promise<void>;
   resetTimer: () => Promise<void>;
   adjustTime: (deltaSeconds: number) => Promise<void>;
   keepTimerRunningOnUnmount: () => void;
+}
+
+/**
+ * Pausa el cronómetro de un partido de forma transaccional e idempotente (R1.2-B).
+ * Si el reloj ya está pausado (`timerLastStart === undefined`), no realiza ningún descuento
+ * ni arranca accidentalmente el cronómetro.
+ */
+export async function pauseMatchTimerIdempotent(
+  matchId: number,
+  nowMs = Date.now()
+): Promise<boolean> {
+  return db.transaction('rw', db.matches, async () => {
+    const match = await db.matches.get(matchId);
+    if (!match || !match.timerLastStart) {
+      return false;
+    }
+
+    const elapsed = Math.max(0, (nowMs - match.timerLastStart.getTime()) / 1000);
+    await db.matches.update(matchId, {
+      timerLastStart: undefined,
+      timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
+    });
+    return true;
+  });
 }
 
 /**
@@ -68,7 +93,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   // ✅ Auto-pause cuando llega a 0
   useEffect(() => {
     if (timeLeft <= 0 && isRunning && match?.id) {
-      pauseTimer(match.id);
+      pauseMatchTimerIdempotent(match.id);
       if (enableAutoPause) {
         playBuzzer();
       }
@@ -82,7 +107,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
       // Usamos los REFS para leer el valor actual al momento de desmontar
       // sin importar si 'match' era undefined al principio.
       if (matchIdRef.current && shouldPauseOnUnmount.current) {
-        pauseTimer(matchIdRef.current);
+        pauseMatchTimerIdempotent(matchIdRef.current);
       }
     };
   }, []); // ✅ Array vacío - evita reconstrucciones del efecto
@@ -101,7 +126,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
 
       if (currentMatch.timerLastStart) {
         // Pausar
-        const elapsed = (Date.now() - currentMatch.timerLastStart.getTime()) / 1000;
+        const elapsed = Math.max(0, (Date.now() - currentMatch.timerLastStart.getTime()) / 1000);
         await db.matches.update(id!, {
           timerLastStart: undefined,
           // CORRECCIÓN 1: Añadir ( ... || 0) para evitar error con undefined
@@ -118,6 +143,11 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
         }
       }
     });
+  }, [match]);
+
+  const pauseTimer = useCallback(async () => {
+    if (!match?.id) return;
+    await pauseMatchTimerIdempotent(match.id);
   }, [match]);
 
   const resetTimer = useCallback(async () => {
@@ -152,7 +182,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
         timerLastStart: undefined
       });
     });
-  }, [match?.id, match?.timerLastStart]);
+  }, [match]);
 
   const keepTimerRunningOnUnmount = useCallback(() => {
     shouldPauseOnUnmount.current = false;
@@ -162,22 +192,9 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     timeLeft,
     isRunning,
     toggleTimer,
+    pauseTimer,
     resetTimer,
     adjustTime,
     keepTimerRunningOnUnmount
   };
-}
-
-// Helper para pausar (usado internamente)
-async function pauseTimer(matchId: number): Promise<void> {
-  const match = await db.matches.get(matchId);
-  if (!match || !match.timerLastStart) return;
-
-  const elapsed = (Date.now() - match.timerLastStart.getTime()) / 1000;
-
-  await db.matches.update(matchId, {
-    timerLastStart: undefined,
-    // CORRECCIÓN 3: Añadir ( ... || 0)
-    timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
-  });
 }

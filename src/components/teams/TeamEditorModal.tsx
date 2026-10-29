@@ -36,7 +36,8 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const [newPlayerNumber, setNewPlayerNumber] = useState('');
     const [newPlayerError, setNewPlayerError] = useState<string | null>(null);
 
-    // Mensajes de error general y de conflicto de concurrencia
+    // Mensajes de error de carga, error general y conflicto de concurrencia
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
     const [isConcurrencyConflict, setIsConcurrencyConflict] = useState(false);
 
@@ -49,27 +50,41 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const rowNumberRefs = useRef<Record<number, HTMLInputElement | null>>({});
     const rowNameRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
-    // 1. Cargar datos y capturar snapshot inicial (C-02)
+    // 1. Cargar datos y capturar snapshot inicial obligatorio (C-02 / R1.2-A)
     const loadData = useCallback(async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
             const team = await db.teams.get(teamId);
+            if (!team) {
+                setInitialSnapshot(undefined);
+                setPlayers([]);
+                setRemovedPlayerIds([]);
+                const notFoundMsg = 'No se encontró el equipo solicitado. No es posible guardar cambios.';
+                setLoadError(notFoundMsg);
+                setFormError(notFoundMsg);
+                return;
+            }
+
             const teamPlayers = await db.players
                 .where({ teamId })
                 .sortBy('number');
 
-            if (team) {
-                const activePlayers = teamPlayers.filter(isActivePlayer);
-                setTeamName(team.name);
-                setPlayers(toEditablePlayerRows(activePlayers));
-                setInitialSnapshot(createTeamRosterSnapshot(team.name, activePlayers));
-                setRemovedPlayerIds([]);
-                setFormError(null);
-                setIsConcurrencyConflict(false);
-            }
+            const activePlayers = teamPlayers.filter(isActivePlayer);
+            setTeamName(team.name);
+            setPlayers(toEditablePlayerRows(activePlayers));
+            setInitialSnapshot(createTeamRosterSnapshot(team.name, activePlayers));
+            setRemovedPlayerIds([]);
+            setFormError(null);
+            setIsConcurrencyConflict(false);
         } catch (err) {
             console.error('Error cargando equipo', err);
-            setFormError('No se pudo cargar la información del equipo.');
+            setInitialSnapshot(undefined);
+            setPlayers([]);
+            setRemovedPlayerIds([]);
+            const errMsg = 'No se pudo cargar la información del equipo. Reintenta antes de guardar.';
+            setLoadError(errMsg);
+            setFormError(errMsg);
         } finally {
             setIsLoading(false);
         }
@@ -111,6 +126,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     };
 
     const handleAddPlayer = () => {
+        if (loadError || !initialSnapshot) return;
         if (!newPlayerName.trim()) return;
 
         const draftResult = validateNewPlayerDraft(players, newPlayerName, newPlayerNumber);
@@ -132,6 +148,15 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     };
 
     const handleSave = async () => {
+        // Evitar modificar registros si hubo error de carga o no existe snapshot inicial válido (R1.2-A)
+        if (isLoading || loadError || !initialSnapshot) {
+            setFormError(
+                loadError ||
+                    'No se dispone de una instantánea válida de la plantilla. Recarga antes de guardar.'
+            );
+            return;
+        }
+
         if (!teamName.trim()) {
             setFormError('El nombre del equipo no puede estar vacío.');
             return;
@@ -196,6 +221,8 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
 
     if (isLoading) return null;
 
+    const isFormBlocked = Boolean(loadError) || !initialSnapshot;
+
     return (
         <div className="modal-overlay">
             <div className="modal-content variant-admin">
@@ -242,7 +269,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 <AlertCircle size={16} color="#f43f5e" />
                                 <span>{formError}</span>
                             </div>
-                            {isConcurrencyConflict && (
+                            {(isConcurrencyConflict || Boolean(loadError)) && (
                                 <button
                                     type="button"
                                     onClick={loadData}
@@ -263,6 +290,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                             type="text"
                             className="input"
                             value={teamName}
+                            disabled={isFormBlocked}
                             onChange={(e) => {
                                 setFormError(null);
                                 setTeamName(e.target.value);
@@ -325,6 +353,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                                 }}
                                                 type="text"
                                                 inputMode="numeric"
+                                                disabled={isFormBlocked}
                                                 className="player-edit-input player-number-input"
                                                 style={{
                                                     width: '56px',
@@ -344,6 +373,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                                 rowNameRefs.current[idx] = el;
                                             }}
                                             type="text"
+                                            disabled={isFormBlocked}
                                             className="player-edit-input"
                                             style={{
                                                 borderColor: p.nameError ? 'var(--danger)' : undefined
@@ -357,6 +387,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                         {/* Botón Quitar de plantilla */}
                                         <button
                                             onClick={() => handleDeletePlayer(idx)}
+                                            disabled={isFormBlocked}
                                             className="btn-icon danger"
                                             style={{ padding: '0.375rem', borderRadius: '0.25rem' }}
                                             title="Quitar de la plantilla activa sin borrar historial"
@@ -392,6 +423,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                         ref={newPlayerNumberRef}
                                         type="text"
                                         inputMode="numeric"
+                                        disabled={isFormBlocked}
                                         className="input"
                                         style={{
                                             width: '74px',
@@ -410,6 +442,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 <input
                                     ref={newPlayerInputRef}
                                     type="text"
+                                    disabled={isFormBlocked}
                                     className="input"
                                     style={{ flex: 1, fontSize: '0.9rem' }}
                                     placeholder="Nombre jugador"
@@ -421,7 +454,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 <button
                                     onClick={handleAddPlayer}
                                     className="btn btn-primary"
-                                    disabled={!newPlayerName.trim()}
+                                    disabled={isFormBlocked || !newPlayerName.trim()}
                                     style={{ padding: '0.5rem 0.75rem' }}
                                 >
                                     <Plus size={18} />
@@ -451,7 +484,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={isSaving}
+                        disabled={isSaving || isFormBlocked}
                         className="btn btn-primary"
                     >
                         <Save size={18} />

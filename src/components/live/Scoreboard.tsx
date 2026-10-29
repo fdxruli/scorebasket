@@ -1,5 +1,5 @@
 // src/components/live/Scoreboard.tsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Pencil, Clock, Check, X } from 'lucide-react';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
@@ -41,7 +41,6 @@ export function Scoreboard({
     showFouls = true,
     showCenterTimer = false,
     onTimerClick,
-    onToggleTimer,
     localTeamId,
     visitorTeamId
 }: ScoreboardProps) {
@@ -52,6 +51,7 @@ export function Scoreboard({
     const [editingSide, setEditingSide] = useState<'local' | 'visitor' | null>(null);
     const [draftName, setDraftName] = useState('');
     const [renameError, setRenameError] = useState<string | null>(null);
+    const timeoutInFlightRef = useRef(false);
 
     const startEditing = (side: 'local' | 'visitor', currentName: string) => {
         const teamId = side === 'local' ? resolvedLocalId : resolvedVisitorId;
@@ -102,7 +102,7 @@ export function Scoreboard({
     const maxTimeouts = match?.config?.traditional?.timeoutsPerTeam ?? 3;
 
     const handleTimeoutClick = async (side: 'local' | 'visitor') => {
-        if (!match?.id) return;
+        if (!match?.id || timeoutInFlightRef.current) return;
 
         const currentCount = (side === 'local' ? match.localTimeouts : match.visitorTimeouts) ?? 0;
 
@@ -111,26 +111,20 @@ export function Scoreboard({
             return;
         }
 
-        unlockAudioContext();
-
-        // 1. Si el reloj está corriendo, pausarlo automáticamente
-        if (isTimerRunning) {
-            if (onToggleTimer) {
-                await onToggleTimer();
-            } else if (match.timerLastStart) {
-                const elapsed = (Date.now() - match.timerLastStart.getTime()) / 1000;
-                await db.matches.update(match.id, {
-                    timerLastStart: undefined,
-                    timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
-                });
-            }
+        timeoutInFlightRef.current = true;
+        try {
+            // La validación de estado/límites, el incremento del contador y la pausa idempotente
+            // del cronómetro ocurren de forma transaccional dentro de TimeoutService.requestTimeout().
+            // Nunca se invoca toggleTimer() y el sonido solo se emite si la solicitud fue concedida (R1.2-B).
+            await TimeoutService.requestTimeout(match.id, side, {
+                onGranted: () => {
+                    unlockAudioContext();
+                    playWhistle();
+                }
+            });
+        } finally {
+            timeoutInFlightRef.current = false;
         }
-
-        // 2. Sonar silbato de árbitro
-        playWhistle();
-
-        // 3. Incrementar contador de tiempos fuera de forma segura y atómica
-        await TimeoutService.requestTimeout(match.id, side);
     };
 
     const canEditTimer = Boolean(onTimerClick) && !isTimerRunning;

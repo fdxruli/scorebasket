@@ -23,7 +23,7 @@ export interface PlayerSnapshotItem {
 }
 
 export interface TeamRosterSnapshot {
-  teamName?: string;
+  teamName: string;
   players: PlayerSnapshotItem[];
 }
 
@@ -32,15 +32,16 @@ export interface SaveTeamAndRosterParams {
   teamName: string;
   players: Array<{ id?: number; name: string; number?: string | number | null }>;
   /**
-   * Snapshot opcional del estado inicial cargado al abrir el editor (C-02).
-   * Cuando se proporciona:
-   * - Detecta modificaciones concurrentes externas en nombre del equipo o en jugadores existentes.
-   * - Solo archiva jugadores que estaban presentes en el snapshot inicial y fueron retirados en el editor.
-   * - Preserva jugadores agregados concurrentemente desde otra pestaña/operación sin archivarlos.
+   * Snapshot obligatorio del estado inicial cargado al abrir el editor (C-02 / R1.2-A).
+   * Garantiza que:
+   * - Nunca se archiven jugadores por la simple ausencia de sus IDs en una solicitud sin snapshot válido.
+   * - Se detecten modificaciones concurrentes externas en el nombre del equipo o en jugadores existentes.
+   * - Se preserven los jugadores agregados desde otras pestañas mientras el editor estaba abierto.
    */
-  initialSnapshot?: TeamRosterSnapshot;
+  initialSnapshot: TeamRosterSnapshot;
   /**
-   * Lista explícita opcional de IDs de jugadores eliminados intencionalmente.
+   * Lista explícita de IDs de jugadores del snapshot inicial que el usuario decidió retirar.
+   * Cualquier jugador del snapshot inicial que no aparezca en `players` debe estar declarado aquí.
    */
   removedPlayerIds?: number[];
 }
@@ -149,6 +150,56 @@ export const PlayersRepository = {
         isArchived: true,
         archivedAt: new Date()
       });
+    });
+  },
+
+  /**
+   * Operación explícita y separada para dar de baja (archivar) jugadores específicos de un equipo (R1.2-A).
+   * Verifica transaccionalmente que el equipo exista y que todos los IDs indicados pertenezcan a dicho equipo
+   * y estén activos antes de archivarlos.
+   */
+  async removePlayersFromRoster(teamId: number, playerIds: number[]): Promise<void> {
+    if (!Array.isArray(playerIds) || playerIds.length === 0) {
+      throw new Error('Debes especificar al menos un jugador para retirar de la plantilla.');
+    }
+
+    return db.transaction('rw', db.teams, db.players, async () => {
+      const team = await db.teams.get(teamId);
+      if (!team) {
+        throw new Error('El equipo no existe.');
+      }
+
+      const uniqueIds = new Set<number>();
+      for (const id of playerIds) {
+        if (typeof id !== 'number' || !Number.isInteger(id)) {
+          throw new Error('Identificador de jugador inválido.');
+        }
+        if (uniqueIds.has(id)) {
+          throw new Error(`El identificador de jugador #${id} está duplicado en la solicitud de baja.`);
+        }
+        uniqueIds.add(id);
+
+        const existing = await db.players.get(id);
+        if (!existing) {
+          throw new Error(`El jugador con ID #${id} no existe.`);
+        }
+        if (existing.teamId !== teamId) {
+          throw new Error(
+            `El jugador con ID #${id} pertenece a otro equipo y no puede retirarse desde esta plantilla.`
+          );
+        }
+        if (existing.isArchived) {
+          throw new Error(`El jugador "${existing.name}" (ID #${id}) ya se encuentra archivado.`);
+        }
+      }
+
+      const archivedAt = new Date();
+      for (const id of uniqueIds) {
+        await db.players.update(id, {
+          isArchived: true,
+          archivedAt
+        });
+      }
     });
   },
 
@@ -274,19 +325,34 @@ export const PlayersRepository = {
   },
 
   /**
-   * Guarda de forma atómica el nombre del equipo y la plantilla completa (C-01 y C-02):
-   * 1. Obtiene y verifica la existencia del equipo actual.
-   * 2. Valida el nombre del equipo sin mutarlo prematuramente.
-   * 3. Obtiene los jugadores actuales del equipo.
-   * 4. Verifica el snapshot inicial si se proporciona (control de concurrencia optimista C-02).
+   * Guarda de forma atómica el nombre del equipo y la plantilla completa (C-01, C-02 y R1.2-A):
+   * 1. Exige un `initialSnapshot` válido. Nunca archiva jugadores por simple omisión en solicitudes sin snapshot.
+   * 2. Obtiene y verifica la existencia del equipo actual.
+   * 3. Valida el nombre del equipo sin mutarlo prematuramente.
+   * 4. Obtiene los jugadores actuales del equipo y verifica el snapshot inicial (control de concurrencia optimista C-02).
    * 5. Examina todos los IDs recibidos: rechaza IDs duplicados, inexistentes, de otros equipos o archivados (C-01).
-   * 6. Valida nombres, dorsales y duplicados contra la lista enviada y contra jugadores agregados concurrentemente.
-   * 7. Aplica las modificaciones en BD únicamente cuando todas las validaciones han concluido con éxito.
+   * 6. Exige que cualquier jugador del snapshot inicial que no continúe en `players` esté explícitamente declarado en `removedPlayerIds`.
+   * 7. Preserva jugadores agregados concurrentemente desde otra pestaña/operación validando no colisión de dorsales.
+   * 8. Aplica las modificaciones en BD únicamente cuando todas las validaciones han concluido con éxito.
    */
   async saveTeamAndRoster(params: SaveTeamAndRosterParams): Promise<void> {
     const { teamId, teamName, players, initialSnapshot, removedPlayerIds } = params;
 
     return db.transaction('rw', db.teams, db.players, async () => {
+      // 0. Validar contrato explícito de guardado: initialSnapshot obligatorio y bien formado (R1.2-A)
+      if (
+        !initialSnapshot ||
+        typeof initialSnapshot !== 'object' ||
+        typeof initialSnapshot.teamName !== 'string' ||
+        !initialSnapshot.teamName.trim() ||
+        !Array.isArray(initialSnapshot.players) ||
+        !Array.isArray(players)
+      ) {
+        throw new Error(
+          'Contrato de guardado inválido: se requiere un snapshot inicial válido (initialSnapshot) para guardar la plantilla.'
+        );
+      }
+
       // 1. Obtener el equipo actual y comprobar que existe
       const team = await db.teams.get(teamId);
       if (!team) {
@@ -310,38 +376,47 @@ export const PlayersRepository = {
         }
       }
 
-      // 4. Control de concurrencia optimista (C-02) si existe initialSnapshot
+      // 4. Control de concurrencia optimista (C-02 / R1.2-A) sobre el initialSnapshot obligatorio
+      if (team.name !== initialSnapshot.teamName) {
+        throw new Error(
+          'Conflicto de concurrencia: el nombre del equipo fue modificado externamente. Actualiza la plantilla antes de guardar.'
+        );
+      }
+
       const snapshotPlayersById = new Map<number, PlayerSnapshotItem>();
-      if (initialSnapshot) {
-        if (
-          initialSnapshot.teamName !== undefined &&
-          team.name !== initialSnapshot.teamName
-        ) {
-          throw new Error(
-            'Conflicto de concurrencia: el nombre del equipo fue modificado externamente. Actualiza la plantilla antes de guardar.'
-          );
+      for (const snap of initialSnapshot.players) {
+        if (!snap || typeof snap.id !== 'number' || !Number.isInteger(snap.id)) {
+          throw new Error('Snapshot inicial inválido: falta un identificador numérico de jugador.');
+        }
+        if (snapshotPlayersById.has(snap.id)) {
+          throw new Error(`El identificador #${snap.id} está duplicado en el snapshot inicial.`);
         }
 
-        for (const snap of initialSnapshot.players) {
-          if (snapshotPlayersById.has(snap.id)) {
-            throw new Error(`El identificador #${snap.id} está duplicado en el snapshot inicial.`);
-          }
-          const currentDbPlayer = teamPlayersById.get(snap.id);
-          if (!currentDbPlayer || currentDbPlayer.isArchived) {
-            throw new Error(
-              `Conflicto de concurrencia: el jugador "${snap.name}" fue eliminado o archivado externamente. Actualiza la plantilla antes de guardar.`
-            );
-          }
-          if (
-            currentDbPlayer.name !== snap.name ||
-            (currentDbPlayer.number ?? undefined) !== (snap.number ?? undefined)
-          ) {
-            throw new Error(
-              `Conflicto de concurrencia: los datos del jugador "${snap.name}" fueron modificados externamente. Actualiza la plantilla antes de guardar.`
-            );
-          }
-          snapshotPlayersById.set(snap.id, snap);
+        const existingSnapPlayer = await db.players.get(snap.id);
+        if (!existingSnapPlayer) {
+          throw new Error(
+            `Conflicto de concurrencia: el jugador "${snap.name}" (ID #${snap.id}) no existe.`
+          );
         }
+        if (existingSnapPlayer.teamId !== teamId) {
+          throw new Error(
+            `El jugador con ID #${snap.id} en el snapshot pertenece a otro equipo.`
+          );
+        }
+        if (existingSnapPlayer.isArchived) {
+          throw new Error(
+            `Conflicto de concurrencia: el jugador "${snap.name}" fue eliminado o archivado externamente. Actualiza la plantilla antes de guardar.`
+          );
+        }
+        if (
+          existingSnapPlayer.name !== snap.name ||
+          (existingSnapPlayer.number ?? undefined) !== (snap.number ?? undefined)
+        ) {
+          throw new Error(
+            `Conflicto de concurrencia: los datos del jugador "${snap.name}" fueron modificados externamente. Actualiza la plantilla antes de guardar.`
+          );
+        }
+        snapshotPlayersById.set(snap.id, snap);
       }
 
       // 5. Examinar todos los identificadores recibidos y validar cada jugador (C-01)
@@ -377,8 +452,8 @@ export const PlayersRepository = {
             );
           }
 
-          // 5e. Si hay snapshot inicial, verificar que el ID formaba parte del snapshot conocido
-          if (initialSnapshot && !snapshotPlayersById.has(p.id)) {
+          // 5e. Verificar que el ID formaba parte del snapshot conocido al abrir el editor
+          if (!snapshotPlayersById.has(p.id)) {
             throw new Error(
               `Conflicto de concurrencia: el jugador "${existingPlayer.name}" (ID #${p.id}) no estaba en el estado inicial del editor.`
             );
@@ -412,84 +487,69 @@ export const PlayersRepository = {
         });
       }
 
-      // 6. Determinar qué jugadores deben archivarse y verificar no colisión con altas concurrentes (C-02)
+      // 6. Validar bajas intencionales explícitas y rechazar solicitudes incompletas (R1.2-A)
       const keptIds = new Set(
         validatedPlayers.map(p => p.id).filter((id): id is number => id !== undefined)
       );
-      const idsToArchive: number[] = [];
+      const explicitRemovedIds = new Set<number>();
 
-      if (initialSnapshot) {
-        // Solo archivar jugadores que estaban en el snapshot inicial y fueron retirados por el usuario
-        for (const snapId of snapshotPlayersById.keys()) {
-          if (!keptIds.has(snapId)) {
-            idsToArchive.push(snapId);
-          }
+      if (removedPlayerIds !== undefined) {
+        if (!Array.isArray(removedPlayerIds)) {
+          throw new Error('Formato inválido en removedPlayerIds.');
         }
-
-        if (removedPlayerIds) {
-          for (const remId of removedPlayerIds) {
-            if (!snapshotPlayersById.has(remId)) {
-              throw new Error(
-                `El jugador con ID #${remId} indicado para baja no pertenece al estado inicial del equipo.`
-              );
-            }
-            if (!idsToArchive.includes(remId) && !keptIds.has(remId)) {
-              idsToArchive.push(remId);
-            }
-          }
-        }
-
-        // Los jugadores activos agregados concurrentemente (que NO estaban en initialSnapshot)
-        // se preservan activos y se valida que sus dorsales no colisionen con los de la plantilla editada.
-        for (const dbPlayer of currentTeamPlayers) {
-          if (
-            !dbPlayer.isArchived &&
-            dbPlayer.id !== undefined &&
-            !snapshotPlayersById.has(dbPlayer.id)
-          ) {
-            if (dbPlayer.number !== undefined && seenJerseys.has(dbPlayer.number)) {
-              throw new Error(
-                `Conflicto de concurrencia: el dorsal #${dbPlayer.number} fue asignado externamente al jugador "${dbPlayer.name}".`
-              );
-            }
-          }
-        }
-      } else if (removedPlayerIds) {
         for (const remId of removedPlayerIds) {
-          const target = teamPlayersById.get(remId);
-          if (!target) {
-            throw new Error(`El jugador con ID #${remId} no pertenece a este equipo.`);
+          if (typeof remId !== 'number' || !Number.isInteger(remId)) {
+            throw new Error('Identificador inválido en removedPlayerIds.');
           }
-          if (!target.isArchived && !keptIds.has(remId)) {
-            idsToArchive.push(remId);
-          }
-        }
-
-        const archiveSet = new Set(idsToArchive);
-        for (const dbPlayer of currentTeamPlayers) {
-          if (
-            !dbPlayer.isArchived &&
-            dbPlayer.id !== undefined &&
-            !keptIds.has(dbPlayer.id) &&
-            !archiveSet.has(dbPlayer.id)
-          ) {
-            if (dbPlayer.number !== undefined && seenJerseys.has(dbPlayer.number)) {
+          if (!snapshotPlayersById.has(remId)) {
+            const externalOrMissing = await db.players.get(remId);
+            if (externalOrMissing && externalOrMissing.teamId !== teamId) {
               throw new Error(
-                `Conflicto de concurrencia: el dorsal #${dbPlayer.number} ya está asignado a "${dbPlayer.name}".`
+                `El jugador con ID #${remId} indicado para baja pertenece a otro equipo.`
               );
             }
+            throw new Error(
+              `El jugador con ID #${remId} indicado para baja no pertenece al estado inicial del equipo.`
+            );
           }
+          if (keptIds.has(remId)) {
+            throw new Error(
+              `Solicitud inconsistente: el jugador con ID #${remId} figura simultáneamente activo y en removedPlayerIds.`
+            );
+          }
+          explicitRemovedIds.add(remId);
         }
-      } else {
-        // Modo sin snapshot explícito: archivar activos previos del equipo que no siguen en la lista
-        for (const dbPlayer of currentTeamPlayers) {
-          if (!dbPlayer.isArchived && dbPlayer.id !== undefined && !keptIds.has(dbPlayer.id)) {
-            idsToArchive.push(dbPlayer.id);
+      }
+
+      const idsToArchive: number[] = [];
+      for (const [snapId, snapPlayer] of snapshotPlayersById.entries()) {
+        if (!keptIds.has(snapId)) {
+          if (!explicitRemovedIds.has(snapId)) {
+            throw new Error(
+              `Solicitud incompleta: el jugador "${snapPlayer.name}" (ID #${snapId}) fue omitido sin declararse explícitamente para baja en removedPlayerIds.`
+            );
+          }
+          idsToArchive.push(snapId);
+        }
+      }
+
+      // 7. Los jugadores activos agregados concurrentemente desde otra pestaña (que NO estaban en initialSnapshot)
+      // se preservan activos y se valida que sus dorsales no colisionen con los de la plantilla editada.
+      for (const dbPlayer of currentTeamPlayers) {
+        if (
+          !dbPlayer.isArchived &&
+          dbPlayer.id !== undefined &&
+          !snapshotPlayersById.has(dbPlayer.id)
+        ) {
+          if (dbPlayer.number !== undefined && seenJerseys.has(dbPlayer.number)) {
+            throw new Error(
+              `Conflicto de concurrencia: el dorsal #${dbPlayer.number} fue asignado externamente al jugador "${dbPlayer.name}".`
+            );
           }
         }
       }
 
-      // 7. Aplicar todas las modificaciones únicamente tras superar todas las validaciones (C-01 paso 10)
+      // 8. Aplicar todas las modificaciones únicamente tras superar todas las validaciones (C-01 paso 10)
       await db.teams.update(teamId, { name: teamNameValidation.trimmedName });
 
       const archivedAt = new Date();

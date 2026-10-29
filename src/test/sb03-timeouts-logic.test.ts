@@ -5,8 +5,9 @@ import {
   advanceTraditionalQuarter,
   startTraditionalOvertime,
 } from '../features/match-creations/hooks/useTraditionalLogic';
+import { pauseMatchTimerIdempotent } from '../hooks/useMatchTimer';
 
-describe('SB-03 & C-04: Timeouts Limits, Quarter Transitions, Overtime, and Persistence', () => {
+describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter Transitions, Overtime, and Persistence', () => {
   let localTeamId: number;
   let visitorTeamId: number;
 
@@ -459,6 +460,216 @@ describe('SB-03 & C-04: Timeouts Limits, Quarter Transitions, Overtime, and Pers
       } finally {
         reloadedDb.close();
       }
+    });
+  });
+
+  describe('R1.2-B: Atomic Timeout & Idempotent Clock Pause Without Accidental Resume', () => {
+    it('Doble pulsación rápida con reloj corriendo: pausa el reloj una sola vez, no descuenta doble, no lo reanuda y emite sonido solo cuando se concede', async () => {
+      const startTimestamp = 1_700_000_000_000;
+      const nowMs = startTimestamp + 15_000; // 15 seconds elapsed
+
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(startTimestamp),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10, timeoutsPerTeam: 1 },
+        },
+        currentQuarter: 1,
+        timerSecondsRemaining: 600,
+        timerLastStart: new Date(startTimestamp),
+        localScore: 10,
+        visitorScore: 8,
+        localFouls: 1,
+        visitorFouls: 1,
+        localTimeouts: 0,
+        visitorTimeouts: 0,
+      })) as number;
+
+      let whistleCount = 0;
+      const [r1, r2] = await Promise.all([
+        TimeoutService.requestTimeout(matchId, 'local', {
+          nowMs,
+          onGranted: () => {
+            whistleCount += 1;
+          },
+        }),
+        TimeoutService.requestTimeout(matchId, 'local', {
+          nowMs: nowMs + 200,
+          onGranted: () => {
+            whistleCount += 1;
+          },
+        }),
+      ]);
+
+      const granted = [r1, r2].filter((r) => r.success);
+      const rejected = [r1, r2].filter((r) => !r.success);
+      expect(granted).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(whistleCount).toBe(1); // Whistle emitted ONLY once for the granted timeout
+
+      const afterMatch = await db.matches.get(matchId);
+      expect(afterMatch?.localTimeouts).toBe(1);
+      // Clock MUST remain paused (never toggled back to running!)
+      expect(afterMatch?.timerLastStart).toBeUndefined();
+      // Elapsed time (15s) deducted exactly once: 600 - 15 = 585
+      expect(afterMatch?.timerSecondsRemaining).toBe(585);
+    });
+
+    it('Dos equipos solicitando tiempo fuera casi simultáneamente con reloj corriendo: ambos incrementan su contador, el reloj queda pausado y el tiempo transcurrido se descuenta una sola vez', async () => {
+      const startTimestamp = 1_700_000_000_000;
+      const nowMs = startTimestamp + 12_000; // 12 seconds elapsed
+
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(startTimestamp),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10, timeoutsPerTeam: 3 },
+        },
+        currentQuarter: 2,
+        timerSecondsRemaining: 500,
+        timerLastStart: new Date(startTimestamp),
+        localScore: 25,
+        visitorScore: 24,
+        localFouls: 2,
+        visitorFouls: 2,
+        localTimeouts: 0,
+        visitorTimeouts: 0,
+      })) as number;
+
+      let localGranted = 0;
+      let visitorGranted = 0;
+
+      const [localRes, visitorRes] = await Promise.all([
+        TimeoutService.requestTimeout(matchId, 'local', {
+          nowMs,
+          onGranted: () => {
+            localGranted += 1;
+          },
+        }),
+        TimeoutService.requestTimeout(matchId, 'visitor', {
+          nowMs,
+          onGranted: () => {
+            visitorGranted += 1;
+          },
+        }),
+      ]);
+
+      expect(localRes.success).toBe(true);
+      expect(visitorRes.success).toBe(true);
+      expect(localGranted).toBe(1);
+      expect(visitorGranted).toBe(1);
+
+      const afterMatch = await db.matches.get(matchId);
+      expect(afterMatch?.localTimeouts).toBe(1);
+      expect(afterMatch?.visitorTimeouts).toBe(1);
+      // Clock is paused and NEVER resumed by the second request
+      expect(afterMatch?.timerLastStart).toBeUndefined();
+      // Elapsed 12s deducted only once: 500 - 12 = 488
+      expect(afterMatch?.timerSecondsRemaining).toBe(488);
+    });
+
+    it('Solicitar tiempo fuera cuando el reloj YA está pausado nunca arranca ni reanuda el cronómetro', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10, timeoutsPerTeam: 3 },
+        },
+        currentQuarter: 1,
+        timerSecondsRemaining: 412,
+        timerLastStart: undefined, // Clock already paused!
+        localScore: 4,
+        visitorScore: 4,
+        localFouls: 0,
+        visitorFouls: 0,
+        localTimeouts: 0,
+        visitorTimeouts: 0,
+      })) as number;
+
+      const res = await TimeoutService.requestTimeout(matchId, 'local');
+      expect(res.success).toBe(true);
+      expect(res.timerWasRunning).toBe(false);
+
+      const afterMatch = await db.matches.get(matchId);
+      expect(afterMatch?.localTimeouts).toBe(1);
+      expect(afterMatch?.timerLastStart).toBeUndefined(); // Still paused!
+      expect(afterMatch?.timerSecondsRemaining).toBe(412); // Untouched!
+    });
+
+    it('Tiempo fuera agotado y partido finalizado: rechazan sin efectos secundarios sobre el cronómetro ni sonido', async () => {
+      const runningStart = new Date(1_700_000_000_000);
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: runningStart,
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10, timeoutsPerTeam: 2 },
+        },
+        currentQuarter: 4,
+        timerSecondsRemaining: 180,
+        timerLastStart: runningStart,
+        localScore: 68,
+        visitorScore: 67,
+        localFouls: 4,
+        visitorFouls: 4,
+        localTimeouts: 2, // Already exhausted!
+        visitorTimeouts: 1,
+      })) as number;
+
+      let whistleFired = 0;
+
+      // 1. Local requests timeout while exhausted and clock is running
+      const exhaustedRes = await TimeoutService.requestTimeout(matchId, 'local', {
+        nowMs: runningStart.getTime() + 10_000,
+        onGranted: () => {
+          whistleFired += 1;
+        },
+      });
+
+      expect(exhaustedRes.success).toBe(false);
+      expect(whistleFired).toBe(0);
+
+      // Clock MUST NOT be paused or altered when timeout request is rejected
+      const afterExhausted = await db.matches.get(matchId);
+      expect(afterExhausted?.localTimeouts).toBe(2);
+      expect(afterExhausted?.timerLastStart?.getTime()).toBe(runningStart.getTime());
+      expect(afterExhausted?.timerSecondsRemaining).toBe(180);
+
+      // 2. Finish match and verify visitor timeout request has no side effects
+      await db.matches.update(matchId, {
+        status: 'finished',
+        timerLastStart: undefined,
+        timerSecondsRemaining: 0,
+      });
+
+      const finishedRes = await TimeoutService.requestTimeout(matchId, 'visitor', {
+        onGranted: () => {
+          whistleFired += 1;
+        },
+      });
+
+      expect(finishedRes.success).toBe(false);
+      expect(whistleFired).toBe(0);
+
+      const afterFinished = await db.matches.get(matchId);
+      expect(afterFinished?.visitorTimeouts).toBe(1);
+      expect(afterFinished?.timerLastStart).toBeUndefined();
+      expect(afterFinished?.timerSecondsRemaining).toBe(0);
+
+      // 3. Verify pauseMatchTimerIdempotent is also idempotent
+      const pauseWhenAlreadyPaused = await pauseMatchTimerIdempotent(matchId);
+      expect(pauseWhenAlreadyPaused).toBe(false);
     });
   });
 });

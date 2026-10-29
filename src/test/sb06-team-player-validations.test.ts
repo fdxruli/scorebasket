@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
-import { PlayersRepository, createTeamRosterSnapshot } from '../db/players.repository';
+import {
+  PlayersRepository,
+  createTeamRosterSnapshot,
+  type TeamRosterSnapshot,
+} from '../db/players.repository';
 import {
   toEditablePlayerRows,
   updateEditablePlayerRow,
@@ -9,7 +13,7 @@ import {
   prepareEditableRosterForSave,
 } from '../components/teams/teamEditorHelpers';
 
-describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form Validations', () => {
+describe('SB-06, C-01, C-02, C-05 & R1.2-A: Team, Player Identity, Concurrency, and Safe Roster Saving', () => {
   beforeEach(async () => {
     await db.delete();
     await db.open();
@@ -244,6 +248,9 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
         teamId,
       });
 
+      const initialPlayers = await PlayersRepository.getActiveByTeam(teamId);
+      const initialSnapshot = createTeamRosterSnapshot('Thunder', initialPlayers);
+
       // Save roster updating p1 and adding p2
       await PlayersRepository.saveTeamAndRoster({
         teamId,
@@ -252,6 +259,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
           { id: p1Id, name: 'Player A Updated', number: 5 },
           { name: 'Player B', number: 7 },
         ],
+        initialSnapshot,
       });
 
       const updatedTeam = await TeamsRepository.getById(teamId);
@@ -265,6 +273,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
 
     it('rejects duplicate jerseys in saveTeamAndRoster()', async () => {
       const teamId = await TeamsRepository.create('Nuggets');
+      const initialSnapshot = createTeamRosterSnapshot('Nuggets', []);
 
       await expect(
         PlayersRepository.saveTeamAndRoster({
@@ -274,6 +283,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { name: 'Player 1', number: 15 },
             { name: 'Player 2', number: 15 },
           ],
+          initialSnapshot,
         })
       ).rejects.toThrow(/El dorsal #15 está duplicado/i);
     });
@@ -285,6 +295,11 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
       const p1Id = await PlayersRepository.create({ name: 'Giannis', number: 34, teamId });
       const p2Id = await PlayersRepository.create({ name: 'Dame', number: 0, teamId });
 
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Bucks',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
       await PlayersRepository.saveTeamAndRoster({
         teamId,
         teamName: 'Milwaukee Bucks',
@@ -292,6 +307,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
           { id: p1Id, name: 'Giannis Antetokounmpo', number: 34 },
           { id: p2Id, name: 'Damian Lillard', number: 0 },
         ],
+        initialSnapshot,
       });
 
       const p1 = await db.players.get(p1Id);
@@ -316,7 +332,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
         teamId: teamBId,
       });
 
-      // Seed historical score/foul stats on Beta Star
+      // Seed historical score stats on Beta Star
       await db.scores.add({
         matchId: 1,
         teamId: teamBId,
@@ -325,6 +341,11 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
         quarter: 1,
         createdAt: new Date(),
       });
+
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Team Alpha',
+        await PlayersRepository.getActiveByTeam(teamAId)
+      );
 
       // Attempt to save Team Alpha while passing betaPlayerId
       await expect(
@@ -336,6 +357,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { id: betaPlayerId, name: 'Hijacked Beta Star', number: 7 },
             { name: 'New Alpha Rookie', number: 1 },
           ],
+          initialSnapshot,
         })
       ).rejects.toThrow(/pertenece a otro equipo/i);
 
@@ -365,6 +387,11 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
       const teamId = await TeamsRepository.create('Knicks');
       const existingId = await PlayersRepository.create({ name: 'Jalen Brunson', number: 11, teamId });
 
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Knicks',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
       await expect(
         PlayersRepository.saveTeamAndRoster({
           teamId,
@@ -373,6 +400,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { id: existingId, name: 'Brunson Updated', number: 11 },
             { id: 999999, name: 'Ghost Player', number: 99 },
           ],
+          initialSnapshot,
         })
       ).rejects.toThrow(/no existe/i);
 
@@ -387,6 +415,11 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
       const teamId = await TeamsRepository.create('Pacers');
       const p1Id = await PlayersRepository.create({ name: 'Haliburton', number: 0, teamId });
 
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Pacers',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
       await expect(
         PlayersRepository.saveTeamAndRoster({
           teamId,
@@ -395,6 +428,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { id: p1Id, name: 'Tyrese Haliburton', number: 0 },
             { id: p1Id, name: 'Tyrese Clone', number: 10 },
           ],
+          initialSnapshot,
         })
       ).rejects.toThrow(/identificador de jugador .* está duplicado/i);
 
@@ -422,6 +456,11 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
         createdAt: new Date(),
       });
 
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Sixers',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
       await expect(
         PlayersRepository.saveTeamAndRoster({
           teamId,
@@ -430,6 +469,7 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { id: activeId, name: 'Tyrese Maxey', number: 0 },
             { id: archivedId, name: 'Allen Iverson Reactivated', number: 3 },
           ],
+          initialSnapshot,
         })
       ).rejects.toThrow(/No se permite reactivar implícitamente/i);
 
@@ -463,7 +503,12 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
         createdAt: new Date(),
       });
 
-      // Attempt: rename team, archive p2 (omitted), update p1, add valid p3, and fail on last item (invalid jersey 150)
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Magic',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
+      // Attempt: rename team, archive p2 (explicitly in removedPlayerIds), update p1, add valid p3, and fail on last item (invalid jersey 150)
       await expect(
         PlayersRepository.saveTeamAndRoster({
           teamId,
@@ -473,6 +518,8 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
             { name: 'Jalen Suggs', number: 4 },
             { name: 'Invalid Last Player', number: 150 },
           ],
+          initialSnapshot,
+          removedPlayerIds: [p2Id],
         })
       ).rejects.toThrow(/entre 0 y 99/i);
 
@@ -655,6 +702,108 @@ describe('SB-06, C-01, C-02 & C-05: Team, Player Identity, Concurrency, and Form
       expect(pA?.isArchived).toBe(false);
       expect(pA?.number).toBe(3);
       expect(pB?.name).toBe('Kyle Kuzma');
+    });
+  });
+
+  describe('R1.2-A: Explicit Roster Save Contract & Protection Against Incomplete Requests', () => {
+    it('when players A, B, and C exist, an incomplete request without snapshot is rejected and NO player is archived or altered', async () => {
+      const teamId = await TeamsRepository.create('Grizzlies');
+      const playerAId = await PlayersRepository.create({ name: 'Player A', number: 12, teamId });
+      const playerBId = await PlayersRepository.create({ name: 'Player B', number: 13, teamId });
+      const playerCId = await PlayersRepository.create({ name: 'Player C', number: 33, teamId });
+
+      // Verify state BEFORE rejected operation
+      const beforeTeam = await TeamsRepository.getById(teamId);
+      const beforePlayers = await PlayersRepository.getActiveByTeam(teamId);
+      expect(beforeTeam?.name).toBe('Grizzlies');
+      expect(beforePlayers).toHaveLength(3);
+
+      // Send an incomplete request containing only Player A and WITHOUT a valid snapshot
+      await expect(
+        PlayersRepository.saveTeamAndRoster({
+          teamId,
+          teamName: 'Memphis Grizzlies Renamed',
+          players: [{ id: playerAId, name: 'Player A Modified', number: 99 }],
+          initialSnapshot: undefined as unknown as TeamRosterSnapshot,
+        })
+      ).rejects.toThrow(/Contrato de guardado inválido: se requiere un snapshot inicial válido/i);
+
+      // Verify state AFTER rejected operation in IndexedDB:
+      // Neither A, B, nor C was archived or modified, and team name is untouched!
+      const afterTeam = await TeamsRepository.getById(teamId);
+      expect(afterTeam?.name).toBe('Grizzlies');
+
+      const pA = await db.players.get(playerAId);
+      const pB = await db.players.get(playerBId);
+      const pC = await db.players.get(playerCId);
+
+      expect(pA?.isArchived).toBe(false);
+      expect(pA?.name).toBe('Player A');
+      expect(pA?.number).toBe(12);
+
+      expect(pB?.isArchived).toBe(false);
+      expect(pB?.name).toBe('Player B');
+      expect(pB?.number).toBe(13);
+
+      expect(pC?.isArchived).toBe(false);
+      expect(pC?.name).toBe('Player C');
+      expect(pC?.number).toBe(33);
+    });
+
+    it('when players A, B, and C exist in snapshot, omitting B and C from players without declaring them in removedPlayerIds is rejected with full rollback', async () => {
+      const teamId = await TeamsRepository.create('Pelicans');
+      const playerAId = await PlayersRepository.create({ name: 'Player A', number: 1, teamId });
+      const playerBId = await PlayersRepository.create({ name: 'Player B', number: 14, teamId });
+      const playerCId = await PlayersRepository.create({ name: 'Player C', number: 5, teamId });
+
+      const initialSnapshot = createTeamRosterSnapshot(
+        'Pelicans',
+        await PlayersRepository.getActiveByTeam(teamId)
+      );
+
+      // Send only Player A without declaring B and C in removedPlayerIds
+      await expect(
+        PlayersRepository.saveTeamAndRoster({
+          teamId,
+          teamName: 'New Orleans Pelicans',
+          players: [{ id: playerAId, name: 'Player A Renamed', number: 1 }],
+          initialSnapshot,
+          removedPlayerIds: [],
+        })
+      ).rejects.toThrow(/Solicitud incompleta: el jugador .* fue omitido sin declararse explícitamente para baja/i);
+
+      // Verify full rollback in IndexedDB
+      const team = await TeamsRepository.getById(teamId);
+      expect(team?.name).toBe('Pelicans');
+
+      const activePlayers = await PlayersRepository.getActiveByTeam(teamId);
+      expect(activePlayers).toHaveLength(3);
+      expect(activePlayers.find((p) => p.id === playerAId)?.name).toBe('Player A');
+      expect(activePlayers.find((p) => p.id === playerBId)?.isArchived).toBe(false);
+      expect(activePlayers.find((p) => p.id === playerCId)?.isArchived).toBe(false);
+    });
+
+    it('supports explicit separate retirement via PlayersRepository.removePlayersFromRoster() and rolls back on external or invalid IDs', async () => {
+      const teamAId = await TeamsRepository.create('Kings');
+      const teamBId = await TeamsRepository.create('Blazers');
+
+      const pA1 = await PlayersRepository.create({ name: 'DeAaron Fox', number: 5, teamId: teamAId });
+      const pA2 = await PlayersRepository.create({ name: 'Domantas Sabonis', number: 10, teamId: teamAId });
+      const pB1 = await PlayersRepository.create({ name: 'Anfernee Simons', number: 1, teamId: teamBId });
+
+      // Attempting to retire pA1 + external pB1 fails and rolls back pA1
+      await expect(
+        PlayersRepository.removePlayersFromRoster(teamAId, [pA1, pB1])
+      ).rejects.toThrow(/pertenece a otro equipo/i);
+
+      expect((await db.players.get(pA1))?.isArchived).toBe(false);
+      expect((await db.players.get(pB1))?.isArchived).toBe(false);
+
+      // Valid retirement of pA2 succeeds
+      await PlayersRepository.removePlayersFromRoster(teamAId, [pA2]);
+
+      expect((await db.players.get(pA1))?.isArchived).toBe(false);
+      expect((await db.players.get(pA2))?.isArchived).toBe(true);
     });
   });
 

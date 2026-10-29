@@ -52,7 +52,9 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
             if (i === index) {
                 return {
                     ...p,
-                    [field]: field === 'number' ? parseInt(value) || undefined : value
+                    [field]: field === 'number'
+                        ? (value.trim() === '' || isNaN(parseInt(value, 10)) ? undefined : parseInt(value, 10))
+                        : value
                 };
             }
             return p;
@@ -66,9 +68,13 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const handleAddPlayer = () => {
         if (!newPlayerName.trim()) return;
 
+        const parsedNumber = newPlayerNumber.trim() === '' || isNaN(parseInt(newPlayerNumber, 10))
+            ? undefined
+            : parseInt(newPlayerNumber, 10);
+
         const tempPlayer: Player = {
             name: newPlayerName.trim(),
-            number: newPlayerNumber ? parseInt(newPlayerNumber) : undefined,
+            number: parsedNumber,
             teamId: teamId,
             createdAt: new Date(),
             isArchived: false
@@ -231,7 +237,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                             className="player-edit-input player-number-input"
                                             style={{ width: '50px', paddingLeft: '1rem' }}
                                             placeholder="00"
-                                            value={p.number || ''}
+                                            value={p.number ?? ''}
                                             onChange={(e) => handlePlayerChange(idx, 'number', e.target.value)}
                                         />
                                     </div>

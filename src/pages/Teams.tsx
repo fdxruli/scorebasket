@@ -64,7 +64,7 @@ export function Teams() {
                 if (tempPlayers.length > 0) {
                     const playersToSave = tempPlayers.map(p => ({
                         name: p.name,
-                        number: p.number ? parseInt(p.number) : undefined,
+                        number: p.number.trim() !== '' && !isNaN(parseInt(p.number, 10)) ? parseInt(p.number, 10) : undefined,
                         teamId: Number(teamId),
                         createdAt: new Date(),
                         isArchived: false

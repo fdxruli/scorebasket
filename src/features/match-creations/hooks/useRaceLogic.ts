@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Match } from '../../../db/models/Match';
 import type { GameResult } from '../../../db/models/MatchConfig';
 import { db } from '../../../db/db';
+import { calculateRaceWinner, resolveRaceGameResult } from '../../../utils/raceLogicHelpers';
 
 interface UseRaceLogicProps {
   match: Match;
@@ -12,20 +13,21 @@ const getRaceWinnerTeamId = (match: Match, targetScore: number): number | null =
   const visitorScore = match.visitorScore || 0;
   const winByTwo = match.config.race?.winByTwo ?? false;
 
-  if (localScore >= targetScore && (!winByTwo || localScore - visitorScore >= 2)) {
-    return match.localTeamId;
-  }
-  if (visitorScore >= targetScore && (!winByTwo || visitorScore - localScore >= 2)) {
-    return match.visitorTeamId;
-  }
+  const winnerSide = calculateRaceWinner(localScore, visitorScore, targetScore, winByTwo);
+  if (winnerSide === 'local') return match.localTeamId;
+  if (winnerSide === 'visitor') return match.visitorTeamId;
   return null;
 };
 
-const buildGameResult = (match: Match, gameNumber: number, winnerTeamId: number): GameResult => ({
+const buildGameResult = (
+  match: Match,
+  gameNumber: number,
+  winner: 'local' | 'visitor' | 'tie'
+): GameResult => ({
   gameNumber,
   localScore: match.localScore || 0,
   visitorScore: match.visitorScore || 0,
-  winner: winnerTeamId === match.localTeamId ? 'local' : 'visitor',
+  winner,
   finishedAt: new Date()
 });
 
@@ -42,7 +44,7 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
 
   const [showMatchEndModal, setShowMatchEndModal] = useState(false);
 
-  // 1. Derivar el ganador directamente de los datos visibles.
+  // 1. Derivar el ganador reglamentario directamente de los datos visibles.
   const winnerTeamId = useMemo(() => {
     return getRaceWinnerTeamId(match, targetScore);
   }, [match, targetScore]);
@@ -55,7 +57,7 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
       return;
     }
 
-    // Si hay un ganador (y el partido sigue activo), ABRIR modal.
+    // Si hay un ganador reglamentario (y el partido sigue activo), ABRIR modal.
     if (winnerTeamId) {
       if (!showMatchEndModal) setShowMatchEndModal(true);
     } else {
@@ -67,13 +69,13 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
   // Acción 1: Finalizar Partido
   const endMatch = useCallback(async () => {
     if (!match.id) return;
-    
+
     await db.transaction('rw', db.matches, async () => {
       const currentMatch = await db.matches.get(match.id!);
       if (!currentMatch) return;
 
       const currentTargetScore = currentMatch.config?.race?.targetScore || targetScore;
-      const currentWinnerTeamId = getRaceWinnerTeamId(currentMatch, currentTargetScore);
+      const currentWinByTwo = currentMatch.config?.race?.winByTwo ?? winByTwo;
       const currentGameNumber = currentMatch.config?.race?.currentGame || 1;
       const currentHistory = currentMatch.gameHistory || [];
 
@@ -81,38 +83,40 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
       const visitorScore = currentMatch.visitorScore || 0;
 
       let gameHistory = currentHistory;
+      const alreadyRecorded = currentHistory.some(g => g.gameNumber === currentGameNumber);
 
-      if (currentWinnerTeamId) {
-        gameHistory = appendGameResultOnce(
-          currentHistory,
-          buildGameResult(currentMatch, currentGameNumber, currentWinnerTeamId)
+      if (!alreadyRecorded) {
+        // Resolver el resultado del juego actual:
+        // Si no llegó a la meta, se trata como cierre anticipado con ventaja o empate.
+        const gameOutcome = resolveRaceGameResult(
+          localScore,
+          visitorScore,
+          currentTargetScore,
+          currentWinByTwo,
+          true // isFinishedOrClosed
         );
-      } else if (localScore !== visitorScore && currentHistory.length === 0) {
-        // Cierre anticipado con ventaja en el primer juego
-        const earlyWinnerId = localScore > visitorScore ? currentMatch.localTeamId : currentMatch.visitorTeamId;
-        gameHistory = appendGameResultOnce(
-          currentHistory,
-          buildGameResult(currentMatch, currentGameNumber, earlyWinnerId)
-        );
-      } else if (localScore !== visitorScore && currentHistory.length >= 1) {
-        // Si ya había juegos previos y el juego actual también llevaba ventaja al cerrarse, lo registramos sin perder los previos
-        const earlyWinnerId = localScore > visitorScore ? currentMatch.localTeamId : currentMatch.visitorTeamId;
-        gameHistory = appendGameResultOnce(
-          currentHistory,
-          buildGameResult(currentMatch, currentGameNumber, earlyWinnerId)
-        );
+
+        if (gameOutcome !== 'unresolved') {
+          // Si es 0-0 y ya había juegos previos, no agregar un juego vacío fantasma
+          const isUntouchedAfterRematch = localScore === 0 && visitorScore === 0 && currentHistory.length > 0;
+          if (!isUntouchedAfterRematch) {
+            gameHistory = appendGameResultOnce(
+              currentHistory,
+              buildGameResult(currentMatch, currentGameNumber, gameOutcome)
+            );
+          }
+        }
       }
 
-      await db.matches.update(currentMatch.id!, {
+      const updates: Partial<Match> = {
         status: 'finished',
         finishedAt: new Date(),
-        winnerTeamId: currentWinnerTeamId || undefined,
         gameHistory
-      } as any);
+      };
+
+      await db.matches.update(currentMatch.id!, updates);
     });
-    // Nota: No cerramos el modal aquí; el useEffect lo hará al detectar el cambio de status,
-    // y el componente Engine redirigirá al usuario.
-  }, [match.id, targetScore]);
+  }, [match.id, targetScore, winByTwo]);
 
   // Acción 2: Revancha / Dar Vuelta
   const handleRematch = useCallback(async () => {
@@ -128,9 +132,10 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
 
       const currentGameNumber = currentMatch.config?.race?.currentGame || 1;
       const currentHistory = currentMatch.gameHistory || [];
+      const winnerSide = currentWinnerTeamId === currentMatch.localTeamId ? 'local' : 'visitor';
       const gameHistory = appendGameResultOnce(
         currentHistory,
-        buildGameResult(currentMatch, currentGameNumber, currentWinnerTeamId)
+        buildGameResult(currentMatch, currentGameNumber, winnerSide)
       );
 
       await db.matches.update(currentMatch.id!, {
@@ -138,9 +143,15 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
         visitorScore: 0,
         localFouls: 0,
         visitorFouls: 0,
-        'config.race.currentGame': currentGameNumber + 1,
-        gameHistory
-      } as any);
+        gameHistory,
+        config: {
+          ...currentMatch.config,
+          race: {
+            ...currentMatch.config.race!,
+            currentGame: currentGameNumber + 1
+          }
+        }
+      });
     });
   }, [match.id, targetScore]);
 

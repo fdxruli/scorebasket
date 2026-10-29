@@ -1,6 +1,7 @@
 // src/utils/shareCardGenerator.ts
 import { db } from '../db/db';
 import { formatPeriodLabel } from './matchHelpers';
+import { resolveRaceGameResult } from './raceLogicHelpers';
 
 export interface ShareMatchCardInput {
   mode: 'traditional' | 'race' | 'best-of-series';
@@ -1111,16 +1112,31 @@ export async function buildShareMatchCardInputFromDb(
   // Construir effectiveHistory para modo race (incluyendo juego en vivo si aún no se guardó en gameHistory)
   const effectiveHistory = [...(match.gameHistory || [])];
   const currentRaceGame = match.config?.race?.currentGame || 1;
+  const targetScore = match.config?.race?.targetScore || 21;
+  const winByTwo = match.config?.race?.winByTwo ?? false;
+  const isFinished = match.status === 'finished';
+
   if (
     mode === 'race' &&
     ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
     !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
   ) {
+    const outcome = resolveRaceGameResult(
+      match.localScore || 0,
+      match.visitorScore || 0,
+      targetScore,
+      winByTwo,
+      isFinished
+    );
+
+    const resolvedWinner: 'local' | 'visitor' | 'tie' =
+      outcome === 'unresolved' ? 'tie' : outcome;
+
     effectiveHistory.push({
       gameNumber: currentRaceGame,
       localScore: match.localScore || 0,
       visitorScore: match.visitorScore || 0,
-      winner: (match.localScore || 0) >= (match.visitorScore || 0) ? 'local' : 'visitor',
+      winner: resolvedWinner,
       finishedAt: new Date()
     });
   }

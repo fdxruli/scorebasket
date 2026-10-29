@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { PlayersRepository } from '../../db/players.repository';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch, type TeamWithPlayers } from '../../features/match-creations/components/context/LiveMatchContext';
 import { useGameActions } from '../../features/match-creations/hooks/useGameActions';
@@ -90,31 +91,22 @@ export function LivePlayersModal({
   const handleAddPlayer = async (teamId: number) => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    const parsedNum = newNumber.trim() !== '' ? parseInt(newNumber.trim(), 10) : undefined;
 
-    if (parsedNum !== undefined && !isNaN(parsedNum)) {
-      const duplicated = await db.players
-        .where({ teamId })
-        .filter(p => !p.isArchived && p.number === parsedNum)
-        .first();
-      if (duplicated) {
-        showError(`El dorsal #${parsedNum} ya lo tiene ${duplicated.name} en este equipo.`);
-        return;
-      }
+    try {
+      await PlayersRepository.create({
+        teamId,
+        name: trimmed,
+        number: newNumber
+      });
+
+      setNewName('');
+      setNewNumber('');
+      setAddingForTeamId(null);
+      showToast(`Jugador ${trimmed} agregado`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al agregar jugador.';
+      showError(msg);
     }
-
-    await db.players.add({
-      name: trimmed,
-      number: parsedNum !== undefined && !isNaN(parsedNum) ? parsedNum : undefined,
-      teamId,
-      createdAt: new Date(),
-      isArchived: false
-    });
-
-    setNewName('');
-    setNewNumber('');
-    setAddingForTeamId(null);
-    showToast(`Jugador ${trimmed} agregado`);
   };
 
   const handleSaveTeamName = async (teamId: number) => {

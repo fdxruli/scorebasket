@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { X, Calendar, BarChart2, Users, Target, Layers, Trash2, Share2, Download, CheckCircle2 } from 'lucide-react';
 import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
+import { resolveRaceGameResult } from '../../utils/raceLogicHelpers';
 import {
     shareOrDownloadMatchCard,
     downloadMatchCardPng,
@@ -109,16 +110,32 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         // C2. Reta (Race): Construir effectiveHistory unificado
         const effectiveHistory = [...(match.gameHistory || [])];
         const currentRaceGame = match.config?.race?.currentGame || 1;
+        const targetScore = match.config?.race?.targetScore || 21;
+        const winByTwo = match.config?.race?.winByTwo ?? false;
+        const isFinished = match.status === 'finished';
+
         if (
             mode === 'race' &&
             ((match.localScore || 0) > 0 || (match.visitorScore || 0) > 0) &&
             !effectiveHistory.some(g => g.gameNumber === currentRaceGame)
         ) {
+            const outcome = resolveRaceGameResult(
+                match.localScore || 0,
+                match.visitorScore || 0,
+                targetScore,
+                winByTwo,
+                isFinished
+            );
+
+            // Si no tiene ganador reglamentario y sigue activo, 'tie' provisional sin otorgar victoria indebida
+            const resolvedWinner: 'local' | 'visitor' | 'tie' =
+                outcome === 'unresolved' ? 'tie' : outcome;
+
             effectiveHistory.push({
                 gameNumber: currentRaceGame,
                 localScore: match.localScore || 0,
                 visitorScore: match.visitorScore || 0,
-                winner: (match.localScore || 0) >= (match.visitorScore || 0) ? 'local' : 'visitor',
+                winner: resolvedWinner,
                 finishedAt: new Date()
             });
         }

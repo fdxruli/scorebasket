@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
+import { PlayersRepository, validateJerseyNumber } from '../../db/players.repository';
 import { X, Save, Trash2, Plus, User, Users, Shield } from 'lucide-react';
 
 interface TeamEditorModalProps {
@@ -50,11 +51,16 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const handlePlayerChange = (index: number, field: 'name' | 'number', value: string) => {
         setPlayers(prev => prev.map((p, i) => {
             if (i === index) {
+                if (field === 'number') {
+                    const parsed = validateJerseyNumber(value);
+                    return {
+                        ...p,
+                        number: parsed.isValid ? parsed.normalizedNumber : (value.trim() === '' ? undefined : p.number)
+                    };
+                }
                 return {
                     ...p,
-                    [field]: field === 'number'
-                        ? (value.trim() === '' || isNaN(parseInt(value, 10)) ? undefined : parseInt(value, 10))
-                        : value
+                    name: value
                 };
             }
             return p;
@@ -68,13 +74,23 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
     const handleAddPlayer = () => {
         if (!newPlayerName.trim()) return;
 
-        const parsedNumber = newPlayerNumber.trim() === '' || isNaN(parseInt(newPlayerNumber, 10))
-            ? undefined
-            : parseInt(newPlayerNumber, 10);
+        const jerseyVal = validateJerseyNumber(newPlayerNumber);
+        if (!jerseyVal.isValid) {
+            alert(jerseyVal.error || "Dorsal no válido.");
+            return;
+        }
+
+        if (jerseyVal.normalizedNumber !== undefined) {
+            const hasDuplicate = players.some(p => p.number === jerseyVal.normalizedNumber);
+            if (hasDuplicate) {
+                alert(`El dorsal #${jerseyVal.normalizedNumber} ya está en la lista de esta plantilla.`);
+                return;
+            }
+        }
 
         const tempPlayer: Player = {
             name: newPlayerName.trim(),
-            number: parsedNumber,
+            number: jerseyVal.normalizedNumber,
             teamId: teamId,
             createdAt: new Date(),
             isArchived: false
@@ -93,53 +109,16 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
         setIsSaving(true);
 
         try {
-            await db.transaction('rw', db.teams, db.players, async () => {
-                await db.teams.update(teamId, { name: teamName.trim() });
-
-                const currentDbPlayers = await db.players.where({ teamId }).toArray();
-                const activeDbIds = currentDbPlayers
-                    .filter(isActivePlayer)
-                    .map(p => p.id)
-                    .filter((id): id is number => id !== undefined);
-
-                const keptIds = players
-                    .filter(p => p.id !== undefined)
-                    .map(p => p.id)
-                    .filter((id): id is number => id !== undefined);
-
-                const idsToArchive = activeDbIds.filter(id => !keptIds.includes(id));
-
-                // No borramos jugadores existentes: se archivan para conservar box scores históricos.
-                for (const id of idsToArchive) {
-                    await db.players.update(id, {
-                        isArchived: true,
-                        archivedAt: new Date()
-                    });
-                }
-
-                const playersToUpdate = players.filter(p => p.id !== undefined);
-                for (const p of playersToUpdate) {
-                    await db.players.update(p.id!, {
-                        name: p.name.trim(),
-                        number: p.number,
-                        isArchived: false,
-                        archivedAt: undefined
-                    });
-                }
-
-                const playersToAdd = players.filter(p => p.id === undefined);
-                if (playersToAdd.length > 0) {
-                    await db.players.bulkAdd(playersToAdd.map(p => ({
-                        ...p,
-                        name: p.name.trim(),
-                        isArchived: false
-                    })));
-                }
+            await PlayersRepository.saveTeamAndRoster({
+                teamId,
+                teamName: teamName.trim(),
+                players
             });
             onClose();
-        } catch (err) {
+        } catch (err: unknown) {
             console.error("Error al guardar", err);
-            alert("Hubo un error al guardar los cambios.");
+            const msg = err instanceof Error ? err.message : "Hubo un error al guardar los cambios.";
+            alert(msg);
         } finally {
             setIsSaving(false);
         }

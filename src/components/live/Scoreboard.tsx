@@ -4,6 +4,7 @@ import { Pencil, Clock, Check, X } from 'lucide-react';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch } from '../../features/match-creations/components/context/LiveMatchContext';
 import { db } from '../../db/db';
+import { TimeoutService } from '../../db/timeout.service';
 import { unlockAudioContext, playWhistle } from '../../utils/soundEffects';
 
 interface ScoreboardProps {
@@ -102,18 +103,15 @@ export function Scoreboard({
 
     const handleTimeoutClick = async (side: 'local' | 'visitor') => {
         if (!match?.id) return;
-        unlockAudioContext();
 
         const currentCount = (side === 'local' ? match.localTimeouts : match.visitorTimeouts) ?? 0;
 
-        // Si ya llegó al máximo, un toque adicional permite reiniciarlo a 0
-        if (currentCount >= maxTimeouts) {
-            await db.matches.update(
-                match.id,
-                side === 'local' ? { localTimeouts: 0 } : { visitorTimeouts: 0 }
-            );
+        // Si ya llegó al máximo o el partido finalizó, NO permitir incrementos ni reiniciar a 0
+        if (currentCount >= maxTimeouts || match.status === 'finished') {
             return;
         }
+
+        unlockAudioContext();
 
         // 1. Si el reloj está corriendo, pausarlo automáticamente
         if (isTimerRunning) {
@@ -131,12 +129,8 @@ export function Scoreboard({
         // 2. Sonar silbato de árbitro
         playWhistle();
 
-        // 3. Incrementar contador de tiempos fuera del equipo
-        const nextCount = currentCount + 1;
-        await db.matches.update(
-            match.id,
-            side === 'local' ? { localTimeouts: nextCount } : { visitorTimeouts: nextCount }
-        );
+        // 3. Incrementar contador de tiempos fuera de forma segura y atómica
+        await TimeoutService.requestTimeout(match.id, side);
     };
 
     const canEditTimer = Boolean(onTimerClick) && !isTimerRunning;
@@ -257,10 +251,11 @@ export function Scoreboard({
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('local')}
+                                disabled={localTimeouts >= maxTimeouts || match?.status === 'finished'}
                                 className={`btn-timeout-card local ${localTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
                                     localTimeouts >= maxTimeouts
-                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        ? 'Tiempos fuera agotados'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >
@@ -364,10 +359,11 @@ export function Scoreboard({
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('visitor')}
+                                disabled={visitorTimeouts >= maxTimeouts || match?.status === 'finished'}
                                 className={`btn-timeout-card visitor ${visitorTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
                                     visitorTimeouts >= maxTimeouts
-                                        ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
+                                        ? 'Tiempos fuera agotados'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >

@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { db } from '../../../db/db';
 import { useLiveMatch } from '../components/context/LiveMatchContext';
+import { GameActionsRepository } from '../../../db/gameActions.repository';
 import { unlockAudioContext, playScorePop, playWhistle } from '../../../utils/soundEffects';
 import type { Score, Foul } from '../../../db/models';
 import type { Match } from '../../../db/models/Match';
@@ -72,10 +73,6 @@ const validateScoreWindow = (match: Match) => {
       throw new Error('Este set ya terminó. Confirma el set antes de registrar más puntos.');
     }
   }
-};
-
-const getLatestByCreatedAt = <T extends { createdAt: Date }>(items: T[]): T | undefined => {
-  return [...items].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 };
 
 const notifyActionError = (error: unknown, fallbackMessage: string) => {
@@ -193,63 +190,15 @@ export const useGameActions = () => {
    * Acción: Deshacer (Undo)
    *
    * Importante: en Race y Series solo deshace acciones del juego/set actual.
-   * Así evitamos borrar acciones de juegos o sets ya cerrados y descontarlas del marcador actual.
+   * Centralizado a través de GameActionsRepository.undoLastAction con transacciones seguras.
    */
   const undoLastAction = useCallback(async () => {
     try {
       if (!match?.id) return;
-
-      await db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
-        const currentMatch = await db.matches.get(match.id!);
-        if (!currentMatch) throw new Error('El partido no existe');
-
-        validateMatchIsActive(currentMatch);
-
-        const currentPeriod = getCurrentActionPeriod(currentMatch);
-
-        const [scores, fouls] = await Promise.all([
-          db.scores.where('matchId').equals(currentMatch.id!).toArray(),
-          db.fouls.where('matchId').equals(currentMatch.id!).toArray()
-        ]);
-
-        const lastScore = getLatestByCreatedAt(
-          scores.filter(score => score.quarter === currentPeriod)
-        );
-
-        const lastFoul = getLatestByCreatedAt(
-          fouls.filter(foul => foul.quarter === currentPeriod)
-        );
-
-        if (!lastScore && !lastFoul) {
-          throw new Error('No hay acciones para deshacer en este periodo.');
-        }
-
-        const lastScoreTime = lastScore?.createdAt.getTime() || 0;
-        const lastFoulTime = lastFoul?.createdAt.getTime() || 0;
-
-        if (lastScore && lastScoreTime >= lastFoulTime) {
-          await db.scores.delete(lastScore.id!);
-
-          const side = getTeamSide(currentMatch, lastScore.teamId);
-          const updateData = side === 'local'
-            ? { localScore: Math.max(0, (currentMatch.localScore || 0) - lastScore.points) }
-            : { visitorScore: Math.max(0, (currentMatch.visitorScore || 0) - lastScore.points) };
-            
-          await db.matches.update(currentMatch.id!, updateData);
-          return;
-        }
-
-        if (lastFoul) {
-          await db.fouls.delete(lastFoul.id!);
-
-          const side = getTeamSide(currentMatch, lastFoul.teamId);
-          const updateData = side === 'local'
-            ? { localFouls: Math.max(0, (currentMatch.localFouls || 0) - 1) }
-            : { visitorFouls: Math.max(0, (currentMatch.visitorFouls || 0) - 1) };
-
-          await db.matches.update(currentMatch.id!, updateData);
-        }
-      });
+      const result = await GameActionsRepository.undoLastAction(match.id);
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo deshacer la última acción.');
+      }
     } catch (error) {
       notifyActionError(error, 'No se pudo deshacer la última acción.');
     }

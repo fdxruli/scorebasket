@@ -13,8 +13,8 @@ export class BasketControlDB extends Dexie {
     scores!: Table<Score>;
     fouls!: Table<Foul>;
 
-    constructor() {
-        super('basket_control_db');
+    constructor(databaseName = 'basket_control_db') {
+        super(databaseName);
 
         // Versiones anteriores (mantener para compatibilidad)
         this.version(2).stores({
@@ -96,7 +96,7 @@ export class BasketControlDB extends Dexie {
                 };
                 
                 // Asegurar que los scores existan (si no hay migración previa)
-                const updates: any = { 
+                const updates: Partial<Match> = { 
                     config,
                     localScore: match.localScore ?? 0,
                     visitorScore: match.visitorScore ?? 0,
@@ -106,6 +106,11 @@ export class BasketControlDB extends Dexie {
                 
                 await tx.table('matches').update(match.id, updates);
             }
+        });
+
+        // 🆕 VERSIÓN 8: Incorporación de índices relacionales en matches (SB-01)
+        this.version(8).stores({
+            matches: '++id, status, createdAt, config.mode, localTeamId, visitorTeamId'
         });
     }
 }

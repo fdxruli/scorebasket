@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { TeamsRepository } from '../db/teams.repository';
+import { validateJerseyNumber } from '../db/players.repository';
 import { Trash2, UserPlus, Save, Users as UsersIcon, Edit2, Archive, RotateCcw, AlertCircle, X, ShieldPlus } from 'lucide-react';
 import { TeamEditorModal } from '../components/teams/TeamEditorModal';
 
@@ -45,9 +46,27 @@ export function Teams() {
 
     const handleAddTempPlayer = () => {
         if (!playerName.trim()) return;
+
+        const jVal = validateJerseyNumber(playerNumber);
+        if (!jVal.isValid) {
+            alert(jVal.error || "Dorsal no válido.");
+            return;
+        }
+
+        if (jVal.normalizedNumber !== undefined) {
+            const hasDuplicate = tempPlayers.some(p => {
+                const existingVal = validateJerseyNumber(p.number);
+                return existingVal.normalizedNumber === jVal.normalizedNumber;
+            });
+            if (hasDuplicate) {
+                alert(`El dorsal #${jVal.normalizedNumber} ya está en la lista de jugadores temporales.`);
+                return;
+            }
+        }
+
         setTempPlayers([...tempPlayers, {
             name: playerName.trim(),
-            number: playerNumber.trim()
+            number: jVal.normalizedNumber !== undefined ? String(jVal.normalizedNumber) : ''
         }]);
         setPlayerName('');
         setPlayerNumber('');
@@ -62,22 +81,36 @@ export function Teams() {
                 const teamId = await TeamsRepository.create(teamName);
 
                 if (tempPlayers.length > 0) {
-                    const playersToSave = tempPlayers.map(p => ({
-                        name: p.name,
-                        number: p.number.trim() !== '' && !isNaN(parseInt(p.number, 10)) ? parseInt(p.number, 10) : undefined,
-                        teamId: Number(teamId),
-                        createdAt: new Date(),
-                        isArchived: false
-                    }));
+                    const seenJerseys = new Set<number>();
+                    const playersToSave = tempPlayers.map(p => {
+                        const jVal = validateJerseyNumber(p.number);
+                        if (!jVal.isValid) {
+                            throw new Error(jVal.error || `Dorsal no válido para ${p.name}`);
+                        }
+                        if (jVal.normalizedNumber !== undefined) {
+                            if (seenJerseys.has(jVal.normalizedNumber)) {
+                                throw new Error(`El dorsal #${jVal.normalizedNumber} está duplicado en la plantilla.`);
+                            }
+                            seenJerseys.add(jVal.normalizedNumber);
+                        }
+                        return {
+                            name: p.name.trim(),
+                            number: jVal.normalizedNumber,
+                            teamId: Number(teamId),
+                            createdAt: new Date(),
+                            isArchived: false
+                        };
+                    });
 
                     await db.players.bulkAdd(playersToSave);
                 }
             });
             setTeamName('');
             setTempPlayers([]);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error al guardar:", error);
-            alert(error.message || "Error al guardar el equipo");
+            const msg = error instanceof Error ? error.message : "Error al guardar el equipo";
+            alert(msg);
         } finally {
             setIsSaving(false);
         }
@@ -88,8 +121,9 @@ export function Teams() {
         if (!confirm(confirmMsg)) return;
         try {
             await TeamsRepository.archive(id);
-        } catch (error: any) {
-            alert(error.message || "Error al archivar el equipo");
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Error al archivar el equipo";
+            alert(msg);
         }
     };
 
@@ -98,8 +132,9 @@ export function Teams() {
         if (!confirm(confirmMsg)) return;
         try {
             await TeamsRepository.unarchive(id);
-        } catch (error: any) {
-            alert(error.message || "Error al restaurar el equipo");
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Error al restaurar el equipo";
+            alert(msg);
         }
     };
 
@@ -108,8 +143,9 @@ export function Teams() {
         if (!confirm(confirmMsg)) return;
         try {
             await TeamsRepository.remove(id);
-        } catch (error: any) {
-            alert(error.message || "Error al eliminar el equipo");
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Error al eliminar el equipo";
+            alert(msg);
         }
     };
 
@@ -277,7 +313,7 @@ export function Teams() {
                                         className={`card team-card ${isArchived ? 'is-archived' : ''}`}
                                     >
                                         <div className="team-card-top">
-                                            <div className="team-info">
+                                             <div className="team-info">
                                                 <div className="team-monogram">{initials}</div>
                                                 <div className="team-meta">
                                                     <span className="team-name">{team.name}</span>

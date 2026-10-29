@@ -7,6 +7,7 @@ import { LiveMatchContext } from '../../features/match-creations/components/cont
 import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { X, Trash2, Clock, AlertCircle, Trophy, History, Lock, UserCheck } from 'lucide-react';
 import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
+import { GameActionsRepository } from '../../db/gameActions.repository';
 
 interface LiveMatchHistoryModalProps {
   matchId: number;
@@ -111,7 +112,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     };
   }, [matchId]);
 
-  // 2. Eliminar acción en 1 toque (sin bloquear con confirm nativo)
+  // 2. Eliminar acción en 1 toque (protegido por transacción atómica e idempotente)
   const handleDelete = async (item: HistoryItem) => {
     if (!historyData) return;
     const isLockedPeriod =
@@ -121,33 +122,13 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
     if (isLockedPeriod) return;
 
     try {
-      await db.transaction('rw', db.scores, db.fouls, db.matches, async () => {
-        if (item.type === 'score') {
-          await db.scores.delete(item.id);
-
-          const match = await db.matches.get(matchId);
-          if (match) {
-            const isLocal = item.teamId === match.localTeamId;
-            const update = isLocal
-              ? { localScore: Math.max(0, (match.localScore || 0) - (item.points || 0)) }
-              : { visitorScore: Math.max(0, (match.visitorScore || 0) - (item.points || 0)) };
-            await db.matches.update(matchId, update);
-          }
-        } else {
-          await db.fouls.delete(item.id);
-
-          const match = await db.matches.get(matchId);
-          if (match) {
-            const isLocal = item.teamId === match.localTeamId;
-            const update = isLocal
-              ? { localFouls: Math.max(0, (match.localFouls || 0) - 1) }
-              : { visitorFouls: Math.max(0, (match.visitorFouls || 0) - 1) };
-            await db.matches.update(matchId, update);
-          }
-        }
+      await GameActionsRepository.deleteActionSafely({
+        matchId,
+        actionId: item.id,
+        type: item.type
       });
     } catch (err) {
-      console.error('Error al eliminar', err);
+      console.error('Error al eliminar jugada:', err);
     }
   };
 

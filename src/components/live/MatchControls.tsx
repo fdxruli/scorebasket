@@ -1,8 +1,9 @@
 // src/components/live/MatchControls.tsx
-import { Play, Pause, FastForward, Flag, Users } from 'lucide-react';
+import { Play, Pause, FastForward } from 'lucide-react';
 import type { Player, Team } from '../../db/models';
 import type { GameAction } from './PlayerSelectModal';
 import { GameActionControls } from '../../features/match-creations/components/shared/GameActionControls';
+import { LiveToolsBar } from '../../features/match-creations/components/shared/LiveToolsBar';
 
 interface MatchControlsProps {
   localTeam: Team;
@@ -35,10 +36,26 @@ export function MatchControls({
   return (
     <section className="controls-panel">
 
-      {/* GRILLA DE ACCIONES PRINCIPALES */}
-      <div className="action-grid">
+      {/* 1. TRANSPORTE: reloj y periodo juntos (lo que se usa a cada rato) */}
+      <div className="transport-bar">
+        <button
+          type="button"
+          onClick={onToggleTimer}
+          className={`btn-transport ${isTimerRunning ? 'is-running' : 'is-paused'}`}
+          title={isTimerRunning ? 'Pausar reloj' : 'Iniciar reloj'}
+        >
+          {isTimerRunning ? <Pause fill="currentColor" size={22} /> : <Play fill="currentColor" size={22} />}
+          <span>{isTimerRunning ? 'Pausar' : 'Iniciar'}</span>
+        </button>
 
-        {/* LADO LOCAL (IZQUIERDA) */}
+        <button type="button" onClick={onNextQuarter} className="btn-transport is-secondary" title="Avanzar al siguiente periodo">
+          <FastForward size={20} />
+          <span>{nextPeriodLabel}</span>
+        </button>
+      </div>
+
+      {/* 2. ANOTACIÓN: un bloque por equipo */}
+      <div className="action-grid">
         <div className="team-column">
           <GameActionControls
             teamName={localTeam.name}
@@ -49,7 +66,6 @@ export function MatchControls({
           />
         </div>
 
-        {/* LADO VISITANTE (DERECHA) */}
         <div className="team-column">
           <GameActionControls
             teamName={visitorTeam.name}
@@ -59,48 +75,17 @@ export function MatchControls({
             onFoul={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, { type: 'foul' })}
           />
         </div>
-
       </div>
 
-      {/* BARRA INFERIOR DE RELOJ Y UTILIDADES */}
-      <div className="bottom-bar">
-        <button type="button" onClick={onEndMatch} className="btn-utility danger-subtle" title="Finalizar y cerrar partido">
-          <Flag size={18} />
-          <span>Finalizar</span>
-        </button>
-
-        {onToggleTrackPlayers && (
-          <button
-            type="button"
-            onClick={onToggleTrackPlayers}
-            className={`btn-utility ${trackPlayers ? 'active-toggle' : ''}`}
-            title="Activar o desactivar selección de jugador al anotar"
-          >
-            <Users size={18} />
-            <span>Jugadores: {trackPlayers ? 'ON' : 'OFF'}</span>
-          </button>
-        )}
-
-        {/* BOTÓN PRINCIPAL PLAY/PAUSE */}
-        <button
-          type="button"
-          onClick={onToggleTimer}
-          className={`btn-main-play ${isTimerRunning ? 'play' : 'pause'}`}
-          title={isTimerRunning ? 'Pausar reloj' : 'Iniciar reloj'}
-        >
-          {isTimerRunning ? (
-            <Pause fill="currentColor" size={32} />
-          ) : (
-            <Play fill="currentColor" size={32} style={{ marginLeft: '0.2rem' }} />
-          )}
-        </button>
-
-        <button type="button" onClick={onNextQuarter} className="btn-utility" title="Avanzar al siguiente periodo">
-          <FastForward size={18} />
-          <span>{nextPeriodLabel}</span>
-        </button>
-      </div>
-
+      {/* 3. HERRAMIENTAS: secundarias, con "Finalizar" aislado */}
+      {onToggleTrackPlayers && (
+        <LiveToolsBar
+          trackPlayers={trackPlayers}
+          onToggleTrackPlayers={onToggleTrackPlayers}
+          onEndMatch={onEndMatch}
+          showBuzzer
+        />
+      )}
     </section>
   );
 }

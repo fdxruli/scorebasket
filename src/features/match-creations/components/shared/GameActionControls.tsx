@@ -13,6 +13,8 @@ interface Props {
   variant: 'local' | 'visitor';
 }
 
+const SCORE_LABELS: Record<1 | 2 | 3, string> = { 1: 'LIBRE', 2: 'DOBLE', 3: 'TRIPLE' };
+
 export const GameActionControls: React.FC<Props> = ({
   teamName,
   onScore,
@@ -21,17 +23,10 @@ export const GameActionControls: React.FC<Props> = ({
   scoringOptions = [1, 2, 3],
   variant
 }) => {
-  const isLocal = variant === 'local';
-  const smBtnClass = isLocal ? 'btn-local-sm' : 'btn-visitor-sm';
-  const lgBtnClass = isLocal ? 'btn-local-lg' : 'btn-visitor-lg';
-  const xlBtnClass = isLocal ? 'btn-local-xl' : 'btn-visitor-xl';
-  const foulBtnClass = isLocal ? 'btn-local-foul' : 'btn-visitor-foul';
-
-  const isTwoOptions = scoringOptions.length === 2;
-
+  // Mobile-first: todos los puntos del equipo en UNA sola fila y la falta justo debajo,
+  // para que cada equipo sea un bloque compacto y no haya que buscar botones.
   return (
     <div className={`team-controls-pad ${variant}`}>
-      {/* Identificador claro de columna para no confundir equipo al anotar rápido */}
       {teamName && (
         <div className={`pad-team-header ${variant}`}>
           <span className="pad-team-dot" />
@@ -39,67 +34,31 @@ export const GameActionControls: React.FC<Props> = ({
         </div>
       )}
 
-      {isTwoOptions ? (
-        /* --- MODO CALLE / RETA (1 y 2 Puntos): 2 Botones Gigantes --- */
-        <div className="btn-score-group is-street">
-          {scoringOptions.map((pts) => (
-            <button
-              key={pts}
-              type="button"
-              disabled={disabled}
-              onClick={() => onScore(pts)}
-              className={`btn-action ${xlBtnClass}`}
-            >
-              <span className="btn-score-num">+{pts}</span>
-              <span className="btn-score-sub">{pts === 1 ? 'PUNTO' : 'DOBLE'}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        /* --- MODO ESTÁNDAR (1, 2 y 3 Puntos): +1 y +2 arriba, +3 prominente abajo --- */
-        <>
-          <div className="btn-score-group">
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onScore(1)}
-              className={`btn-action ${smBtnClass}`}
-            >
-              <span className="btn-score-num">+1</span>
-              <span className="btn-score-sub">LIBRE</span>
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onScore(2)}
-              className={`btn-action ${smBtnClass}`}
-            >
-              <span className="btn-score-num">+2</span>
-              <span className="btn-score-sub">DOBLE</span>
-            </button>
-          </div>
-
+      <div className={`btn-score-group count-${scoringOptions.length}`}>
+        {scoringOptions.map((pts) => (
           <button
+            key={pts}
             type="button"
             disabled={disabled}
-            onClick={() => onScore(3)}
-            className={`btn-action ${lgBtnClass}`}
+            onClick={() => onScore(pts)}
+            className={`btn-action btn-score btn-${variant}-score ${pts === 3 ? 'is-three' : ''}`}
+            aria-label={`Sumar ${pts} punto${pts > 1 ? 's' : ''} a ${teamName ?? variant}`}
           >
-            <span className="btn-score-num">+3</span>
-            <span className="btn-score-sub">TRIPLE</span>
+            <span className="btn-score-num">+{pts}</span>
+            <span className="btn-score-sub">{SCORE_LABELS[pts]}</span>
           </button>
-        </>
-      )}
+        ))}
+      </div>
 
-      {/* Botón de Falta Grande y Visible */}
       <button
         type="button"
         disabled={disabled}
         onClick={onFoul}
-        className={`btn-action ${foulBtnClass}`}
+        className={`btn-action btn-${variant}-foul`}
+        aria-label={`Falta de ${teamName ?? variant}`}
       >
-        <AlertCircle size={18} />
-        <span>FALTA {teamName ? teamName.substring(0, 8) : ''}</span>
+        <AlertCircle size={16} />
+        <span>FALTA</span>
       </button>
     </div>
   );

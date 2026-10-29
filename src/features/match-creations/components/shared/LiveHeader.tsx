@@ -2,13 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronLeft, RotateCcw, History, Users, Trophy, AlertCircle, Volume2, VolumeX, Bell } from 'lucide-react';
+import { ChevronLeft, RotateCcw, History, Users, Trophy, AlertCircle } from 'lucide-react';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { LiveMatchHistoryModal } from '../../../../components/live/LiveMatchHistoryModal';
 import { LivePlayersModal } from '../../../../components/live/LivePlayersModal';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
-import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 import { db } from '../../../../db/db';
 
 export const LiveHeader: React.FC = () => {
@@ -17,7 +16,6 @@ export const LiveHeader: React.FC = () => {
   const { match, localTeam, visitorTeam, setActionModalOpen } = useLiveMatch();
   const [showHistory, setShowHistory] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
-  const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
 
   useEffect(() => {
     setActionModalOpen('live-header-history', showHistory);
@@ -28,16 +26,6 @@ export const LiveHeader: React.FC = () => {
     setActionModalOpen('live-header-players', showPlayers);
     return () => setActionModalOpen('live-header-players', false);
   }, [showPlayers, setActionModalOpen]);
-
-  const handleToggleMute = () => {
-    const nextMuted = toggleSoundMute();
-    setMuted(nextMuted);
-  };
-
-  const handleManualBuzzer = () => {
-    unlockAudioContext();
-    playBuzzer();
-  };
 
   const mode = match?.config?.mode || 'traditional';
   const currentQuarter = match?.currentQuarter || 1;
@@ -132,38 +120,16 @@ export const LiveHeader: React.FC = () => {
 
         {/* Acciones Rápidas: Chicharra, Sonido, Jugadores, Historial, Deshacer */}
         <div className="live-header-actions">
-          {mode === 'traditional' && (
-            <button
-              type="button"
-              onClick={handleManualBuzzer}
-              className="live-btn-icon buzzer-btn"
-              title="Sonar chicharra manual (cambios / mesa)"
-              aria-label="Sonar chicharra manual"
-            >
-              <Bell size={19} />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleToggleMute}
-            className={`live-btn-icon ${muted ? 'is-muted' : 'is-sound-on'}`}
-            title={muted ? 'Sonido silenciado (toca para activar)' : 'Sonido de cancha activo (toca para silenciar)'}
-            aria-label={muted ? 'Activar sonido' : 'Silenciar sonido'}
-          >
-            {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
-          </button>
-
           <button
             type="button"
             onClick={() => setShowPlayers(true)}
-            className="live-btn-pill"
+            className="live-btn-icon"
             title="Ver y gestionar jugadores y estadísticas en vivo"
+            aria-label="Jugadores y estadísticas"
           >
-            <Users size={18} />
-            <span className="live-btn-pill-label">Jugadores</span>
+            <Users size={20} />
             {totalPlayersCount > 0 && (
-              <span className="live-btn-pill-count">{totalPlayersCount}</span>
+              <span className="live-btn-pill-count live-btn-badge">{totalPlayersCount}</span>
             )}
           </button>
 

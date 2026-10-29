@@ -5,11 +5,12 @@ import { useGameActions } from '../../hooks/useGameActions';
 import { useSeriesLogic } from '../../hooks/useSeriesLogic';
 import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
+import { LiveToolsBar } from '../shared/LiveToolsBar';
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
-import { Trophy, Layers, Flag, Users, Share2 } from 'lucide-react';
+import { Trophy, Layers, Flag, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Player } from '../../../../db/models';
 
@@ -299,27 +300,11 @@ export const SeriesEngine: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bottom-bar" style={{ gap: '0.65rem' }}>
-                    <button
-                        type="button"
-                        onClick={() => setTrackPlayers(prev => !prev)}
-                        className={`btn-utility ${trackPlayers ? 'active-toggle' : ''}`}
-                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
-                    >
-                        <Users size={17} />
-                        <span>Jugadores: {trackPlayers ? 'ON' : 'OFF'}</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setShowEarlyFinishConfirm(true)}
-                        className="btn-utility danger-subtle"
-                        style={{ flex: 1, flexDirection: 'row', gap: '0.5rem', fontSize: '0.78rem' }}
-                    >
-                        <Flag size={17} />
-                        <span>Finalizar Partido</span>
-                    </button>
-                </div>
+                <LiveToolsBar
+                    trackPlayers={trackPlayers}
+                    onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
+                    onEndMatch={() => setShowEarlyFinishConfirm(true)}
+                />
             </section>
 
             {/* --- MODALES --- */}

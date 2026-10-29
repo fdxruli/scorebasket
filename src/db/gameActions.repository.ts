@@ -37,8 +37,9 @@ export const GameActionsRepository = {
     matchId: number;
     actionId: number;
     type: 'score' | 'foul';
+    _faultInjection?: 'post-delete';
   }): Promise<DeleteActionResult> {
-    const { matchId, actionId, type } = params;
+    const { matchId, actionId, type, _faultInjection } = params;
 
     return db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
       // 1. Consultar el partido actual
@@ -96,7 +97,7 @@ export const GameActionsRepository = {
 
       const isLocal = action.teamId === match.localTeamId;
 
-      // 8, 9, 10, 11, 12: Integridad y actualización
+      // 8, 9, 10, 11, 12, 13: Integridad, actualización y verificación posterior
       if (type === 'score') {
         const scoreItem = action as Score;
         const currentLocal = match.localScore ?? 0;
@@ -123,13 +124,13 @@ export const GameActionsRepository = {
           throw new Error(`Historial no verificable: la eliminación está bloqueada porque no se pudo acreditar la integridad (${integrity.reason ?? 'estado no verificable'}).`);
         }
 
-        // 11. Cuando la operación está autorizada, borrar la anotación y actualizar el marcador atómicamente
+        // 11. Borrar la anotación y actualizar el marcador atómicamente
         await db.scores.delete(actionId);
 
         const newLocal = isLocal ? currentLocal - points : currentLocal;
         const newVisitor = !isLocal ? currentVisitor - points : currentVisitor;
 
-        // 12. Verificar que el estado posterior conserva la consistencia (sin números negativos)
+        // 12. Verificar que el estado resultante conserva la no-negatividad
         if (newLocal < 0 || newVisitor < 0) {
           throw new Error('Invariante violado: el marcador resultante contiene valores negativos.');
         }
@@ -138,6 +139,23 @@ export const GameActionsRepository = {
           localScore: newLocal,
           visitorScore: newVisitor
         });
+
+        // 13. Fallo controlado para pruebas de rollback transaccional (R1.5)
+        if (_faultInjection === 'post-delete') {
+          throw new Error('Fallo transaccional deliberado provocado después de la escritura parcial.');
+        }
+
+        // 14. Verificación de consistencia posterior dentro de la misma transacción antes de confirmar
+        const updatedMatch = await db.matches.get(matchId);
+        if (!updatedMatch) {
+          throw new Error('El partido no existe tras la actualización.');
+        }
+        const remainingScores = await db.scores.where('matchId').equals(matchId).toArray();
+        const postIntegrity = ScoreIntegrityService.verifyScoreIntegrity(updatedMatch, remainingScores);
+
+        if (postIntegrity.status !== 'CONSISTENT') {
+          throw new Error(`Inconsistencia posterior detectada: la eliminación produce un estado inválido (${postIntegrity.reason ?? 'marcador no consistente'}).`);
+        }
 
         return {
           success: true,
@@ -168,6 +186,18 @@ export const GameActionsRepository = {
           localFouls: newLocalFouls,
           visitorFouls: newVisitorFouls
         });
+
+        if (_faultInjection === 'post-delete') {
+          throw new Error('Fallo transaccional deliberado provocado después de la escritura parcial de falta.');
+        }
+
+        const updatedMatch = await db.matches.get(matchId);
+        if (!updatedMatch) {
+          throw new Error('El partido no existe tras la actualización de faltas.');
+        }
+        if (updatedMatch.localFouls < 0 || updatedMatch.visitorFouls < 0) {
+          throw new Error('Inconsistencia posterior detectada en contador de faltas.');
+        }
 
         return {
           success: true,

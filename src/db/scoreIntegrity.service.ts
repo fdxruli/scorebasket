@@ -1,6 +1,6 @@
 // src/db/scoreIntegrity.service.ts
 
-import type { Match, Score } from './models';
+import type { Match, Score, GameResult } from './models';
 
 export type ScoreIntegrityStatus = 'CONSISTENT' | 'INCONSISTENT' | 'UNVERIFIED';
 
@@ -19,6 +19,201 @@ export interface PeriodResolutionResult {
   period: number;
   isAmbiguous: boolean;
   reason?: string;
+}
+
+export interface HistoryValidationResult {
+  isValid: boolean;
+  reason?: string;
+}
+
+/**
+ * Valida la identidad, continuidad e integridad del historial de juegos/sets (R1.5).
+ * - Identificadores enteros, positivos y únicos.
+ * - Todos los periodos anteriores (1 .. effectivePeriod - 1) presentes exactamente una vez (sin huecos).
+ * - Periodo actual no cerrado.
+ * - Sin entradas futuras (gameNumber > effectivePeriod).
+ * - Resultados bien formados (puntuaciones enteras >= 0, ganador válido y concordante con los puntos).
+ * - En Best-of-Series: contrastar victorias acumuladas con los ganadores registrados y rechazar empates.
+ * - No reescribir resultados históricos; ante ambigüedad devolver isValid: false.
+ */
+export function validateGameHistoryContinuity(params: {
+  mode: 'race' | 'best-of-series';
+  effectivePeriod: number;
+  history?: GameResult[];
+  bestOfWins?: { local: number; visitor: number };
+}): HistoryValidationResult {
+  const { mode, effectivePeriod, history, bestOfWins } = params;
+
+  // Si estamos en el primer periodo (1), el historial debe estar vacío o no definido
+  if (effectivePeriod === 1) {
+    if (history && history.length > 0) {
+      if (history.some(g => g.gameNumber >= 1)) {
+        return {
+          isValid: false,
+          reason: `Historial anómalo: se disputa el periodo #1 pero gameHistory ya contiene entradas cerradas (${history.map(g => g.gameNumber).join(', ')}).`,
+        };
+      }
+    }
+    return { isValid: true };
+  }
+
+  // Si effectivePeriod > 1, history debe existir y contener entradas previas
+  if (!history || history.length === 0) {
+    return {
+      isValid: false,
+      reason: `Historial incompleto: se disputa el periodo #${effectivePeriod} pero no existen juegos previos registrados en gameHistory.`,
+    };
+  }
+
+  const seenNumbers = new Set<number>();
+  let recordedLocalWins = 0;
+  let recordedVisitorWins = 0;
+
+  for (const g of history) {
+    // 1. Identificador entero y positivo
+    if (typeof g.gameNumber !== 'number' || !Number.isInteger(g.gameNumber) || g.gameNumber <= 0) {
+      return {
+        isValid: false,
+        reason: `Identificador de juego inválido en gameHistory: "${g.gameNumber}" no es un entero positivo.`,
+      };
+    }
+
+    // 2. Resultados malformados: puntuaciones
+    if (
+      typeof g.localScore !== 'number' ||
+      !Number.isInteger(g.localScore) ||
+      g.localScore < 0 ||
+      typeof g.visitorScore !== 'number' ||
+      !Number.isInteger(g.visitorScore) ||
+      g.visitorScore < 0
+    ) {
+      return {
+        isValid: false,
+        reason: `Resultado malformado en juego #${g.gameNumber}: puntuaciones deben ser enteros no negativos.`,
+      };
+    }
+
+    // 3. Resultados malformados: ganador
+    if (!['local', 'visitor', 'tie'].includes(g.winner)) {
+      return {
+        isValid: false,
+        reason: `Resultado malformado en juego #${g.gameNumber}: ganador inválido "${g.winner}".`,
+      };
+    }
+
+    // En Best-of-Series los sets no pueden terminar en empate
+    if (mode === 'best-of-series' && g.winner === 'tie') {
+      return {
+        isValid: false,
+        reason: `Resultado inválido en Best-of-Series: el set #${g.gameNumber} está registrado como empate, lo cual no está permitido en series.`,
+      };
+    }
+
+    // Coherencia deportiva entre puntos y ganador
+    if (g.winner === 'local' && g.localScore <= g.visitorScore) {
+      return {
+        isValid: false,
+        reason: `Resultado contradictorio en juego #${g.gameNumber}: ganador local pero marcador (${g.localScore}-${g.visitorScore}) no refleja victoria local.`,
+      };
+    }
+    if (g.winner === 'visitor' && g.visitorScore <= g.localScore) {
+      return {
+        isValid: false,
+        reason: `Resultado contradictorio en juego #${g.gameNumber}: ganador visitante pero marcador (${g.localScore}-${g.visitorScore}) no refleja victoria visitante.`,
+      };
+    }
+    if (g.winner === 'tie' && g.localScore !== g.visitorScore) {
+      return {
+        isValid: false,
+        reason: `Resultado contradictorio en juego #${g.gameNumber}: registrado como empate pero marcador (${g.localScore}-${g.visitorScore}) difiere.`,
+      };
+    }
+
+    if (g.winner === 'local') recordedLocalWins++;
+    if (g.winner === 'visitor') recordedVisitorWins++;
+
+    // 4. Periodo actual cerrado
+    if (g.gameNumber === effectivePeriod) {
+      return {
+        isValid: false,
+        reason: `El periodo #${effectivePeriod} ya figura cerrado en gameHistory.`,
+      };
+    }
+
+    // 5. Entradas futuras
+    if (g.gameNumber > effectivePeriod) {
+      return {
+        isValid: false,
+        reason: `Entrada futura detectada en gameHistory: el juego #${g.gameNumber} es posterior al periodo actual #${effectivePeriod}.`,
+      };
+    }
+
+    // 6. Duplicados
+    if (seenNumbers.has(g.gameNumber)) {
+      return {
+        isValid: false,
+        reason: `Identificador duplicado en gameHistory: el juego #${g.gameNumber} aparece más de una vez.`,
+      };
+    }
+    seenNumbers.add(g.gameNumber);
+  }
+
+  // 7. Huecos: verificar que cada periodo previo [1 .. effectivePeriod - 1] esté presente
+  for (let k = 1; k < effectivePeriod; k++) {
+    if (!seenNumbers.has(k)) {
+      return {
+        isValid: false,
+        reason: `Hueco detectado en gameHistory: falta el periodo previo #${k} para el periodo actual #${effectivePeriod}.`,
+      };
+    }
+  }
+
+  // 8. Best-of-Series: contrastar victorias acumuladas con los ganadores registrados
+  if (mode === 'best-of-series') {
+    const storedLocalWins = bestOfWins?.local ?? 0;
+    const storedVisitorWins = bestOfWins?.visitor ?? 0;
+    if (storedLocalWins !== recordedLocalWins || storedVisitorWins !== recordedVisitorWins) {
+      return {
+        isValid: false,
+        reason: `Incoherencia en Best-of-Series: victorias acumuladas (L:${storedLocalWins}, V:${storedVisitorWins}) no coinciden con los ganadores registrados en el historial (L:${recordedLocalWins}, V:${recordedVisitorWins}).`,
+      };
+    }
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Evalúa si existe evidencia verificable de procedencia y completitud del flujo de eventos (R1.5).
+ * No asume completitud simplemente por coincidencia numérica.
+ */
+function hasVerifiableEventEvidence(params: {
+  match: Match;
+  scores: Score[];
+  relevantQuarter?: number;
+}): boolean {
+  const { match, scores, relevantQuarter } = params;
+
+  // 1. Procedencia explícitamente acreditada (creado y registrado mediante rutas de sesión en vivo)
+  if (match.eventsProvenance !== 'live_session') {
+    return false;
+  }
+
+  // 2. Validación de eventos del periodo o partido:
+  const relevantScores = relevantQuarter !== undefined
+    ? scores.filter(s => s.matchId === match.id && s.quarter === relevantQuarter)
+    : scores.filter(s => s.matchId === match.id);
+
+  for (const s of relevantScores) {
+    if (![1, 2, 3].includes(s.points)) {
+      return false;
+    }
+    if (s.matchId !== match.id) return false;
+    if (s.teamId !== match.localTeamId && s.teamId !== match.visitorTeamId) return false;
+    if (!(s.createdAt instanceof Date) || isNaN(s.createdAt.getTime())) return false;
+  }
+
+  return true;
 }
 
 export const ScoreIntegrityService = {
@@ -110,6 +305,18 @@ export const ScoreIntegrityService = {
 
     const effectivePeriod = periodRes.period;
 
+    // Validación de procedencia explícitamente no acreditada (R1.5)
+    if (match.eventsProvenance === 'unverified') {
+      return {
+        status: 'UNVERIFIED',
+        mode,
+        effectivePeriod,
+        storedScore,
+        reason: 'Historial no verificable: procedencia de eventos no acreditada.',
+        isCompleteHistory: false,
+      };
+    }
+
     // --- MODALIDAD: TRADITIONAL ---
     if (mode === 'traditional') {
       const matchScores = scores.filter(s => s.matchId === match.id);
@@ -157,6 +364,7 @@ export const ScoreIntegrityService = {
       };
 
       const isConsistent = discrepancy.local === 0 && discrepancy.visitor === 0;
+      const isCompleteHistory = isConsistent && hasVerifiableEventEvidence({ match, scores });
 
       return {
         status: isConsistent ? 'CONSISTENT' : 'INCONSISTENT',
@@ -166,35 +374,26 @@ export const ScoreIntegrityService = {
         computedScore,
         discrepancy,
         reason: isConsistent ? undefined : 'Discrepancia entre marcador almacenado y suma de anotaciones.',
-        isCompleteHistory: true,
+        isCompleteHistory,
       };
     }
 
     // --- MODALIDAD: RACE ---
     if (mode === 'race') {
-      const history = match.gameHistory || [];
+      // Validación estricta de continuidad e identidad de juegos (R1.5)
+      const continuityResult = validateGameHistoryContinuity({
+        mode: 'race',
+        effectivePeriod,
+        history: match.gameHistory,
+      });
 
-      // Continuidad de historial en revanchas:
-      // Si estamos en el juego N > 1, gameHistory debe contener los juegos anteriores [1 .. N-1].
-      if (effectivePeriod > 1 && history.length < effectivePeriod - 1) {
+      if (!continuityResult.isValid) {
         return {
           status: 'UNVERIFIED',
           mode,
           effectivePeriod,
           storedScore,
-          reason: `Historial incompleto en Race: se disputa el juego #${effectivePeriod} pero solo hay ${history.length} juegos cerrados en gameHistory.`,
-          isCompleteHistory: false,
-        };
-      }
-
-      // El juego actual no debe estar registrado ya como cerrado
-      if (history.some(g => g.gameNumber === effectivePeriod)) {
-        return {
-          status: 'UNVERIFIED',
-          mode,
-          effectivePeriod,
-          storedScore,
-          reason: `El juego #${effectivePeriod} ya figura cerrado en gameHistory.`,
+          reason: continuityResult.reason,
           isCompleteHistory: false,
         };
       }
@@ -244,6 +443,11 @@ export const ScoreIntegrityService = {
       };
 
       const isConsistent = discrepancy.local === 0 && discrepancy.visitor === 0;
+      const isCompleteHistory = isConsistent && hasVerifiableEventEvidence({
+        match,
+        scores,
+        relevantQuarter: effectivePeriod,
+      });
 
       return {
         status: isConsistent ? 'CONSISTENT' : 'INCONSISTENT',
@@ -253,48 +457,27 @@ export const ScoreIntegrityService = {
         computedScore,
         discrepancy,
         reason: isConsistent ? undefined : 'Discrepancia entre marcador del juego actual y jugadas del periodo.',
-        isCompleteHistory: true,
+        isCompleteHistory,
       };
     }
 
     // --- MODALIDAD: BEST-OF-SERIES ---
     if (mode === 'best-of-series') {
-      const history = match.gameHistory || [];
+      // Validación estricta de continuidad e identidad de sets y victorias (R1.5)
+      const continuityResult = validateGameHistoryContinuity({
+        mode: 'best-of-series',
+        effectivePeriod,
+        history: match.gameHistory,
+        bestOfWins: match.config?.bestOf?.wins,
+      });
 
-      // Continuidad de sets en la serie:
-      if (effectivePeriod > 1 && history.length < effectivePeriod - 1) {
+      if (!continuityResult.isValid) {
         return {
           status: 'UNVERIFIED',
           mode,
           effectivePeriod,
           storedScore,
-          reason: `Historial incompleto en Best-of-Series: se disputa el set #${effectivePeriod} pero solo hay ${history.length} sets cerrados en gameHistory.`,
-          isCompleteHistory: false,
-        };
-      }
-
-      // Coherencia entre victorias acumuladas de la serie y tamaño del historial
-      const winsLocal = match.config?.bestOf?.wins?.local ?? 0;
-      const winsVisitor = match.config?.bestOf?.wins?.visitor ?? 0;
-      if (history.length > 0 && winsLocal + winsVisitor !== history.length) {
-        return {
-          status: 'UNVERIFIED',
-          mode,
-          effectivePeriod,
-          storedScore,
-          reason: `Inconsistencia en Best-of-Series: la suma de victorias (${winsLocal + winsVisitor}) difiere de sets en historial (${history.length}).`,
-          isCompleteHistory: false,
-        };
-      }
-
-      // El set actual no debe estar registrado ya como cerrado
-      if (history.some(g => g.gameNumber === effectivePeriod)) {
-        return {
-          status: 'UNVERIFIED',
-          mode,
-          effectivePeriod,
-          storedScore,
-          reason: `El set #${effectivePeriod} ya figura cerrado en gameHistory.`,
+          reason: continuityResult.reason,
           isCompleteHistory: false,
         };
       }
@@ -344,6 +527,11 @@ export const ScoreIntegrityService = {
       };
 
       const isConsistent = discrepancy.local === 0 && discrepancy.visitor === 0;
+      const isCompleteHistory = isConsistent && hasVerifiableEventEvidence({
+        match,
+        scores,
+        relevantQuarter: effectivePeriod,
+      });
 
       return {
         status: isConsistent ? 'CONSISTENT' : 'INCONSISTENT',
@@ -353,7 +541,7 @@ export const ScoreIntegrityService = {
         computedScore,
         discrepancy,
         reason: isConsistent ? undefined : 'Discrepancia entre marcador del set actual y jugadas del periodo.',
-        isCompleteHistory: true,
+        isCompleteHistory,
       };
     }
 

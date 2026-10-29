@@ -769,4 +769,598 @@ describe('R1.4: Contrato de Integridad y Protección de Anotaciones (15 Escenari
     expect(remainingFouls.filter(f => f.quarter === 2)).toHaveLength(1);
     expect(remainingFouls.filter(f => f.quarter === 1)).toHaveLength(1);
   });
+
+  // =========================================================================
+  // MINI-FASE R1.5: Certificación del Contrato de Integridad (10 Escenarios)
+  // =========================================================================
+
+  describe('R1.5: Certificación y Blindaje del Contrato de Integridad', () => {
+    // 1. Race juego 3 con historial "[1, 1]"
+    it('1. Race juego 3 con historial "[1, 1]": detecta identificadores duplicados y devuelve UNVERIFIED', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 3, hasRematches: true },
+        },
+        localScore: 5,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() },
+          { gameNumber: 1, localScore: 21, visitorScore: 12, winner: 'local', finishedAt: new Date() }, // Duplicado!
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 3,
+        createdAt: new Date(),
+      })) as number;
+
+      const match = (await db.matches.get(matchId))!;
+      const scores = await db.scores.where('matchId').equals(matchId).toArray();
+
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, scores);
+      expect(integrity.status).toBe('UNVERIFIED');
+      expect(integrity.isCompleteHistory).toBe(false);
+      expect(integrity.reason).toMatch(/duplicado/i);
+
+      // Bloquea deleteActionSafely para proteger la integridad
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      // Comprobar que no se alteró la BD
+      const matchAfter = await db.matches.get(matchId);
+      expect(matchAfter?.localScore).toBe(5);
+      const scoreAfter = await db.scores.get(scoreId);
+      expect(scoreAfter).toBeDefined();
+    });
+
+    // 2. Race juego 3 con historial "[1]"
+    it('2. Race juego 3 con historial "[1]": detecta hueco de juego 2 y devuelve UNVERIFIED', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 3, hasRematches: true },
+        },
+        localScore: 5,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() },
+          // Juego 2 ausente (hueco)
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 3,
+        createdAt: new Date(),
+      })) as number;
+
+      const match = (await db.matches.get(matchId))!;
+      const scores = await db.scores.where('matchId').equals(matchId).toArray();
+
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, scores);
+      expect(integrity.status).toBe('UNVERIFIED');
+      expect(integrity.isCompleteHistory).toBe(false);
+      expect(integrity.reason).toMatch(/Hueco detectado/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+    });
+
+    // 3. Race juego 3 con historial "[1, 2]"
+    it('3. Race juego 3 con historial "[1, 2]": continuidad válida permite eliminar jugadas del juego 3', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        eventsProvenance: 'live_session',
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 3, hasRematches: true },
+        },
+        localScore: 5,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() },
+          { gameNumber: 2, localScore: 18, visitorScore: 21, winner: 'visitor', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 3,
+        createdAt: new Date(Date.now() - 2000),
+      });
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 3,
+        createdAt: new Date(Date.now() - 1000),
+      })) as number;
+
+      const matchBefore = (await db.matches.get(matchId))!;
+      const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
+
+      const integrityBefore = ScoreIntegrityService.verifyScoreIntegrity(matchBefore, scoresBefore);
+      expect(integrityBefore.status).toBe('CONSISTENT');
+      expect(integrityBefore.isCompleteHistory).toBe(true);
+
+      const deleteResult = await GameActionsRepository.deleteActionSafely({
+        matchId,
+        actionId: scoreId,
+        type: 'score',
+      });
+
+      expect(deleteResult.success).toBe(true);
+      expect(deleteResult.deleted).toBe(true);
+      expect(deleteResult.newScore?.local).toBe(3);
+
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.localScore).toBe(3);
+
+      const scoresAfter = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrityAfter = ScoreIntegrityService.verifyScoreIntegrity(matchAfter, scoresAfter);
+      expect(integrityAfter.status).toBe('CONSISTENT');
+      expect(integrityAfter.isCompleteHistory).toBe(true);
+    });
+
+    // 4. Race con identificadores no enteros o futuros
+    it('4. Race con identificadores no enteros o futuros: rechaza corrupción y devuelve UNVERIFIED', async () => {
+      // Caso 4a: Identificador no entero (1.5)
+      const matchNonIntegerId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 2, hasRematches: true },
+        },
+        localScore: 2,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1.5 as unknown as number, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      const scoreNonInteger = (await db.scores.add({
+        matchId: matchNonIntegerId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 2,
+        createdAt: new Date(),
+      })) as number;
+
+      const matchNI = (await db.matches.get(matchNonIntegerId))!;
+      const scoresNI = await db.scores.where('matchId').equals(matchNonIntegerId).toArray();
+      const integrityNI = ScoreIntegrityService.verifyScoreIntegrity(matchNI, scoresNI);
+      expect(integrityNI.status).toBe('UNVERIFIED');
+      expect(integrityNI.reason).toMatch(/no es un entero positivo/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId: matchNonIntegerId,
+          actionId: scoreNonInteger,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+
+      // Caso 4b: Entrada futura (juego 4 en historial cuando el actual es 2)
+      const matchFutureId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 2, hasRematches: true },
+        },
+        localScore: 2,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 10, winner: 'local', finishedAt: new Date() },
+          { gameNumber: 4, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() }, // Futuro!
+        ],
+      })) as number;
+
+      const scoreFuture = (await db.scores.add({
+        matchId: matchFutureId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 2,
+        createdAt: new Date(),
+      })) as number;
+
+      const matchFut = (await db.matches.get(matchFutureId))!;
+      const scoresFut = await db.scores.where('matchId').equals(matchFutureId).toArray();
+      const integrityFut = ScoreIntegrityService.verifyScoreIntegrity(matchFut, scoresFut);
+      expect(integrityFut.status).toBe('UNVERIFIED');
+      expect(integrityFut.reason).toMatch(/Entrada futura/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId: matchFutureId,
+          actionId: scoreFuture,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+    });
+
+    // 5. Best-of-Series con duplicados
+    it('5. Best-of-Series con duplicados: detecta sets duplicados en gameHistory y devuelve UNVERIFIED', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'best-of-series',
+          bestOf: {
+            totalGames: 3,
+            targetScorePerGame: 21,
+            currentGame: 3,
+            wins: { local: 2, visitor: 0 },
+          },
+        },
+        currentQuarter: 3,
+        localScore: 3,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+          { gameNumber: 1, localScore: 21, visitorScore: 19, winner: 'local', finishedAt: new Date() }, // Duplicado!
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 3,
+        createdAt: new Date(),
+      })) as number;
+
+      const match = (await db.matches.get(matchId))!;
+      const scores = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, scores);
+
+      expect(integrity.status).toBe('UNVERIFIED');
+      expect(integrity.isCompleteHistory).toBe(false);
+      expect(integrity.reason).toMatch(/duplicado/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+    });
+
+    // 6. Best-of-Series con victorias contradictorias
+    it('6. Best-of-Series con victorias contradictorias: detecta discrepancia entre wins y ganadores registrados', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'best-of-series',
+          bestOf: {
+            totalGames: 3,
+            targetScorePerGame: 21,
+            currentGame: 3,
+            wins: { local: 1, visitor: 1 }, // Contradice historial: 2 victorias locales
+          },
+        },
+        currentQuarter: 3,
+        localScore: 2,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+          { gameNumber: 2, localScore: 21, visitorScore: 19, winner: 'local', finishedAt: new Date() }, // Ganador local
+        ],
+      })) as number;
+
+      const scoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 3,
+        createdAt: new Date(),
+      })) as number;
+
+      const match = (await db.matches.get(matchId))!;
+      const scores = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, scores);
+
+      expect(integrity.status).toBe('UNVERIFIED');
+      expect(integrity.isCompleteHistory).toBe(false);
+      expect(integrity.reason).toMatch(/Incoherencia en Best-of-Series: victorias acumuladas/i);
+
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/Historial no verificable/i);
+    });
+
+    // 7. Igualdad numérica sin evidencia suficiente de completitud
+    it('7. Igualdad numérica sin evidencia suficiente de completitud: separa consistencia de completitud histórica', async () => {
+      // 7a: Procedencia explícitamente no verificada
+      const matchUnverifiedId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        eventsProvenance: 'unverified',
+        config: { mode: 'traditional' },
+        currentQuarter: 1,
+        localScore: 6, // Marcador = 6
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      // Eventos suman exactamente 6 (3 + 3)
+      await db.scores.bulkAdd([
+        { matchId: matchUnverifiedId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+        { matchId: matchUnverifiedId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+      ] as Score[]);
+
+      const matchUV = (await db.matches.get(matchUnverifiedId))!;
+      const scoresUV = await db.scores.where('matchId').equals(matchUnverifiedId).toArray();
+      const integrityUV = ScoreIntegrityService.verifyScoreIntegrity(matchUV, scoresUV);
+
+      // A pesar de la igualdad numérica, procedencia no acreditada produce UNVERIFIED e isCompleteHistory: false
+      expect(integrityUV.status).toBe('UNVERIFIED');
+      expect(integrityUV.isCompleteHistory).toBe(false);
+      expect(integrityUV.reason).toMatch(/procedencia de eventos no acreditada/i);
+
+      // 7b: Registro histórico legado sin procedencia explícita pero con igualdad numérica
+      const matchLegacyId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        // eventsProvenance no definido (registro preexistente)
+        config: { mode: 'traditional' },
+        currentQuarter: 1,
+        localScore: 6,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      await db.scores.bulkAdd([
+        { matchId: matchLegacyId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 2000) },
+        { matchId: matchLegacyId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 1000) },
+      ] as Score[]);
+
+      const matchLeg = (await db.matches.get(matchLegacyId))!;
+      const scoresLeg = await db.scores.where('matchId').equals(matchLegacyId).toArray();
+      const integrityLeg = ScoreIntegrityService.verifyScoreIntegrity(matchLeg, scoresLeg);
+
+      // El marcador es consistente aritméticamente, PERO NO afirma completitud histórica certificada
+      expect(integrityLeg.status).toBe('CONSISTENT');
+      expect(integrityLeg.isCompleteHistory).toBe(false); // NO se asume completitud solo porque las sumas coinciden
+    });
+
+    // 8. Partido nuevo con historial verificable y Deshacer funcional
+    it('8. Partido nuevo con historial verificable y Deshacer funcional: flujo completo trazable', async () => {
+      // Simular la creación real mediante NewMatch con eventsProvenance: 'live_session'
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'created',
+        createdAt: new Date(),
+        eventsProvenance: 'live_session',
+        config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
+        currentQuarter: 1,
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      // Anotación 1: Triple (+3)
+      await db.transaction('rw', db.matches, db.scores, async () => {
+        await db.scores.add({
+          matchId,
+          teamId: localTeamId,
+          points: 3,
+          quarter: 1,
+          createdAt: new Date(Date.now() - 2000),
+        } as Score);
+        await db.matches.update(matchId, { localScore: 3, status: 'playing' });
+      });
+
+      // Anotación 2: Doble (+2)
+      await db.transaction('rw', db.matches, db.scores, async () => {
+        await db.scores.add({
+          matchId,
+          teamId: localTeamId,
+          points: 2,
+          quarter: 1,
+          createdAt: new Date(Date.now() - 1000),
+        } as Score);
+        await db.matches.update(matchId, { localScore: 5 });
+      });
+
+      const matchWith5 = (await db.matches.get(matchId))!;
+      const scoresWith5 = await db.scores.where('matchId').equals(matchId).toArray();
+      const integrityBeforeUndo = ScoreIntegrityService.verifyScoreIntegrity(matchWith5, scoresWith5);
+
+      expect(integrityBeforeUndo.status).toBe('CONSISTENT');
+      expect(integrityBeforeUndo.isCompleteHistory).toBe(true);
+
+      // Deshacer la última jugada (el doble de 2 puntos)
+      const undoResult = await GameActionsRepository.undoLastAction(matchId);
+      expect(undoResult.success).toBe(true);
+      expect(undoResult.deleted).toBe(true);
+      expect(undoResult.newScore?.local).toBe(3);
+
+      const matchAfterUndo = (await db.matches.get(matchId))!;
+      expect(matchAfterUndo.localScore).toBe(3);
+
+      const remainingScores = await db.scores.where('matchId').equals(matchId).toArray();
+      expect(remainingScores).toHaveLength(1);
+      expect(remainingScores[0].points).toBe(3);
+
+      const integrityAfterUndo = ScoreIntegrityService.verifyScoreIntegrity(matchAfterUndo, remainingScores);
+      expect(integrityAfterUndo.status).toBe('CONSISTENT');
+      expect(integrityAfterUndo.isCompleteHistory).toBe(true);
+    });
+
+    // 9. Rollback ante fallo posterior al borrado de una anotación
+    it('9. Rollback ante fallo posterior al borrado de una anotación: IndexedDB revierte tanto evento como marcador', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        eventsProvenance: 'live_session',
+        config: { mode: 'traditional' },
+        currentQuarter: 1,
+        localScore: 5,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+      })) as number;
+
+      await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 2000),
+      });
+
+      const scoreToDelete = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 2,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 1000),
+      })) as number;
+
+      // Invocar fallo transaccional deliberado después de la escritura parcial (_faultInjection)
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: scoreToDelete,
+          type: 'score',
+          _faultInjection: 'post-delete',
+        })
+      ).rejects.toThrow(/Fallo transaccional deliberado/i);
+
+      // Verificación estricta de rollback en IndexedDB:
+      // 1. La anotación NO debe haber sido eliminada de db.scores
+      const scoreInDb = await db.scores.get(scoreToDelete);
+      expect(scoreInDb).toBeDefined();
+      expect(scoreInDb?.points).toBe(2);
+
+      // 2. El marcador en db.matches NO debe haber sido descontado
+      const matchInDb = await db.matches.get(matchId);
+      expect(matchInDb?.localScore).toBe(5);
+
+      // 3. El total de anotaciones en BD sigue sumando 5 puntos
+      const allScores = await db.scores.where('matchId').equals(matchId).toArray();
+      const totalPoints = allScores.reduce((sum, s) => sum + s.points, 0);
+      expect(totalPoints).toBe(5);
+    });
+
+    // 10. Preservación de resultados y ganadores históricos
+    it('10. Preservación de resultados y ganadores históricos: inmutabilidad de juegos y sets cerrados', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        createdAt: new Date(),
+        config: {
+          mode: 'race',
+          race: { targetScore: 21, currentGame: 2, hasRematches: true },
+        },
+        localScore: 4,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+        ],
+      })) as number;
+
+      // Anotación del juego 1 (cerrado)
+      const closedScoreId = (await db.scores.add({
+        matchId,
+        teamId: localTeamId,
+        points: 3,
+        quarter: 1,
+        createdAt: new Date(Date.now() - 50000),
+      })) as number;
+
+      // Intentar eliminar la anotación del juego 1 debe ser categóricamente rechazado
+      await expect(
+        GameActionsRepository.deleteActionSafely({
+          matchId,
+          actionId: closedScoreId,
+          type: 'score',
+        })
+      ).rejects.toThrow(/No se pueden eliminar acciones de juegos o sets anteriores ya cerrados/i);
+
+      // Confirmar que gameHistory, ganadores y marcadores cerrados permanecen 100% inmutables
+      const matchAfter = (await db.matches.get(matchId))!;
+      expect(matchAfter.gameHistory).toHaveLength(1);
+      expect(matchAfter.gameHistory![0].gameNumber).toBe(1);
+      expect(matchAfter.gameHistory![0].winner).toBe('local');
+      expect(matchAfter.gameHistory![0].localScore).toBe(21);
+      expect(matchAfter.gameHistory![0].visitorScore).toBe(15);
+
+      // Marcador del juego actual no fue alterado
+      expect(matchAfter.localScore).toBe(4);
+    });
+  });
 });

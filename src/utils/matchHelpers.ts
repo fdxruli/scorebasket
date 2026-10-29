@@ -118,6 +118,7 @@ export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
       visitorTeamId,
       status: 'playing',
       createdAt: new Date(),
+      eventsProvenance: 'live_session',
       config: {
         mode: 'race',
         race: {

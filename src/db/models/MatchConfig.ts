@@ -13,6 +13,7 @@ export type ScoringSystem = 'standard' | 'street';
 export interface TraditionalConfig {
   totalQuarters: number;        // Número de periodos (ej: 4)
   minutesPerQuarter: number;    // Duración en minutos (ej: 10)
+  timeoutsPerTeam?: number;     // Tiempos fuera por equipo (ej: 2, 3, 5)
 }
 
 /**

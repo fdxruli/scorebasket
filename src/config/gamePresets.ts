@@ -4,7 +4,8 @@ export const GAME_PRESETS = {
     mode: 'traditional' as const,
     traditional: {
       totalQuarters: 4,
-      minutesPerQuarter: 12
+      minutesPerQuarter: 12,
+      timeoutsPerTeam: 5
     }
   },
   
@@ -12,7 +13,8 @@ export const GAME_PRESETS = {
     mode: 'traditional' as const,
     traditional: {
       totalQuarters: 4,
-      minutesPerQuarter: 10
+      minutesPerQuarter: 10,
+      timeoutsPerTeam: 5
     }
   },
   
@@ -20,7 +22,8 @@ export const GAME_PRESETS = {
     mode: 'traditional' as const,
     traditional: {
       totalQuarters: 4,
-      minutesPerQuarter: 10
+      minutesPerQuarter: 10,
+      timeoutsPerTeam: 3
     }
   },
   
@@ -91,7 +94,9 @@ export const MODE_OPTIONS = {
   traditional: {
     quarterOptions: [2, 4, 6, 8],
     minuteOptions: [5, 8, 10, 12, 15, 20],
+    timeoutOptions: [1, 2, 3, 5],
     defaultQuarters: 4,
-    defaultMinutes: 10
+    defaultMinutes: 10,
+    defaultTimeouts: 3
   }
 } as const;

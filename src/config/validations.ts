@@ -9,7 +9,9 @@ export const VALIDATION_RULES = {
     minQuarters: 1,
     maxQuarters: 8,
     minMinutes: 1,
-    maxMinutes: 30
+    maxMinutes: 30,
+    minTimeouts: 0,
+    maxTimeouts: 10
   },
   race: {
     minScore: 1,
@@ -39,7 +41,7 @@ export function validateMatchConfig(config: MatchConfig): {
         break;
       }
       
-      const { totalQuarters, minutesPerQuarter } = config.traditional;
+      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = config.traditional;
       const rules = VALIDATION_RULES.traditional;
       
       if (totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
@@ -48,6 +50,10 @@ export function validateMatchConfig(config: MatchConfig): {
       
       if (minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
         errors.push(`Los minutos deben estar entre ${rules.minMinutes} y ${rules.maxMinutes}`);
+      }
+
+      if (timeoutsPerTeam !== undefined && (timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
+        errors.push(`Los tiempos fuera deben estar entre ${rules.minTimeouts} y ${rules.maxTimeouts}`);
       }
       break;
     }
@@ -107,7 +113,8 @@ export function getDefaultConfig(mode: MatchConfig['mode']): MatchConfig {
         mode: 'traditional',
         traditional: {
           totalQuarters: VALIDATION_RULES.traditional.minQuarters * 4,
-          minutesPerQuarter: 10
+          minutesPerQuarter: 10,
+          timeoutsPerTeam: 3
         }
       };
     

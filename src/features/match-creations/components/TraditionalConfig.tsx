@@ -9,9 +9,10 @@ interface TraditionalConfigProps {
 }
 
 export function TraditionalConfigComponent({ config, onChange }: TraditionalConfigProps) {
-  const { quarterOptions, minuteOptions } = MODE_OPTIONS.traditional;
+  const { quarterOptions, minuteOptions, timeoutOptions } = MODE_OPTIONS.traditional;
 
   const totalMinutes = config.totalQuarters * config.minutesPerQuarter;
+  const timeoutsCount = config.timeoutsPerTeam ?? 3;
 
   return (
     <div className="mode-config traditional">
@@ -76,13 +77,41 @@ export function TraditionalConfigComponent({ config, onChange }: TraditionalConf
             placeholder="Otro..."
           />
         </div>
+
+        {/* Selector de Tiempos Fuera */}
+        <div className="config-group">
+          <label className="config-label">Tiempos Fuera por Equipo</label>
+          
+          <div className="preset-buttons">
+            {(timeoutOptions || [1, 2, 3, 5]).map(timeouts => (
+              <button
+                key={timeouts}
+                type="button"
+                onClick={() => onChange({ ...config, timeoutsPerTeam: timeouts })}
+                className={`preset-btn ${timeoutsCount === timeouts ? 'active' : ''}`}
+              >
+                {timeouts}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="number"
+            min="0"
+            max="10"
+            value={timeoutsCount}
+            onChange={e => onChange({ ...config, timeoutsPerTeam: Math.max(0, parseInt(e.target.value) || 0) })}
+            className="input input-number"
+            placeholder="Otro..."
+          />
+        </div>
       </div>
 
       {/* Info Card */}
       <div className="config-info">
         <Info size={16} />
         <div>
-          <strong>Duración total estimada:</strong> {totalMinutes} minutos de juego
+          <strong>Duración estimada:</strong> {totalMinutes} min de juego • <strong>{timeoutsCount}</strong> tiempos fuera por equipo
         </div>
       </div>
     </div>

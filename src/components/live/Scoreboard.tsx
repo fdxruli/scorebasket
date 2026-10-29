@@ -21,9 +21,8 @@ interface ScoreboardProps {
     onToggleTimer?: () => Promise<void> | void;
     localTeamId?: number;
     visitorTeamId?: number;
+    showCenterTimer?: boolean;
 }
-
-const MAX_TIMEOUTS = 3;
 
 const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);
@@ -39,6 +38,7 @@ export function Scoreboard({
     timeLeft, isTimerRunning,
     showTimer = true,
     showFouls = true,
+    showCenterTimer = false,
     onTimerClick,
     onToggleTimer,
     localTeamId,
@@ -98,14 +98,16 @@ export function Scoreboard({
         await db.matches.update(match.id, { possession: nextPossession });
     };
 
+    const maxTimeouts = match?.config?.traditional?.timeoutsPerTeam ?? 3;
+
     const handleTimeoutClick = async (side: 'local' | 'visitor') => {
         if (!match?.id) return;
         unlockAudioContext();
 
         const currentCount = (side === 'local' ? match.localTimeouts : match.visitorTimeouts) ?? 0;
 
-        // Si ya llegó al máximo (3), un toque adicional permite reiniciarlo a 0
-        if (currentCount >= MAX_TIMEOUTS) {
+        // Si ya llegó al máximo, un toque adicional permite reiniciarlo a 0
+        if (currentCount >= maxTimeouts) {
             await db.matches.update(
                 match.id,
                 side === 'local' ? { localTimeouts: 0 } : { visitorTimeouts: 0 }
@@ -145,8 +147,8 @@ export function Scoreboard({
 
     return (
         <section className={`scoreboard-container ${!showTimer ? 'no-timer' : ''}`}>
-            {/* Reloj Central + Flecha de Posesión Alterna */}
-            {showTimer && (
+            {/* Reloj Central (opcional para visualización clásica) */}
+            {showCenterTimer && showTimer && (
                 <div className="timer-center-hub">
                     <button
                         type="button"
@@ -251,18 +253,34 @@ export function Scoreboard({
                             </div>
                         )}
 
-                        {showTimer && (
+                        {showTimer && maxTimeouts > 0 && (
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('local')}
-                                className={`timeout-chip local ${localTimeouts >= MAX_TIMEOUTS ? 'maxed' : ''}`}
+                                className={`btn-timeout-card local ${localTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
-                                    localTimeouts >= MAX_TIMEOUTS
+                                    localTimeouts >= maxTimeouts
                                         ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >
-                                <span>T. FUERA ({localTimeouts}/{MAX_TIMEOUTS})</span>
+                                <div className="timeout-header-row">
+                                    <span className="timeout-title">
+                                        <Clock size={12} />
+                                        T. FUERA
+                                    </span>
+                                    <span className="timeout-count-badge">
+                                        {localTimeouts >= maxTimeouts ? 'AGOTADOS' : `${maxTimeouts - localTimeouts} disp.`}
+                                    </span>
+                                </div>
+                                <div className="timeout-dots-row">
+                                    {Array.from({ length: maxTimeouts }).map((_, idx) => (
+                                        <span
+                                            key={idx}
+                                            className={`timeout-dot ${idx < localTimeouts ? 'used' : 'available'}`}
+                                        />
+                                    ))}
+                                </div>
                             </button>
                         )}
                     </div>
@@ -342,18 +360,34 @@ export function Scoreboard({
                             </div>
                         )}
 
-                        {showTimer && (
+                        {showTimer && maxTimeouts > 0 && (
                             <button
                                 type="button"
                                 onClick={() => handleTimeoutClick('visitor')}
-                                className={`timeout-chip visitor ${visitorTimeouts >= MAX_TIMEOUTS ? 'maxed' : ''}`}
+                                className={`btn-timeout-card visitor ${visitorTimeouts >= maxTimeouts ? 'is-maxed' : ''}`}
                                 title={
-                                    visitorTimeouts >= MAX_TIMEOUTS
+                                    visitorTimeouts >= maxTimeouts
                                         ? 'Tiempos fuera agotados (toca para reiniciar a 0)'
                                         : 'Pedir Tiempo Fuera (pausa el reloj y suena silbato)'
                                 }
                             >
-                                <span>T. FUERA ({visitorTimeouts}/{MAX_TIMEOUTS})</span>
+                                <div className="timeout-header-row">
+                                    <span className="timeout-title">
+                                        <Clock size={12} />
+                                        T. FUERA
+                                    </span>
+                                    <span className="timeout-count-badge">
+                                        {visitorTimeouts >= maxTimeouts ? 'AGOTADOS' : `${maxTimeouts - visitorTimeouts} disp.`}
+                                    </span>
+                                </div>
+                                <div className="timeout-dots-row">
+                                    {Array.from({ length: maxTimeouts }).map((_, idx) => (
+                                        <span
+                                            key={idx}
+                                            className={`timeout-dot ${idx < visitorTimeouts ? 'used' : 'available'}`}
+                                        />
+                                    ))}
+                                </div>
                             </button>
                         )}
                     </div>

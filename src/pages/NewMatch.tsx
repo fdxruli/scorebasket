@@ -90,6 +90,8 @@ export function NewMatch() {
         matchData.timerLastStart = undefined;
         matchData.totalQuarters = config.traditional.totalQuarters;
         matchData.quarterDuration = config.traditional.minutesPerQuarter;
+        matchData.localTimeouts = 0;
+        matchData.visitorTimeouts = 0;
       }
 
       if (config.mode === 'race' || config.mode === 'best-of-series') {

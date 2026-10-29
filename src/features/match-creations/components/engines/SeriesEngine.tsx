@@ -123,6 +123,13 @@ export const SeriesEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
+            {/* Herramientas secundarias (en vertical: arriba de los marcadores; en horizontal: columna central superior) */}
+            <LiveToolsBar
+                trackPlayers={trackPlayers}
+                onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
+                onEndMatch={() => setShowEarlyFinishConfirm(true)}
+            />
+
             {/* 1. BANNER SUPERIOR COMPACTO DE SETS GANADOS (PLAYOFFS BAR) */}
             <div className="race-stage-banner" style={{ paddingBottom: '0.2rem' }}>
                 <div
@@ -299,12 +306,6 @@ export const SeriesEngine: React.FC = () => {
                         />
                     </div>
                 </div>
-
-                <LiveToolsBar
-                    trackPlayers={trackPlayers}
-                    onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
-                    onEndMatch={() => setShowEarlyFinishConfirm(true)}
-                />
             </section>
 
             {/* --- MODALES --- */}

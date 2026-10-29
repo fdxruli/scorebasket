@@ -491,44 +491,114 @@
   border-radius: var(--radius-full);
 }
 
-.timeout-chip {
+/* Botón de Tiempo Fuera Grande y Mejorado */
+.btn-timeout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-timeout-card.local {
+  border-color: rgba(14, 165, 233, 0.25);
+}
+.btn-timeout-card.local:hover {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: var(--secondary-light);
+}
+
+.btn-timeout-card.visitor {
+  border-color: rgba(255, 95, 31, 0.25);
+}
+.btn-timeout-card.visitor:hover {
+  background: rgba(255, 95, 31, 0.15);
+  border-color: var(--primary-light);
+}
+
+.btn-timeout-card:active {
+  transform: scale(0.97);
+}
+
+.btn-timeout-card.is-maxed {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.timeout-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.timeout-title {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 4px 9px;
-  border-radius: var(--radius-full);
+  gap: 0.3rem;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.timeout-count-badge {
   font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  transition: all 0.16s ease;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: var(--text-main);
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.timeout-chip.local:hover {
-  background: rgba(14, 165, 233, 0.2);
-  border-color: var(--secondary-light);
+.btn-timeout-card.is-maxed .timeout-count-badge {
+  background: rgba(239, 68, 68, 0.25);
   color: #fff;
 }
 
-.timeout-chip.visitor:hover {
-  background: rgba(255, 95, 31, 0.2);
-  border-color: var(--primary-light);
-  color: #fff;
+.timeout-dots-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
 }
 
-.timeout-chip:active {
-  transform: scale(0.94);
+.timeout-dot {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  transition: all 0.2s ease;
 }
 
-.timeout-chip.maxed {
-  background: rgba(245, 158, 11, 0.18);
-  border-color: rgba(245, 158, 11, 0.45);
-  color: #fcd34d;
+.btn-timeout-card.local .timeout-dot.available {
+  background: rgba(14, 165, 233, 0.3);
+}
+.btn-timeout-card.local .timeout-dot.used {
+  background: var(--secondary-light);
+  box-shadow: 0 0 6px var(--secondary);
+}
+
+.btn-timeout-card.visitor .timeout-dot.available {
+  background: rgba(255, 95, 31, 0.3);
+}
+.btn-timeout-card.visitor .timeout-dot.used {
+  background: var(--primary-light);
+  box-shadow: 0 0 6px var(--primary);
+}
+
+.btn-timeout-card.is-maxed .timeout-dot.used {
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
 }
 
 .fouls-dots {
@@ -1371,11 +1441,57 @@
   flex-shrink: 0;
 }
 
-/* 1. Transporte */
+/* 1. Transporte y Reloj Unificados */
 .transport-bar {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 0.6rem;
+  grid-template-columns: 1.15fr 1.35fr 1fr;
+  gap: 0.5rem;
+}
+
+.btn-transport.transport-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.35rem;
+  background: linear-gradient(180deg, #151928 0%, #080a10 100%);
+  border: 1px solid var(--border-strong);
+  color: var(--text-main);
+}
+
+.btn-transport.transport-clock.is-running {
+  border-color: var(--primary);
+  box-shadow: 0 0 16px rgba(255, 95, 31, 0.28);
+}
+
+.btn-transport.transport-clock.is-editable {
+  cursor: pointer;
+}
+
+.btn-transport.transport-clock.is-editable:hover {
+  border-color: var(--secondary-light);
+  color: #fff;
+}
+
+.transport-clock-digits {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.transport-clock-hint {
+  font-family: var(--font-sans);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--secondary-light);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  line-height: 1.1;
 }
 
 .btn-transport {
@@ -1415,7 +1531,114 @@
 
 .btn-transport.is-secondary { color: var(--text-secondary); font-size: 0.8rem; }
 
-/* 2. Anotación */
+/* 2. Botón de Posesión Fluido y Visible (en medio de las zonas de juego) */
+.possession-hub-container {
+  width: 100%;
+  margin: 0.1rem 0 0.2rem;
+}
+
+.btn-possession-fluid {
+  width: 100%;
+  height: 2.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(20, 24, 36, 0.95) 0%, rgba(12, 14, 22, 0.98) 100%);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0 0.85rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-possession-fluid:active {
+  transform: scale(0.985);
+}
+
+.possession-side {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  transition: all 0.22s ease;
+  z-index: 2;
+  min-width: 0;
+}
+
+.possession-chevron {
+  font-size: 1rem;
+  font-weight: 900;
+  transition: transform 0.2s ease;
+}
+
+.possession-team-name {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.possession-center-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.possession-pill-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+/* Estados activos fluidos con iluminación hacia el equipo */
+.btn-possession-fluid.is-local {
+  border-color: rgba(14, 165, 233, 0.6);
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.25);
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.25) 0%, rgba(12, 14, 22, 0.98) 75%);
+}
+
+.btn-possession-fluid.is-local .possession-side.local {
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+}
+
+.btn-possession-fluid.is-local .possession-side.local .possession-chevron {
+  transform: translateX(-3px);
+  color: #38bdf8;
+}
+
+.btn-possession-fluid.is-visitor {
+  border-color: rgba(255, 95, 31, 0.6);
+  box-shadow: 0 0 20px rgba(255, 95, 31, 0.25);
+  background: linear-gradient(270deg, rgba(255, 95, 31, 0.25) 0%, rgba(12, 14, 22, 0.98) 75%);
+}
+
+.btn-possession-fluid.is-visitor .possession-side.visitor {
+  color: #fb923c;
+  text-shadow: 0 0 10px rgba(251, 146, 60, 0.6);
+}
+
+.btn-possession-fluid.is-visitor .possession-side.visitor .possession-chevron {
+  transform: translateX(3px);
+  color: #fb923c;
+}
+
+/* 3. Anotación */
 .action-grid {
   gap: 0.75rem;
 }
@@ -1478,14 +1701,21 @@
   margin-top: 0.25rem;
 }
 
-/* 3. Herramientas */
+/* Herramientas Secundarias (en vertical: arriba de los marcadores; en horizontal: columna central) */
 .tools-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--border-light);
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.4rem 0.85rem;
+  border-bottom: 1px solid var(--border-light);
+  border-top: none;
+  background: rgba(10, 13, 20, 0.65);
+  backdrop-filter: blur(12px);
+  z-index: 12;
 }
 
 .tools-bar-group { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
@@ -1549,7 +1779,8 @@
 }
 
 @media (min-width: 768px) and (min-height: 551px) {
-  .transport-bar { grid-template-columns: 1.4fr 1fr; max-width: 520px; margin: 0 auto; width: 100%; }
+  .transport-bar { grid-template-columns: 1.15fr 1.35fr 1fr; max-width: 580px; margin: 0 auto; width: 100%; }
+  .possession-hub-container { max-width: 580px; margin: 0 auto; }
   .btn-transport { height: 3.9rem; }
   .btn-action.btn-score { height: 5rem; }
   .btn-action.btn-score .btn-score-num { font-size: 2rem; }
@@ -1766,70 +1997,119 @@
     border-radius: var(--radius-sm) !important;
   }
 
-  /* 5. Columna 2: CENTRAL HUB */
-  /* Reloj y posesión (Modo Tradicional): DISTINGUIDOS Y CON ESPACIO */
+  /* 5. Columna 2: CENTRAL HUB REDISEÑADO */
+  /* El viejo timer-center-hub del scoreboard se oculta en landscape */
   .timer-center-hub {
-    position: static !important;
-    transform: none !important;
+    display: none !important;
+  }
+
+  /* Fila 3 Centro: Herramientas secundarias (Finalizar arriba, Jugadores/Sonido/Campana abajo) */
+  .tools-bar {
     grid-column: 2 !important;
     grid-row: 3 !important;
     display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.6rem !important; /* SEPARACIÓN generosa para evitar toques accidentales */
-    margin: 0 auto !important;
-    z-index: 10 !important;
-  }
-
-  .timer-pill {
-    padding: 0.35rem 1rem !important;
-    font-size: 1.65rem !important;
-    border-radius: var(--radius-md) !important;
+    flex-direction: column-reverse !important; /* Finalizar queda arriba, bajo "EN CANCHA - Q1" */
     gap: 0.35rem !important;
     width: 100% !important;
-    max-width: 175px !important;
-    justify-content: center !important;
+    max-width: 215px !important;
+    margin: 0 auto !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    align-self: center !important;
   }
 
-  .possession-pill {
-    padding: 0.28rem 0.85rem !important;
-    font-size: 0.78rem !important;
-    min-height: 32px !important;
-    border-radius: var(--radius-full) !important;
-    display: inline-flex !important;
+  .tools-bar-group {
+    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    gap: 0.35rem !important;
+    width: 100% !important;
   }
 
-  /* Transporte de periodo/reloj (Modo Tradicional) */
+  .tool-chip {
+    height: 2.1rem !important;
+    font-size: 0.7rem !important;
+    padding: 0 0.5rem !important;
+  }
+
+  .tool-chip.icon-only {
+    width: 2.1rem !important;
+    height: 2.1rem !important;
+  }
+
+  .tool-chip.is-danger {
+    width: 100% !important;
+    height: 2.1rem !important;
+    justify-content: center !important;
+  }
+
+  /* Fila 4 Centro: Reloj + Iniciar/Pausar + Ir a Q (Unificados juntos) */
   .transport-bar {
     grid-column: 2 !important;
     grid-row: 4 !important;
-    display: flex !important;
-    flex-direction: column !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1.25fr 0.95fr !important;
     gap: 0.35rem !important;
     width: 100% !important;
-    max-width: 200px !important;
+    max-width: 220px !important;
     margin: 0 auto !important;
+    align-self: center !important;
   }
 
   .btn-transport {
-    height: 2.5rem !important;
-    font-size: 0.85rem !important;
+    height: 2.7rem !important;
+    font-size: 0.8rem !important;
     border-radius: var(--radius-sm) !important;
-    padding: 0 0.6rem !important;
+    padding: 0 0.35rem !important;
+  }
+
+  .btn-transport.transport-clock {
+    height: 2.7rem !important;
+    padding: 0.15rem 0.25rem !important;
+  }
+
+  .transport-clock-digits {
+    font-size: 1.15rem !important;
   }
 
   .btn-transport.is-secondary {
-    height: 2.1rem !important;
-    font-size: 0.75rem !important;
+    height: 2.7rem !important;
+    font-size: 0.72rem !important;
   }
 
-  /* Banners de meta (Modo Reta / Series) */
+  /* Fila 5 Centro: Botón de Posesión Fluido y Visible (en medio de faltas/puntos) */
+  .possession-hub-container {
+    grid-column: 2 !important;
+    grid-row: 5 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-width: 220px !important;
+    margin: 0 auto !important;
+    align-self: center !important;
+  }
+
+  .btn-possession-fluid {
+    height: 2.5rem !important;
+    padding: 0 0.6rem !important;
+  }
+
+  .possession-team-name {
+    max-width: 58px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .possession-pill-label {
+    font-size: 0.58rem !important;
+    padding: 0.1rem 0.35rem !important;
+  }
+
+  /* Banners de meta (Modo Reta / Series en Landscape) */
   .race-stage-banner {
     grid-column: 2 !important;
-    grid-row: 3 / 5 !important;
+    grid-row: 4 / 6 !important;
     align-self: center !important;
     justify-self: center !important;
     width: 100% !important;
@@ -1863,45 +2143,6 @@
     max-width: 215px !important;
     border-radius: var(--radius-md) !important;
     text-align: center !important;
-  }
-
-  /* Barra de herramientas transversal central */
-  .tools-bar {
-    grid-column: 2 !important;
-    grid-row: 5 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 0.35rem !important;
-    width: 100% !important;
-    max-width: 200px !important;
-    margin: 0 auto !important;
-    border-top: none !important;
-    padding-top: 0 !important;
-  }
-
-  .tools-bar-group {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.35rem !important;
-    width: 100% !important;
-  }
-
-  .tool-chip {
-    height: 2.3rem !important;
-    font-size: 0.72rem !important;
-    padding: 0 0.55rem !important;
-  }
-
-  .tool-chip.icon-only {
-    width: 2.3rem !important;
-    height: 2.3rem !important;
-  }
-
-  .tool-chip.is-danger {
-    width: 100% !important;
-    height: 2.3rem !important;
-    justify-content: center !important;
   }
 
   /* Modales en landscape compacto */

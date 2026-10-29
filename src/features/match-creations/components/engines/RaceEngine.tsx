@@ -124,6 +124,13 @@ export const RaceEngine: React.FC = () => {
         <div className="live-layout">
             <LiveHeader />
 
+            {/* Herramientas secundarias (en vertical: arriba de los marcadores; en horizontal: columna central superior) */}
+            <LiveToolsBar
+                trackPlayers={trackPlayers}
+                onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
+                onEndMatch={() => setShowEarlyFinishConfirm(true)}
+            />
+
             <div className="race-stage-banner">
                 <div className="race-info-pill">
                     <span className="race-info-label">
@@ -197,12 +204,6 @@ export const RaceEngine: React.FC = () => {
                         />
                     </div>
                 </div>
-
-                <LiveToolsBar
-                    trackPlayers={trackPlayers}
-                    onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
-                    onEndMatch={() => setShowEarlyFinishConfirm(true)}
-                />
             </section>
 
             {currentAction && (

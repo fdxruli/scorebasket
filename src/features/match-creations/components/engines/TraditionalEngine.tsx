@@ -18,6 +18,7 @@ import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatus
 
 // Components compartidos
 import { LiveHeader } from '../shared/LiveHeader';
+import { LiveToolsBar } from '../shared/LiveToolsBar';
 
 export const TraditionalEngine: React.FC = () => {
   const navigate = useNavigate();
@@ -212,11 +213,26 @@ export const TraditionalEngine: React.FC = () => {
     setShowTimerModal(false);
   };
 
+  const handleTogglePossession = async () => {
+    if (!match?.id) return;
+    const current = match.possession ?? null;
+    const nextPossession: 'local' | 'visitor' = current === 'local' ? 'visitor' : 'local';
+    await db.matches.update(match.id, { possession: nextPossession });
+  };
+
   const isLocalModal = playerModal.teamId === localTeam.id;
 
   return (
     <div className="live-layout">
       <LiveHeader />
+
+      {/* Herramientas secundarias (en vertical: arriba de los marcadores; en horizontal: columna central superior) */}
+      <LiveToolsBar
+        trackPlayers={trackPlayers}
+        onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
+        onEndMatch={() => setConfirmDialog('end-match')}
+        showBuzzer
+      />
 
       <Scoreboard
         localName={localTeam.name}
@@ -237,11 +253,13 @@ export const TraditionalEngine: React.FC = () => {
         localPlayers={localTeam.players}
         visitorPlayers={visitorTeam.players}
         isTimerRunning={isTimerRunning}
-        trackPlayers={trackPlayers}
-        onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
+        timeLeft={timeLeft}
+        canEditTimer={!isTimerRunning}
+        onTimerClick={openTimerEditor}
+        possession={match.possession ?? null}
+        onTogglePossession={handleTogglePossession}
         onToggleTimer={toggleTimer}
         onNextQuarter={handleNextQuarterClick}
-        onEndMatch={() => setConfirmDialog('end-match')}
         nextPeriodLabel={nextPeriodBtnLabel}
         onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}
       />

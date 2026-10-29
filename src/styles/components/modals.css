@@ -1568,3 +1568,85 @@
 .mls-dash {
   color: var(--text-muted);
 }
+
+/* =========================================
+   ADAPTACIONES DE MODALES EN MODO HORIZONTAL (LANDSCAPE MÓVIL)
+   ========================================= */
+@media (orientation: landscape) and (max-height: 550px) {
+  .modal-overlay {
+    padding: 0.5rem;
+    align-items: center;
+  }
+
+  .modal-content {
+    max-height: 94dvh;
+    padding: 0.85rem;
+  }
+
+  .modal-content.variant-game {
+    max-height: 96dvh;
+  }
+
+  .variant-game .pm-header {
+    padding: 0.4rem 0.75rem 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .variant-game .modal-title {
+    font-size: 1.2rem;
+  }
+
+  .pm-instruction {
+    display: none;
+  }
+
+  .pm-team-pill {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.78rem;
+  }
+
+  .pm-close-btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .pm-switch-pill {
+    height: 1.85rem;
+    font-size: 0.82rem;
+  }
+
+  .variant-game .player-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .pm-player-btn {
+    min-height: 72px !important;
+    padding: 0.4rem !important;
+    gap: 0.2rem !important;
+  }
+
+  .player-jersey-num {
+    font-size: 1.75rem !important;
+  }
+
+  .player-name-label {
+    font-size: 0.8rem !important;
+  }
+
+  .pm-stat-chip {
+    font-size: 0.6rem !important;
+    padding: 0.08rem 0.35rem !important;
+  }
+
+  .variant-game-footer.pm-footer-actions {
+    padding: 0.35rem 0.75rem calc(0.35rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .pm-unassigned-btn,
+  .pm-cancel-btn {
+    height: 2.2rem !important;
+    font-size: 0.78rem !important;
+  }
+}

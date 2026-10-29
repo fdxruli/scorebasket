@@ -298,7 +298,7 @@
   align-items: stretch;
   justify-content: center;
   gap: 0.65rem;
-  padding: 2.35rem 0.85rem 0.5rem;
+  padding: 2.25rem 0.85rem 0.65rem;
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;
@@ -307,13 +307,13 @@
 }
 
 .scoreboard-container.no-timer {
-  padding-top: 0.35rem;
+  padding-top: 0.65rem;
 }
 
 .score-card {
   width: 100%;
   height: 100%;
-  max-height: 240px;
+  min-height: 0;
   background: rgba(18, 21, 31, 0.65);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-light);
@@ -322,7 +322,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
@@ -456,13 +456,18 @@
 
 .score-big {
   font-family: var(--font-mono);
-  font-size: clamp(3.4rem, 13vw, 6.75rem);
+  font-size: clamp(3.5rem, 14vw, 6.75rem);
   font-weight: 800;
   line-height: 0.94;
   color: #ffffff;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 6px 28px rgba(0, 0, 0, 0.65);
   transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.2rem 0;
 }
 
 /* Barra de faltas de equipo + indicador BONUS + Tiempos Fuera */
@@ -1054,10 +1059,10 @@
 }
 
 /* ==========================================================================
-   BREAKPOINT: TABLET & DESKTOP ARENA (min-width: 768px / 1100px)
+   BREAKPOINT: TABLET & DESKTOP ARENA (min-width: 768px / 1100px and min-height: 551px)
    Aprovechamiento total del monitor con Jumbotron Widescreen y Botones Grandes
    ========================================================================== */
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 551px) {
   .live-layout {
     padding: 0.5rem 1.5rem 1.25rem;
     gap: 0.5rem;
@@ -1163,7 +1168,7 @@
   }
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 1100px) and (min-height: 551px) {
   .live-layout {
     padding: 0.75rem 2.5rem 1.5rem;
   }
@@ -1531,7 +1536,7 @@
   .btn-action.btn-score .btn-score-sub { display: none; }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 551px) {
   .transport-bar { grid-template-columns: 1.4fr 1fr; max-width: 520px; margin: 0 auto; width: 100%; }
   .btn-transport { height: 3.9rem; }
   .btn-action.btn-score { height: 5rem; }
@@ -1541,4 +1546,371 @@
   .btn-local-foul, .btn-visitor-foul { height: 3.2rem; }
   .tool-chip { height: 2.9rem; font-size: 0.82rem; }
   .tool-chip.icon-only { width: 2.9rem; }
+}
+
+/* ==========================================================================
+   MOBILE-FIRST: ARENA COCKPIT EN MODO HORIZONTAL (LANDSCAPE MÓVIL)
+   Diseño ergonómico a 2 pulgares:
+   Columna Izquierda (1): Local (Marcador + Botones de anotación y falta)
+   Columna Central (2):   Hub de Juego (Reloj/Meta + Transporte + Herramientas)
+   Columna Derecha (3):   Visita (Marcador + Botones de anotación y falta)
+   ========================================================================== */
+@media (orientation: landscape) and (max-height: 550px) {
+  .live-layout {
+    display: grid !important;
+    grid-template-columns: 1fr minmax(180px, 220px) 1fr !important;
+    grid-template-rows: auto auto 1fr auto !important;
+    gap: 0.35rem 0.6rem !important;
+    padding: 0.25rem max(0.65rem, env(safe-area-inset-right, 0px)) calc(0.25rem + env(safe-area-inset-bottom, 0px)) max(0.65rem, env(safe-area-inset-left, 0px)) !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    align-items: stretch !important;
+  }
+
+  /* 1. Header ultra-compacto transversal */
+  .live-header {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+    padding: 0.15rem 0.5rem !important;
+    gap: 0.4rem !important;
+  }
+
+  .live-btn-icon {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+  }
+
+  .live-btn-icon svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .live-badge {
+    height: 28px !important;
+    padding: 0.15rem 0.65rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .live-last-play-bar {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    padding: 0.15rem 0.55rem !important;
+    margin: 0 0 0.1rem !important;
+    font-size: 0.74rem !important;
+    height: 26px !important;
+  }
+
+  /* 2. Desenvolver contenedores para control total del grid */
+  .scoreboard-container {
+    display: contents !important;
+  }
+
+  .controls-panel {
+    display: contents !important;
+  }
+
+  .action-grid {
+    display: contents !important;
+  }
+
+  /* 3. Columna 1: LOCAL (Marcador y acciones bajo el pulgar izquierdo) */
+  .score-card.local {
+    grid-column: 1 !important;
+    grid-row: 3 / 5 !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0.45rem 0.55rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .action-grid > .team-column:first-child {
+    grid-column: 1 !important;
+    grid-row: 5 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* 4. Columna 3: VISITANTE (Marcador y acciones bajo el pulgar derecho) */
+  .score-card.visitor {
+    grid-column: 3 !important;
+    grid-row: 3 / 5 !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0.45rem 0.55rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .action-grid > .team-column:last-child {
+    grid-column: 3 !important;
+    grid-row: 5 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Estilos internos de tarjetas de marcador en horizontal */
+  .score-card-role {
+    font-size: 0.58rem !important;
+    padding: 0.08rem 0.45rem !important;
+    margin-bottom: 0.1rem !important;
+  }
+
+  .score-card .team-name {
+    font-size: clamp(0.95rem, 2.2vw, 1.3rem) !important;
+    line-height: 1.1 !important;
+    margin-bottom: 0 !important;
+  }
+
+  .score-big {
+    font-size: clamp(2.8rem, 8vw, 4.4rem) !important;
+    line-height: 0.9 !important;
+    margin: 0.1rem 0 !important;
+    flex: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .team-meta-row {
+    margin-top: 0.1rem !important;
+    gap: 0.25rem !important;
+  }
+
+  .fouls-bar {
+    padding: 2px 6px !important;
+    gap: 3px !important;
+  }
+
+  .dot {
+    width: 5px !important;
+    height: 5px !important;
+  }
+
+  .fouls-count-label {
+    font-size: 0.62rem !important;
+  }
+
+  .timeout-chip {
+    padding: 2px 6px !important;
+    font-size: 0.6rem !important;
+  }
+
+  /* Botones de acción táctiles en horizontal */
+  .pad-team-header {
+    display: none !important; /* Oculto: el nombre ya está visible en la tarjeta superior */
+  }
+
+  .team-controls-pad {
+    gap: 0.25rem !important;
+  }
+
+  .btn-score-group,
+  .btn-score-group.count-2,
+  .btn-score-group.count-3 {
+    display: grid !important;
+    gap: 0.25rem !important;
+  }
+
+  .btn-action.btn-score {
+    height: 2.75rem !important;
+    border-radius: var(--radius-sm) !important;
+    padding: 0 !important;
+  }
+
+  .btn-action.btn-score .btn-score-num {
+    font-size: 1.35rem !important;
+  }
+
+  .btn-action.btn-score .btn-score-sub {
+    font-size: 0.5rem !important;
+  }
+
+  .btn-score-group.count-2 .btn-score {
+    height: 2.85rem !important;
+  }
+
+  .btn-score-group.count-2 .btn-score .btn-score-num {
+    font-size: 1.55rem !important;
+  }
+
+  .btn-local-foul,
+  .btn-visitor-foul {
+    height: 2.15rem !important;
+    font-size: 0.8rem !important;
+    margin-top: 0.15rem !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  /* 5. Columna 2: CENTRAL HUB */
+  /* Reloj y posesión (Modo Tradicional) */
+  .timer-center-hub {
+    position: static !important;
+    transform: none !important;
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.25rem !important;
+    margin: 0 auto !important;
+    z-index: 10 !important;
+  }
+
+  .timer-pill {
+    padding: 0.3rem 0.8rem !important;
+    font-size: 1.6rem !important;
+    border-radius: var(--radius-md) !important;
+    gap: 0.35rem !important;
+  }
+
+  .possession-pill {
+    padding: 0.18rem 0.55rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Transporte de periodo/reloj (Modo Tradicional) */
+  .transport-bar {
+    grid-column: 2 !important;
+    grid-row: 4 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+    width: 100% !important;
+    max-width: 200px !important;
+    margin: 0 auto !important;
+  }
+
+  .btn-transport {
+    height: 2.35rem !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    padding: 0 0.5rem !important;
+  }
+
+  .btn-transport.is-secondary {
+    height: 1.95rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Banners de meta (Modo Reta / Series) */
+  .race-stage-banner {
+    grid-column: 2 !important;
+    grid-row: 3 / 5 !important;
+    align-self: center !important;
+    justify-self: center !important;
+    width: 100% !important;
+    max-width: 210px !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+  }
+
+  .race-info-pill {
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+    padding: 0.5rem 0.75rem !important;
+    width: 100% !important;
+    border-radius: var(--radius-md) !important;
+    text-align: center !important;
+  }
+
+  .race-info-label {
+    font-size: 0.68rem !important;
+  }
+
+  .race-info-value {
+    font-size: 1.25rem !important;
+  }
+
+  .series-info-pill {
+    flex-direction: column !important;
+    gap: 0.3rem !important;
+    padding: 0.45rem 0.65rem !important;
+    width: 100% !important;
+    max-width: 210px !important;
+    border-radius: var(--radius-md) !important;
+    text-align: center !important;
+  }
+
+  /* Barra de herramientas transversal central */
+  .tools-bar {
+    grid-column: 2 !important;
+    grid-row: 5 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+    width: 100% !important;
+    max-width: 200px !important;
+    margin: 0 auto !important;
+    border-top: none !important;
+    padding-top: 0 !important;
+  }
+
+  .tools-bar-group {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.25rem !important;
+    width: 100% !important;
+  }
+
+  .tool-chip {
+    height: 2.15rem !important;
+    font-size: 0.7rem !important;
+    padding: 0 0.45rem !important;
+  }
+
+  .tool-chip.icon-only {
+    width: 2.15rem !important;
+    height: 2.15rem !important;
+  }
+
+  .tool-chip.is-danger {
+    width: 100% !important;
+    height: 2.15rem !important;
+    justify-content: center !important;
+  }
+
+  /* Modales en landscape compacto */
+  .game-modal-card {
+    padding: 1rem 1.25rem !important;
+    max-height: 94dvh !important;
+    overflow-y: auto !important;
+  }
+
+  .modal-icon-wrapper {
+    padding: 0.4rem !important;
+    margin-bottom: 0.4rem !important;
+  }
+
+  .game-modal-card h3 {
+    font-size: 1.25rem !important;
+    margin-bottom: 0.2rem !important;
+  }
+
+  .game-modal-card p {
+    font-size: 0.85rem !important;
+    margin-bottom: 0.65rem !important;
+  }
+
+  .btn-modal-primary {
+    padding: 0.6rem 0.9rem !important;
+    font-size: 0.88rem !important;
+  }
+
+  .btn-modal-secondary {
+    padding: 0.5rem !important;
+    font-size: 0.82rem !important;
+  }
 }

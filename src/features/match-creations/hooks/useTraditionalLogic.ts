@@ -4,7 +4,7 @@ import type { Match } from '../../../db/models/Match';
 import { db } from '../../../db/db';
 
 interface UseTraditionalLogicProps {
-  match: Match;
+  match?: Match | null;
   /** Cuando hay un modal de acción/jugadores/historial abierto, diferimos el modal de fin de cuarto/partido */
   isActionModalOpen?: boolean;
 }
@@ -81,16 +81,29 @@ export async function startTraditionalOvertime(
 
 export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTraditionalLogicProps) => {
   // 1. Extraer configuración con fallbacks seguros para partidos legacy
-  const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
+  const quartersConfig = match?.config?.traditional?.totalQuarters || match?.totalQuarters || 4;
 
   // 2. Estado local para modales
   const [showQuarterEndModal, setShowQuarterEndModal] = useState(false);
   const [showMatchEndModal, setShowMatchEndModal] = useState(false);
   const zeroHandledQuarterRef = useRef<number | null>(null);
 
+  // Limpieza de estado local al cambiar el partido durante el render (You Might Not Need an Effect)
+  const [prevMatchId, setPrevMatchId] = useState<number | undefined>(match?.id);
+  if (match?.id !== prevMatchId) {
+    setPrevMatchId(match?.id);
+    setShowQuarterEndModal(false);
+    setShowMatchEndModal(false);
+  }
+
+  // Reiniciar el ref de cuarto manejado en efecto al cambiar el matchId
+  useEffect(() => {
+    zeroHandledQuarterRef.current = null;
+  }, [match?.id]);
+
   // 3. Timer Hook: Pasamos el OBJETO match, no los segundos.
   // El hook se encarga de calcular el tiempo restante basado en la BD y sonar la chicharra en 00:00.
-  const { timeLeft, isRunning, toggleTimer, resetTimer, adjustTime } = useMatchTimer(match);
+  const { timeLeft, isRunning, toggleTimer, resetTimer, adjustTime } = useMatchTimer(match ?? undefined);
 
   // Helper para formato de tiempo (MM:SS)
   const formatTime = (seconds: number) => {
@@ -101,6 +114,7 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
   };
 
   const handleTimerZero = useCallback(() => {
+    if (!match) return;
     const currentQ = match.currentQuarter || 1;
 
     // Si estamos en el último cuarto (o más), es fin de partido.
@@ -109,10 +123,11 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     } else {
       setShowQuarterEndModal(true);
     }
-  }, [match.currentQuarter, quartersConfig]);
+  }, [match, quartersConfig]);
 
   // 4. Efecto: Detectar cuando el reloj llega a cero (diferido si hay un modal de acción en curso)
   useEffect(() => {
+    if (!match) return;
     const currentQ = match.currentQuarter || 1;
 
     if (timeLeft > 0) {
@@ -137,10 +152,9 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
       }
     }
   }, [
+    match,
     timeLeft,
     isRunning,
-    match.status,
-    match.currentQuarter,
     showQuarterEndModal,
     showMatchEndModal,
     handleTimerZero,
@@ -149,35 +163,36 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
 
   // 5. Acción: Siguiente Cuarto (invoca la función real de dominio advanceTraditionalQuarter)
   const nextQuarter = useCallback(async () => {
-    if (!match.id) return;
+    if (!match?.id) return;
     const advanced = await advanceTraditionalQuarter(match.id);
     if (advanced) {
       setShowQuarterEndModal(false);
     }
-  }, [match.id]);
+  }, [match]);
 
   // 6. Acción: Finalizar Partido
   const endMatch = useCallback(async () => {
-    await db.matches.update(match.id!, {
+    if (!match?.id) return;
+    await db.matches.update(match.id, {
       status: 'finished',
       finishedAt: new Date(),
       timerLastStart: undefined
     });
     setShowMatchEndModal(false);
     setShowQuarterEndModal(false);
-  }, [match.id]);
+  }, [match]);
 
   // 7. Acción: Iniciar Tiempo Extra (OT) (invoca la función real de dominio startTraditionalOvertime)
   const startOvertime = useCallback(async (overtimeMinutes = 5) => {
-    if (!match.id) return;
+    if (!match?.id) return;
     const started = await startTraditionalOvertime(match.id, overtimeMinutes);
     if (started) {
       setShowMatchEndModal(false);
       setShowQuarterEndModal(false);
     }
-  }, [match.id]);
+  }, [match]);
 
-  const isTied = (match.localScore || 0) === (match.visitorScore || 0);
+  const isTied = (match?.localScore || 0) === (match?.visitorScore || 0);
 
   return {
     timerDisplay: formatTime(timeLeft),
@@ -187,7 +202,7 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     resetCurrentQuarter: resetTimer,
     adjustTime,
 
-    currentQuarter: match.currentQuarter || 1,
+    currentQuarter: match?.currentQuarter || 1,
     totalQuarters: quartersConfig,
     nextQuarter,
     endMatch,

@@ -70,7 +70,7 @@ const EngineDispatcher = () => {
   const navigate = useNavigate();
 
   // Mantener pantalla encendida mientras el partido esté activo
-  useWakeLock(match?.status !== 'finished');
+  useWakeLock(Boolean(match && match.status !== 'finished'));
 
   // 1. Estado de Carga visible y con altura completa.
   if (isLoading) {

@@ -71,6 +71,16 @@ export const SeriesEngine: React.FC = () => {
         }
     };
 
+    // Limpieza de estado local al cambiar el partido
+    const currentMatchIdRef = useRef<number | undefined>(match?.id);
+    useEffect(() => {
+        if (currentMatchIdRef.current !== match?.id) {
+            currentMatchIdRef.current = match?.id;
+            setCurrentAction(null);
+            setShowEarlyFinishConfirm(false);
+        }
+    }, [match?.id]);
+
     if (!match || !localTeam || !visitorTeam) return null;
 
     const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];

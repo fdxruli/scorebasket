@@ -1,3 +1,4 @@
+import React from 'react';
 // src/test/sb04-series-integrity.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '../db/db';
@@ -5,6 +6,7 @@ import { SeriesService } from '../db/series.service';
 import { ScoreIntegrityService, validateGameHistoryContinuity } from '../db/scoreIntegrity.service';
 import { GameActionsRepository } from '../db/gameActions.repository';
 import type { Match, Score } from '../db/models';
+import { useSeriesLogic } from '../features/match-creations/hooks/useSeriesLogic';
 
 describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best-of-Series', () => {
   let localTeamId: number;
@@ -530,14 +532,18 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
     const snapshotBefore = (await db.matches.get(matchId))!;
     const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
 
-    // Provocamos una excepción post-escritura en SeriesService.confirmSet
-    await expect(
-      SeriesService.confirmSet({
-        matchId,
-        setNumber: 1,
-        _testFailPostWrite: true,
-      })
-    ).rejects.toThrow(/Inyección de fallo post-escritura/i);
+    // Provocamos una excepción post-escritura en SeriesService.confirmSet mediante hook de test aislado
+    SeriesService.__setTestPostWriteHook(() => {});
+    try {
+      await expect(
+        SeriesService.confirmSet({
+          matchId,
+          setNumber: 1,
+        })
+      ).rejects.toThrow(/Inyección de fallo post-escritura/i);
+    } finally {
+      SeriesService.__setTestPostWriteHook(null);
+    }
 
     // Verificamos que la instantánea de IndexedDB es exactamente idéntica
     const matchAfter = (await db.matches.get(matchId))!;
@@ -975,13 +981,17 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
     const snapshotBefore = (await db.matches.get(matchId))!;
     const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
 
-    await expect(
-      SeriesService.finishSeriesEarly({
-        matchId,
-        countCurrentSet: true,
-        _testFailPostWrite: true,
-      })
-    ).rejects.toThrow(/Inyección de fallo post-escritura/i);
+    SeriesService.__setTestPostWriteHook(() => {});
+    try {
+      await expect(
+        SeriesService.finishSeriesEarly({
+          matchId,
+          countCurrentSet: true,
+        })
+      ).rejects.toThrow(/Inyección de fallo post-escritura/i);
+    } finally {
+      SeriesService.__setTestPostWriteHook(null);
+    }
 
     const matchAfter = (await db.matches.get(matchId))!;
     const scoresAfter = await db.scores.where('matchId').equals(matchId).toArray();
@@ -1255,4 +1265,380 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
       })
     ).rejects.toThrow(/No se pueden eliminar acciones de juegos o sets anteriores ya cerrados/i);
   });
+
+  // =========================================================================
+  // FASE 2A R1.2: C-05 y C-06 — CIERRE FINAL DE UX Y AISLAMIENTO DE TEST HOOKS
+  // =========================================================================
+  describe('FASE 2A R1.2: C-05 y C-06 (R12-01 a R12-10)', () => {
+    // Harness de ejecución de hooks React en entorno Node / Vitest
+    function renderHook<T>(hookFn: () => T) {
+      const stateSlots: unknown[] = [];
+      let slotIndex = 0;
+      let currentResult: T;
+
+      const dispatcher = {
+        useState<S>(initialValue: S | (() => S)) {
+          const index = slotIndex++;
+          if (stateSlots.length <= index) {
+            stateSlots.push(typeof initialValue === 'function' ? (initialValue as () => S)() : initialValue);
+          }
+          const setState = (newValue: S | ((prev: S) => S)) => {
+            const current = stateSlots[index] as S;
+            const val = typeof newValue === 'function' ? (newValue as (prev: S) => S)(current) : newValue;
+            stateSlots[index] = val;
+            rerender();
+          };
+          return [stateSlots[index] as S, setState] as const;
+        },
+        useRef<R>(initialValue: R) {
+          const index = slotIndex++;
+          if (stateSlots.length <= index) {
+            stateSlots.push({ current: initialValue });
+          }
+          return stateSlots[index] as { current: R };
+        },
+        useCallback<F extends (...args: unknown[]) => unknown>(fn: F, deps?: unknown[]) {
+          const index = slotIndex++;
+          if (stateSlots.length <= index) {
+            stateSlots.push({ fn, deps });
+            return fn;
+          }
+          const prev = stateSlots[index] as { fn: F; deps?: unknown[] };
+          const depsChanged = !prev.deps || !deps || deps.some((d: unknown, i: number) => !Object.is(d, prev.deps?.[i]));
+          if (depsChanged) {
+            stateSlots[index] = { fn, deps };
+            return fn;
+          }
+          return prev.fn;
+        },
+        useMemo<M>(factory: () => M, deps?: unknown[]) {
+          const index = slotIndex++;
+          if (stateSlots.length <= index) {
+            const value = factory();
+            stateSlots.push({ value, deps });
+            return value;
+          }
+          const prev = stateSlots[index] as { value: M; deps?: unknown[] };
+          const depsChanged = !prev.deps || !deps || deps.some((d: unknown, i: number) => !Object.is(d, prev.deps?.[i]));
+          if (depsChanged) {
+            const value = factory();
+            stateSlots[index] = { value, deps };
+            return value;
+          }
+          return prev.value;
+        },
+        useEffect() {}
+      };
+
+      function rerender() {
+        slotIndex = 0;
+        const internals = (React as unknown as { __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: { H?: unknown } })
+          .__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+        const prevH = internals?.H;
+        if (internals) internals.H = dispatcher;
+        try {
+          currentResult = hookFn();
+        } finally {
+          if (internals) internals.H = prevH;
+        }
+      }
+
+      rerender();
+      return {
+        get result() { return currentResult; },
+        rerender
+      };
+    }
+
+    // Controlador de componentes que replica la máquina de estados de SeriesEngine
+    function useSeriesEngineModal(match: Match) {
+      const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = React.useState(false);
+      const series = useSeriesLogic({ match });
+
+      const handleEarlyFinish = async (countCurrentSet: boolean) => {
+        const result = await series.endSeries({ countCurrentSet });
+        if (result && (result.status === 'finished' || result.status === 'already_finished')) {
+          setShowEarlyFinishConfirm(false);
+        }
+        return result;
+      };
+
+      const handleDismiss = () => {
+        series.clearError();
+        setShowEarlyFinishConfirm(false);
+      };
+
+      const openEarlyFinishModal = () => {
+        series.clearError();
+        setShowEarlyFinishConfirm(true);
+      };
+
+      return {
+        ...series,
+        showEarlyFinishConfirm,
+        setShowEarlyFinishConfirm,
+        handleEarlyFinish,
+        handleDismiss,
+        openEarlyFinishModal,
+      };
+    }
+
+    // R12-01: cierre anticipado válido muestra estado de procesamiento y concluye en finished
+    it('R12-01: cierre anticipado válido muestra estado de procesamiento y concluye en finished cerrando modal', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
+
+      const hook = renderHook(() => useSeriesEngineModal(match));
+      hook.result.openEarlyFinishModal();
+
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      expect(hook.result.errorMessage).toBeNull();
+      expect(hook.result.isProcessing).toBe(false);
+
+      const finishPromise = hook.result.handleEarlyFinish(true);
+      expect(hook.result.isProcessing).toBe(true);
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+
+      const result = await finishPromise;
+      expect(result.status).toBe('finished');
+      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+      expect(hook.result.errorMessage).toBeNull();
+      expect(hook.result.isProcessing).toBe(false);
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('finished');
+    });
+
+    // R12-02: cierre anticipado rechazado mantiene el modal abierto y muestra errorMessage
+    it('R12-02: cierre anticipado rechazado mantiene el modal abierto y muestra el mensaje de error', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
+
+      const hook = renderHook(() => useSeriesEngineModal(match));
+      hook.result.openEarlyFinishModal();
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+
+      const result = await hook.result.handleEarlyFinish(true);
+      expect(result.status).toBe('rejected');
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      expect(hook.result.errorMessage).toMatch(/empatado/i);
+      expect(hook.result.isProcessing).toBe(false);
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('playing');
+    });
+
+    // R12-03: cierre rechazado por eventos inconsistentes muestra el error concreto
+    it('R12-03: cierre rechazado por eventos inconsistentes mantiene el modal abierto y detalla la discrepancia', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 8 });
+      // Sobrescribimos scores de local para generar discrepancia intencional
+      await db.scores.where('matchId').equals(matchId).and(s => s.teamId === localTeamId).delete();
+      await db.scores.bulkAdd([
+        { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
+        { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
+      ]);
+
+      const match = (await db.matches.get(matchId))!;
+      const hook = renderHook(() => useSeriesEngineModal(match));
+      hook.result.openEarlyFinishModal();
+
+      const result = await hook.result.handleEarlyFinish(false);
+      expect(result.status).toBe('rejected');
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      expect(hook.result.errorMessage).toMatch(/Discrepancia detectada en el marcador del set #1/i);
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('playing');
+    });
+
+    // R12-04: cierre rechazado por historial con huecos conserva todos los datos intactos
+    it('R12-04: cierre rechazado por historial con huecos mantiene el modal abierto y no altera datos en BD', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        currentQuarter: 3,
+        localScore: 5,
+        visitorScore: 2,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: {
+          mode: 'best-of-series',
+          bestOf: {
+            totalGames: 3,
+            targetScorePerGame: 21,
+            currentGame: 3,
+            wins: { local: 1, visitor: 0 },
+          },
+        },
+        gameHistory: [
+          { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+          // Falta el set 2: hueco
+        ],
+      })) as number;
+
+      await populateScoresForQuarter(matchId, 3, 5, 2);
+      const snapshotBefore = (await db.matches.get(matchId))!;
+
+      const hook = renderHook(() => useSeriesEngineModal(snapshotBefore));
+      hook.result.openEarlyFinishModal();
+
+      const result = await hook.result.handleEarlyFinish(false);
+      expect(result.status).toBe('rejected');
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      expect(hook.result.errorMessage).toMatch(/violación de integridad histórica/i);
+
+      const snapshotAfter = (await db.matches.get(matchId))!;
+      expect(snapshotAfter).toEqual(snapshotBefore);
+    });
+
+    // R12-05: excepción transaccional conserva el modal y presenta error sin fingir éxito
+    it('R12-05: excepción transaccional en el servicio preserva el modal abierto y muestra el fallo', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
+
+      SeriesService.__setTestPostWriteHook(() => {
+        throw new Error('Fallo transaccional crítico simulado en IndexedDB');
+      });
+
+      try {
+        const hook = renderHook(() => useSeriesEngineModal(match));
+        hook.result.openEarlyFinishModal();
+
+        const result = await hook.result.handleEarlyFinish(false);
+        expect(result.status).toBe('rejected');
+        expect(hook.result.showEarlyFinishConfirm).toBe(true);
+        expect(hook.result.errorMessage).toMatch(/Fallo transaccional crítico simulado en IndexedDB/i);
+        expect(hook.result.isProcessing).toBe(false);
+
+        const dbMatch = (await db.matches.get(matchId))!;
+        expect(dbMatch.status).toBe('playing');
+      } finally {
+        SeriesService.__setTestPostWriteHook(null);
+      }
+    });
+
+    // R12-06: doble clic no genera dos cierres simultáneos (protección con isSubmittingRef)
+    it('R12-06: doble clic no genera dos cierres simultáneos y preserva la integridad', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
+
+      const hook = renderHook(() => useSeriesEngineModal(match));
+      hook.result.openEarlyFinishModal();
+
+      const [res1, res2] = await Promise.all([
+        hook.result.handleEarlyFinish(false),
+        hook.result.handleEarlyFinish(false),
+      ]);
+
+      const statuses = [res1.status, res2.status];
+      expect(statuses).toContain('finished');
+      expect(statuses).toContain('rejected');
+      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('finished');
+    });
+
+    // R12-07: los botones quedan deshabilitados mientras la operación está pendiente
+    it('R12-07: los botones reflejan estado de procesamiento y quedan deshabilitados mientras la operación está pendiente', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
+
+      SeriesService.__setTestPostWriteHook(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      try {
+        const hook = renderHook(() => useSeriesEngineModal(match));
+        hook.result.openEarlyFinishModal();
+
+        const promise = hook.result.handleEarlyFinish(false);
+        expect(hook.result.isProcessing).toBe(true);
+
+        await promise;
+        expect(hook.result.isProcessing).toBe(false);
+      } finally {
+        SeriesService.__setTestPostWriteHook(null);
+      }
+    });
+
+    // R12-08: el usuario puede corregir una inconsistencia y reintentar con éxito
+    it('R12-08: usuario puede corregir discrepancia de anotaciones y reintentar con éxito sin cerrar modal', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 8 });
+      // Generar discrepancia: eliminar puntos de local y dejar solo 6 puntos legítimos (dos triples)
+      await db.scores.where('matchId').equals(matchId).and(s => s.teamId === localTeamId).delete();
+      await db.scores.bulkAdd([
+        { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
+        { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
+      ]);
+
+      const match = (await db.matches.get(matchId))!;
+      const hook = renderHook(() => useSeriesEngineModal(match));
+      hook.result.openEarlyFinishModal();
+
+      // Primer intento: falla y mantiene modal abierto
+      const failRes = await hook.result.handleEarlyFinish(false);
+      expect(failRes.status).toBe('rejected');
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      expect(hook.result.errorMessage).not.toBeNull();
+
+      // Corrección de la discrepancia en la base de datos (añadir los 4 puntos faltantes)
+      await db.scores.bulkAdd([
+        { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date() },
+        { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date() },
+      ]);
+
+      // Segundo intento (reintento del usuario desde el mismo modal abierto)
+      const successRes = await hook.result.handleEarlyFinish(false);
+      expect(successRes.status).toBe('finished');
+      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+      expect(hook.result.errorMessage).toBeNull();
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('finished');
+    });
+
+    // R12-09: respuesta already_finished reconcilia la interfaz y no duplica datos
+    it('R12-09: respuesta already_finished reconcilia la interfaz cerrando el modal de confirmación sin duplicar sets', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      await db.matches.update(matchId, { status: 'finished' });
+      const finishedMatch = (await db.matches.get(matchId))!;
+
+      const hook = renderHook(() => useSeriesEngineModal(finishedMatch));
+      hook.result.setShowEarlyFinishConfirm(true);
+      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+
+      const res = await hook.result.handleEarlyFinish(false);
+      expect(res.status).toBe('already_finished');
+      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('finished');
+      expect(dbMatch.gameHistory?.length).toBe(0);
+    });
+
+    // R12-10: los mecanismos de prueba de rollback no quedan operativos fuera de NODE_ENV === 'test'
+    it('R12-10: los mecanismos de prueba de rollback lanzan error fuera de NODE_ENV=test y no se exponen en params', async () => {
+      const proc = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
+      const originalEnv = proc?.env?.NODE_ENV;
+      try {
+        if (proc && proc.env) {
+          proc.env.NODE_ENV = 'production';
+        }
+        expect(() => {
+          SeriesService.__setTestPostWriteHook(() => {});
+        }).toThrow(/Mecanismo de prueba restringido exclusivamente al entorno de pruebas/i);
+      } finally {
+        if (proc && proc.env) {
+          proc.env.NODE_ENV = originalEnv;
+        }
+      }
+
+      // En entorno de test, el hook vuelve a null sin efectos colaterales
+      SeriesService.__setTestPostWriteHook(null);
+    });
+  });
+
 });

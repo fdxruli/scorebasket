@@ -37,8 +37,6 @@ export const SeriesEngine: React.FC = () => {
         prevHasAnyPlayersRef.current = hasAnyPlayers;
     }, [hasAnyPlayers]);
 
-    if (!match || !localTeam || !visitorTeam) return null;
-
     const {
         currentSet,
         localSetsWon,
@@ -57,11 +55,6 @@ export const SeriesEngine: React.FC = () => {
         clearError
     } = useSeriesLogic({ match });
 
-    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
-
-    // Se preserva la pantalla final de la serie para visualización del resultado,
-    // compartir la tarjeta y salida explícita hacia el historial.
-
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
         teamSide: 'local' | 'visitor';
@@ -69,6 +62,20 @@ export const SeriesEngine: React.FC = () => {
         players: Player[];
         action: GameAction;
     } | null>(null);
+
+    const handleEarlyFinish = async (countCurrentSet: boolean) => {
+        const result = await endSeries({ countCurrentSet });
+        if (result && (result.status === 'finished' || result.status === 'already_finished')) {
+            setShowEarlyFinishConfirm(false);
+        }
+    };
+
+    if (!match || !localTeam || !visitorTeam) return null;
+
+    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
+
+    // Se preserva la pantalla final de la serie para visualización del resultado,
+    // compartir la tarjeta y salida explícita hacia el historial.
 
     const requestAction = (
         teamId: number,
@@ -127,7 +134,7 @@ export const SeriesEngine: React.FC = () => {
             <LiveToolsBar
                 trackPlayers={trackPlayers}
                 onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
-                onEndMatch={() => setShowEarlyFinishConfirm(true)}
+                onEndMatch={() => { clearError(); setShowEarlyFinishConfirm(true); }}
             />
 
             {/* 1. BANNER SUPERIOR COMPACTO DE SETS GANADOS (PLAYOFFS BAR) */}
@@ -345,27 +352,27 @@ export const SeriesEngine: React.FC = () => {
                             {match.localScore !== match.visitorScore && (
                                 <button
                                     type="button"
-                                    onClick={async () => {
-                                        setShowEarlyFinishConfirm(false);
-                                        await endSeries({ countCurrentSet: true });
-                                    }}
+                                    onClick={() => handleEarlyFinish(true)}
+                                    disabled={isProcessing}
                                     className="btn-modal-primary"
                                     style={{ background: 'var(--primary-accent, #3b82f6)' }}
                                 >
-                                    Cerrar y Contabilizar Set Actual ({match.localScore > match.visitorScore ? localTeam.name : visitorTeam.name} +1)
+                                    {isProcessing
+                                        ? 'Procesando...'
+                                        : `Cerrar y Contabilizar Set Actual (${match.localScore > match.visitorScore ? localTeam.name : visitorTeam.name} +1)`}
                                 </button>
                             )}
                             <button
                                 type="button"
-                                onClick={async () => {
-                                    setShowEarlyFinishConfirm(false);
-                                    await endSeries({ countCurrentSet: false });
-                                }}
+                                onClick={() => handleEarlyFinish(false)}
+                                disabled={isProcessing}
                                 className="btn-modal-primary btn-finish"
                             >
-                                {match.localScore !== match.visitorScore
-                                    ? 'Cerrar sin Contabilizar Set Actual'
-                                    : 'Sí, Guardar y Cerrar Serie'}
+                                {isProcessing
+                                    ? 'Procesando...'
+                                    : (match.localScore !== match.visitorScore
+                                        ? 'Cerrar sin Contabilizar Set Actual'
+                                        : 'Sí, Guardar y Cerrar Serie')}
                             </button>
                             <button
                                 type="button"
@@ -373,6 +380,7 @@ export const SeriesEngine: React.FC = () => {
                                     clearError();
                                     setShowEarlyFinishConfirm(false);
                                 }}
+                                disabled={isProcessing}
                                 className="btn-modal-secondary"
                             >
                                 Seguir Jugando

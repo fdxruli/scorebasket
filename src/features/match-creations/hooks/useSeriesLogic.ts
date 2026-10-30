@@ -1,26 +1,26 @@
 // src/features/match-creations/hooks/useSeriesLogic.ts
 import { useState, useCallback, useMemo, useRef } from 'react';
 import type { Match } from '../../../db/models/Match';
-import { SeriesService } from '../../../db/series.service';
+import { SeriesService, type ConfirmSetResult, type FinishSeriesResult } from '../../../db/series.service';
 import {
   getSetWinnerTeamId,
   calculateSetsToWin,
 } from '../../../utils/seriesLogicHelpers';
 
 interface UseSeriesLogicProps {
-  match: Match;
+  match?: Match | null;
 }
 
 export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
   // Configuración
-  const maxSets = match.config.bestOf?.totalGames || 3;
-  const pointsPerSet = match.config.bestOf?.targetScorePerGame || 21;
-  const winByTwo = match.config.bestOf?.winByTwo ?? false;
-  const scoringSystem = match.config.bestOf?.scoringSystem || 'standard';
+  const maxSets = match?.config?.bestOf?.totalGames || 3;
+  const pointsPerSet = match?.config?.bestOf?.targetScorePerGame || 21;
+  const winByTwo = match?.config?.bestOf?.winByTwo ?? false;
+  const scoringSystem = match?.config?.bestOf?.scoringSystem || 'standard';
 
   // Estado actual de la serie desde la BD
-  const localSetsWon = match.config.bestOf?.wins?.local || 0;
-  const visitorSetsWon = match.config.bestOf?.wins?.visitor || 0;
+  const localSetsWon = match?.config?.bestOf?.wins?.local || 0;
+  const visitorSetsWon = match?.config?.bestOf?.wins?.visitor || 0;
   const setsToWin = calculateSetsToWin(maxSets);
 
   // Protección inmediata de doble clic (sin depender de renders asíncronos)
@@ -35,11 +35,11 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
   // Ganador reglamentario derivado de forma reactiva de los puntos visibles
   const detectedSetWinnerId = useMemo(() => {
-    return getSetWinnerTeamId(match, pointsPerSet);
+    return match ? getSetWinnerTeamId(match, pointsPerSet) : null;
   }, [match, pointsPerSet]);
 
   const isSeriesOver =
-    match.status === 'finished' ||
+    match?.status === 'finished' ||
     localSetsWon >= setsToWin ||
     visitorSetsWon >= setsToWin;
 
@@ -49,11 +49,18 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
   const setWinnerId = detectedSetWinnerId;
 
   // 1. Confirmar Fin de Set mediante servicio de dominio
-  const confirmSetEnd = useCallback(async () => {
-    if (!match?.id || isSubmittingRef.current) return;
+  const confirmSetEnd = useCallback(async (): Promise<ConfirmSetResult> => {
+    if (!match?.id) {
+      return { status: 'rejected', reason: 'Identificador de partido no disponible.' };
+    }
+    if (isSubmittingRef.current) {
+      return { status: 'rejected', reason: 'Operación en curso.' };
+    }
 
     const winnerId = detectedSetWinnerId;
-    if (!winnerId) return;
+    if (!winnerId) {
+      return { status: 'rejected', reason: 'No hay ganador reglamentario detectado.' };
+    }
 
     const currentSetNum = match.currentQuarter || match.config.bestOf?.currentGame || 1;
 
@@ -76,10 +83,12 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
         console.error('Error al confirmar set:', result.reason);
         setErrorMessage(result.reason);
       }
+      return result;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Excepción al confirmar set:', err);
       setErrorMessage(msg);
+      return { status: 'rejected', reason: msg };
     } finally {
       isSubmittingRef.current = false;
       setIsProcessing(false);
@@ -95,8 +104,13 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
   // 2. Finalizar la Serie (cierre anticipado o confirmación final)
   const endSeries = useCallback(
-    async (options?: { countCurrentSet?: boolean }) => {
-      if (!match?.id || isSubmittingRef.current) return;
+    async (options?: { countCurrentSet?: boolean }): Promise<FinishSeriesResult> => {
+      if (!match?.id) {
+        return { status: 'rejected', reason: 'Identificador de partido no disponible.' };
+      }
+      if (isSubmittingRef.current) {
+        return { status: 'rejected', reason: 'Operación en curso.' };
+      }
 
       isSubmittingRef.current = true;
       setIsProcessing(true);
@@ -104,7 +118,7 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
       try {
         if (match.status === 'finished') {
-          return;
+          return { status: 'already_finished' };
         }
 
         const countCurrentSet = options?.countCurrentSet ?? false;
@@ -117,10 +131,12 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
           console.error('Error al finalizar serie:', result.reason);
           setErrorMessage(result.reason);
         }
+        return result;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error('Excepción al finalizar serie:', err);
         setErrorMessage(msg);
+        return { status: 'rejected', reason: msg };
       } finally {
         isSubmittingRef.current = false;
         setIsProcessing(false);
@@ -130,7 +146,7 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
   );
 
   return {
-    currentSet: match.currentQuarter || match.config.bestOf?.currentGame || 1,
+    currentSet: match?.currentQuarter || match?.config?.bestOf?.currentGame || 1,
     localSetsWon,
     visitorSetsWon,
     setsToWin,

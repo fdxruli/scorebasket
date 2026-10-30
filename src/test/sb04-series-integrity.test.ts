@@ -29,8 +29,47 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
     })) as number;
   });
 
-  const createBaseSeriesMatch = async (overrides: Partial<Match> = {}) => {
-    return (await db.matches.add({
+  const populateScoresForQuarter = async (
+    matchId: number,
+    quarter: number,
+    localScore: number,
+    visitorScore: number,
+    options: { localPlayerId?: number; visitorPlayerId?: number } = {}
+  ) => {
+    const buildScoreList = (teamId: number, totalPoints: number, playerId?: number) => {
+      const list: Omit<Score, 'id'>[] = [];
+      let rem = totalPoints;
+      let offset = 0;
+      while (rem > 0) {
+        const pts = rem >= 3 ? 3 : rem >= 2 ? 2 : 1;
+        list.push({
+          matchId,
+          teamId,
+          points: pts,
+          quarter,
+          playerId,
+          createdAt: new Date(Date.now() - 60000 + (offset++) * 1000),
+        });
+        rem -= pts;
+      }
+      return list;
+    };
+
+    const localList = buildScoreList(localTeamId, localScore, options.localPlayerId);
+    const visitorList = buildScoreList(visitorTeamId, visitorScore, options.visitorPlayerId);
+    if (localList.length > 0) await db.scores.bulkAdd(localList as Score[]);
+    if (visitorList.length > 0) await db.scores.bulkAdd(visitorList as Score[]);
+  };
+
+  const createBaseSeriesMatch = async (
+    overrides: Partial<Match> = {},
+    options: { createScores?: boolean; localPlayerId?: number; visitorPlayerId?: number } = { createScores: true }
+  ) => {
+    const localScore = overrides.localScore ?? 21;
+    const visitorScore = overrides.visitorScore ?? 18;
+    const currentQuarter = overrides.currentQuarter ?? 1;
+
+    const matchId = (await db.matches.add({
       localTeamId,
       visitorTeamId,
       status: 'playing',
@@ -41,19 +80,28 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
         bestOf: {
           totalGames: 3,
           targetScorePerGame: 21,
-          currentGame: 1,
+          currentGame: currentQuarter,
           wins: { local: 0, visitor: 0 },
           winByTwo: false,
         },
       },
-      currentQuarter: 1,
-      localScore: 21,
-      visitorScore: 18,
+      currentQuarter,
+      localScore,
+      visitorScore,
       localFouls: 2,
       visitorFouls: 3,
       gameHistory: [],
       ...overrides,
     })) as number;
+
+    if (options.createScores !== false && (localScore > 0 || visitorScore > 0)) {
+      await populateScoresForQuarter(matchId, currentQuarter, localScore, visitorScore, {
+        localPlayerId: options.localPlayerId,
+        visitorPlayerId: options.visitorPlayerId,
+      });
+    }
+
+    return matchId;
   };
 
   // T-SERIES-01: set no decisivo correcto
@@ -100,6 +148,7 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
 
     // Set 2 ganado por local (21 - 12)
     await db.matches.update(matchId, { localScore: 21, visitorScore: 12 });
+    await populateScoresForQuarter(matchId, 2, 21, 12);
     const res2 = await SeriesService.confirmSet({ matchId, setNumber: 2 });
     expect(res2.status).toBe('confirmed');
     match = (await db.matches.get(matchId))!;
@@ -178,8 +227,9 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
 
     await SeriesService.confirmSet({ matchId, setNumber: 1 });
 
-    // Ahora estamos en set 2 con marcador parcial (5-3)
+    // Ahora estamos en set 2 con marcador parcial (5-3) y sus eventos
     await db.matches.update(matchId, { localScore: 5, visitorScore: 3 });
+    await populateScoresForQuarter(matchId, 2, 5, 3);
 
     // Llega confirmación retrasada del set 1
     const delayedRes = await SeriesService.confirmSet({ matchId, setNumber: 1 });
@@ -279,6 +329,14 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
 
     // 22 - 20 sí cumple winByTwo
     await db.matches.update(matchId, { localScore: 22 });
+    await db.scores.add({
+      matchId,
+      teamId: localTeamId,
+      points: 1,
+      quarter: 1,
+      createdAt: new Date(),
+    } as Score);
+
     const resPass = await SeriesService.confirmSet({ matchId, setNumber: 1 });
     expect(resPass.status).toBe('confirmed');
   });
@@ -299,9 +357,12 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
         },
       },
       gameHistory: [
-        { gameNumber: 1, localScore: 21, visitorScore: 17, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 1, localScore: 21, visitorScore: 17, winner: 'local', finishedAt: new Date(Date.now() - 60000) },
       ],
     });
+
+    // Eventos históricos del set 1
+    await populateScoresForQuarter(matchId, 1, 21, 17);
 
     const result = await SeriesService.confirmSet({ matchId, setNumber: 2 });
     expect(result.status).toBe('confirmed');
@@ -364,7 +425,7 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
       gameHistory: [
         { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date(Date.now() - 30000) },
       ],
-    });
+    }, { createScores: false });
 
     // Puntos en scores para set 2 (7 canastas de 3 puntos para local = 21)
     for (let i = 0; i < 7; i++) {
@@ -438,7 +499,7 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
         },
       },
       gameHistory: [
-        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date(Date.now() - 60000) },
       ],
     });
 
@@ -463,22 +524,34 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
     expect(resRepeat.status).toBe('already_finished');
   });
 
-  // T-SERIES-18: rollback ante fallo transaccional real
-  it('T-SERIES-18: rollback transaccional ante error no deja mutaciones parciales', async () => {
+  // T-SERIES-18: rollback ante fallo transaccional real invocando SeriesService
+  it('T-SERIES-18: rollback transaccional ante error inyectado no deja mutaciones parciales', async () => {
     const matchId = await createBaseSeriesMatch();
     const snapshotBefore = (await db.matches.get(matchId))!;
+    const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
 
-    // Forzamos un fallo dentro de una transacción custom que simula confirmSet con error
+    // Provocamos una excepción post-escritura en SeriesService.confirmSet
     await expect(
-      db.transaction('rw', [db.matches, db.scores], async () => {
-        await db.matches.update(matchId, { localScore: 999 });
-        throw new Error('Fallo provocado para verificar rollback');
+      SeriesService.confirmSet({
+        matchId,
+        setNumber: 1,
+        _testFailPostWrite: true,
       })
-    ).rejects.toThrow('Fallo provocado para verificar rollback');
+    ).rejects.toThrow(/Inyección de fallo post-escritura/i);
 
+    // Verificamos que la instantánea de IndexedDB es exactamente idéntica
     const matchAfter = (await db.matches.get(matchId))!;
+    const scoresAfter = await db.scores.where('matchId').equals(matchId).toArray();
+
     expect(matchAfter.localScore).toBe(snapshotBefore.localScore);
+    expect(matchAfter.visitorScore).toBe(snapshotBefore.visitorScore);
     expect(matchAfter.status).toBe(snapshotBefore.status);
+    expect(matchAfter.finishedAt).toBe(snapshotBefore.finishedAt);
+    expect(matchAfter.currentQuarter).toBe(snapshotBefore.currentQuarter);
+    expect(matchAfter.gameHistory).toEqual(snapshotBefore.gameHistory);
+    expect(matchAfter.config.bestOf?.wins).toEqual(snapshotBefore.config.bestOf?.wins);
+    expect(matchAfter.config.bestOf?.currentGame).toBe(snapshotBefore.config.bestOf?.currentGame);
+    expect(scoresAfter).toEqual(scoresBefore);
   });
 
   // T-SERIES-19: un partido finalizado no admite nuevas confirmaciones ni modificaciones
@@ -534,7 +607,7 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
           wins: { local: 1, visitor: 0 },
         },
       },
-    });
+    }, { createScores: false });
 
     const match = (await db.matches.get(matchId))!;
     const integrity = ScoreIntegrityService.verifyScoreIntegrity(match, []);
@@ -542,7 +615,489 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
     expect(integrity.isCompleteHistory).toBe(false);
   });
 
-  // --- REGRESIONES DEL VALIDADOR COMPARTIDO ---
+  // --- R1.1: NUEVAS PRUEBAS OBLIGATORIAS (R11-01 a R11-15) ---
+
+  // R11-01: marcador 21–18 sin eventos; la confirmación no puede acreditarse como íntegra ni persistir un cierre falsamente certificado
+  it('R11-01: marcador 21–18 sin eventos es rechazado y no permite confirmar set', async () => {
+    const matchId = await createBaseSeriesMatch({}, { createScores: false });
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Integridad de eventos no verificable/i);
+    }
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    expect(matchAfter.status).toBe('playing');
+    expect(matchAfter.gameHistory).toHaveLength(0);
+    expect(matchAfter.currentQuarter).toBe(1);
+  });
+
+  // R11-02: marcador distinto a la suma real de eventos; rechazar y preservar instantánea
+  it('R11-02: marcador distinto a la suma real de eventos es rechazado y preserva la instantánea', async () => {
+    const matchId = await createBaseSeriesMatch({
+      localScore: 21,
+      visitorScore: 18,
+    }, { createScores: false });
+
+    // Eventos suman solo 18 para local en vez de 21
+    await populateScoresForQuarter(matchId, 1, 18, 18);
+
+    const snapshotBefore = (await db.matches.get(matchId))!;
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Discrepancia detectada en el marcador/i);
+    }
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    expect(matchAfter).toEqual(snapshotBefore);
+  });
+
+  // R11-03: eventos de otro set o partido; no deben justificar el marcador
+  it('R11-03: eventos de otro set o partido no justifican el marcador del set vigente', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 1,
+      localScore: 21,
+      visitorScore: 18,
+    }, { createScores: false });
+
+    // Eventos registrados con quarter 2 (no el vigente 1)
+    await populateScoresForQuarter(matchId, 2, 21, 18);
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Integridad de eventos no verificable/i);
+    }
+  });
+
+  // R11-04: partido con eventos válidos; confirmar set no decisivo con integridad preservada
+  it('R11-04: partido con eventos válidos confirma set no decisivo preservando integridad', async () => {
+    const matchId = await createBaseSeriesMatch({
+      localScore: 21,
+      visitorScore: 18,
+    });
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('confirmed');
+    if (result.status === 'confirmed') {
+      expect(result.seriesFinished).toBe(false);
+      expect(result.newWins).toEqual({ local: 1, visitor: 0 });
+    }
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    expect(matchAfter.currentQuarter).toBe(2);
+    expect(matchAfter.localScore).toBe(0);
+    expect(matchAfter.visitorScore).toBe(0);
+    expect(matchAfter.gameHistory).toHaveLength(1);
+  });
+
+  // R11-05: partido con eventos válidos; confirmar último set y comprobar CONSISTENT e isCompleteHistory === true
+  it('R11-05: partido con eventos válidos confirma último set con CONSISTENT e isCompleteHistory === true', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 21,
+      visitorScore: 15,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date(Date.now() - 30000) },
+      ],
+    });
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 2 });
+    expect(result.status).toBe('confirmed');
+    if (result.status === 'confirmed') {
+      expect(result.seriesFinished).toBe(true);
+    }
+
+    const finishedMatch = (await db.matches.get(matchId))!;
+    const scores = await db.scores.where('matchId').equals(matchId).toArray();
+
+    const integrity = ScoreIntegrityService.verifyScoreIntegrity(finishedMatch, scores);
+    expect(integrity.status).toBe('CONSISTENT');
+    expect(integrity.isCompleteHistory).toBe(true);
+  });
+
+  // R11-06: cierre anticipado con historial previo incompleto; rechazar sin mutaciones
+  it('R11-06: cierre anticipado con historial previo incompleto rechaza sin mutaciones', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 3,
+      localScore: 10,
+      visitorScore: 8,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 3,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        // Falta set 2 (hueco)
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+
+    const snapshotBefore = (await db.matches.get(matchId))!;
+
+    const result = await SeriesService.finishSeriesEarly({
+      matchId,
+      countCurrentSet: false,
+    });
+
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Violación de integridad histórica previa/i);
+    }
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    expect(matchAfter).toEqual(snapshotBefore);
+  });
+
+  // R11-07: cierre anticipado con victorias contradictorias; rechazar
+  it('R11-07: cierre anticipado con victorias contradictorias rechaza la operación', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 10,
+      visitorScore: 6,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 0, visitor: 1 }, // Contradice victoria local en set 1
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+
+    const result = await SeriesService.finishSeriesEarly({
+      matchId,
+      countCurrentSet: false,
+    });
+
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Incoherencia en Best-of-Series: victorias acumuladas/i);
+    }
+  });
+
+  // R11-08: cierre anticipado sin contabilizar set; conservar resultados previos y verificar el contrato de estado final
+  it('R11-08: cierre anticipado sin contabilizar set conserva resultados previos y verifica el contrato de estado final', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 10,
+      visitorScore: 6,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date(Date.now() - 40000) },
+      ],
+    });
+
+    const result = await SeriesService.finishSeriesEarly({
+      matchId,
+      countCurrentSet: false,
+    });
+
+    expect(result.status).toBe('finished');
+    if (result.status === 'finished') {
+      expect(result.finalWins).toEqual({ local: 1, visitor: 0 });
+    }
+
+    const finishedMatch = (await db.matches.get(matchId))!;
+    expect(finishedMatch.status).toBe('finished');
+    expect(finishedMatch.gameHistory).toHaveLength(1); // Set 2 no se agregó
+    expect(finishedMatch.config.bestOf?.wins).toEqual({ local: 1, visitor: 0 });
+
+    const scores = await db.scores.where('matchId').equals(matchId).toArray();
+    const integrity = ScoreIntegrityService.verifyScoreIntegrity(finishedMatch, scores);
+    expect(integrity.status).toBe('CONSISTENT');
+    expect(integrity.isCompleteHistory).toBe(true);
+  });
+
+  // R11-09: cierre anticipado contabilizando set con marcador legítimo y eventos coherentes
+  it('R11-09: cierre anticipado contabilizando set con marcador legítimo y eventos coherentes', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 12,
+      visitorScore: 8,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date(Date.now() - 40000) },
+      ],
+    });
+
+    const result = await SeriesService.finishSeriesEarly({
+      matchId,
+      countCurrentSet: true,
+    });
+
+    expect(result.status).toBe('finished');
+    if (result.status === 'finished') {
+      expect(result.finalWins).toEqual({ local: 2, visitor: 0 });
+    }
+
+    const finishedMatch = (await db.matches.get(matchId))!;
+    expect(finishedMatch.status).toBe('finished');
+    expect(finishedMatch.gameHistory).toHaveLength(2);
+    expect(finishedMatch.gameHistory![1]).toMatchObject({
+      gameNumber: 2,
+      localScore: 12,
+      visitorScore: 8,
+      winner: 'local',
+    });
+    expect(finishedMatch.config.bestOf?.wins).toEqual({ local: 2, visitor: 0 });
+
+    const scores = await db.scores.where('matchId').equals(matchId).toArray();
+    const integrity = ScoreIntegrityService.verifyScoreIntegrity(finishedMatch, scores);
+    expect(integrity.status).toBe('CONSISTENT');
+    expect(integrity.isCompleteHistory).toBe(true);
+  });
+
+  // R11-10: cierre anticipado de set con anotaciones inconsistentes; no certificar un resultado falso
+  it('R11-10: cierre anticipado de set con anotaciones inconsistentes rechaza sin actualizar', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 12,
+      visitorScore: 8,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    }, { createScores: false });
+
+    // Eventos solo suman 6 para local en vez de 12
+    await populateScoresForQuarter(matchId, 2, 6, 8);
+
+    const snapshotBefore = (await db.matches.get(matchId))!;
+
+    const result = await SeriesService.finishSeriesEarly({
+      matchId,
+      countCurrentSet: true,
+    });
+
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Discrepancia detectada en el marcador/i);
+    }
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    expect(matchAfter).toEqual(snapshotBefore);
+  });
+
+  // R11-11: invocación repetida de confirmación sobre historial duplicado; no responder como éxito idempotente
+  it('R11-11: confirmación repetida sobre historial corrupto con duplicados rechaza en vez de aceptar', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 0,
+      visitorScore: 0,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 2, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        // Set 1 duplicado en historial
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    }, { createScores: false });
+
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.reason).toMatch(/Historial corrupto: existen múltiples entradas duplicadas/i);
+    }
+  });
+
+  // R11-12: inyección de fallo después de la escritura real del servicio en finishSeriesEarly; rollback íntegro
+  it('R11-12: inyección de fallo después de la escritura real en finishSeriesEarly realiza rollback íntegro', async () => {
+    const matchId = await createBaseSeriesMatch({
+      currentQuarter: 2,
+      localScore: 10,
+      visitorScore: 6,
+      config: {
+        mode: 'best-of-series',
+        bestOf: {
+          totalGames: 3,
+          targetScorePerGame: 21,
+          currentGame: 2,
+          wins: { local: 1, visitor: 0 },
+        },
+      },
+      gameHistory: [
+        { gameNumber: 1, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+
+    const snapshotBefore = (await db.matches.get(matchId))!;
+    const scoresBefore = await db.scores.where('matchId').equals(matchId).toArray();
+
+    await expect(
+      SeriesService.finishSeriesEarly({
+        matchId,
+        countCurrentSet: true,
+        _testFailPostWrite: true,
+      })
+    ).rejects.toThrow(/Inyección de fallo post-escritura/i);
+
+    const matchAfter = (await db.matches.get(matchId))!;
+    const scoresAfter = await db.scores.where('matchId').equals(matchId).toArray();
+
+    expect(matchAfter).toEqual(snapshotBefore);
+    expect(scoresAfter).toEqual(scoresBefore);
+  });
+
+  // R11-13: doble confirmación concurrente válida con eventos reales; una sola transición
+  it('R11-13: doble confirmación concurrente con eventos reales produce una sola transición y ya confirmado', async () => {
+    const matchId = await createBaseSeriesMatch({
+      localScore: 21,
+      visitorScore: 18,
+    });
+
+    const [resA, resB] = await Promise.all([
+      SeriesService.confirmSet({ matchId, setNumber: 1 }),
+      SeriesService.confirmSet({ matchId, setNumber: 1 }),
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses).toEqual(['already_confirmed', 'confirmed']);
+
+    const match = (await db.matches.get(matchId))!;
+    expect(match.gameHistory).toHaveLength(1);
+    expect(match.config.bestOf?.wins).toEqual({ local: 1, visitor: 0 });
+    expect(match.currentQuarter).toBe(2);
+  });
+
+  // R11-14: corrección y confirmación de set con puntos contabilizados por jugadores, sin pérdida de eventos
+  it('R11-14: corrección y confirmación de set con puntos contabilizados por jugadores conserva playerId y eventos', async () => {
+    const playerId = 42;
+    const matchId = await createBaseSeriesMatch({
+      localScore: 20,
+      visitorScore: 18,
+    }, { createScores: true, localPlayerId: playerId });
+
+    // Jugador anota el punto 21 decisivo
+    const lastScoreId = (await db.scores.add({
+      matchId,
+      teamId: localTeamId,
+      points: 1,
+      quarter: 1,
+      playerId,
+      createdAt: new Date(),
+    })) as number;
+
+    await db.matches.update(matchId, { localScore: 21 });
+
+    // Confirmar set
+    const result = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(result.status).toBe('confirmed');
+
+    // Comprobar que los scores en BD conservan su playerId
+    const playerScores = await db.scores.where('matchId').equals(matchId).filter(s => s.playerId === playerId).toArray();
+    expect(playerScores.length).toBeGreaterThan(0);
+    const lastScore = await db.scores.get(lastScoreId);
+    expect(lastScore?.playerId).toBe(playerId);
+  });
+
+  // R11-15: pruebas de Race terminado, activo y cierre anticipado contra el verificador compartido
+  it('R11-15: validador compartido distingue correctamente Race activo, terminado y cierre anticipado', () => {
+    // 1. Race activo: juego actual en historial es rechazado
+    const raceActive = validateGameHistoryContinuity({
+      mode: 'race',
+      effectivePeriod: 2,
+      isFinished: false,
+      history: [
+        { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 2, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+    expect(raceActive.isValid).toBe(false);
+    expect(raceActive.reason).toMatch(/periodo #2 ya figura cerrado/i);
+
+    // 2. Race terminado legítimo con juego final incluido: válido
+    const raceFinished = validateGameHistoryContinuity({
+      mode: 'race',
+      effectivePeriod: 2,
+      isFinished: true,
+      matchScore: { local: 21, visitor: 18 },
+      history: [
+        { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 2, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+    expect(raceFinished.isValid).toBe(true);
+
+    // 3. Race cerrado anticipadamente sin juego 2 en historial: válido
+    const raceEarly = validateGameHistoryContinuity({
+      mode: 'race',
+      effectivePeriod: 2,
+      isFinished: true,
+      matchScore: { local: 10, visitor: 8 },
+      history: [
+        { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+    expect(raceEarly.isValid).toBe(true);
+
+    // 4. Race terminado con marcador contradictorio en el juego final: rechazado
+    const raceMismatch = validateGameHistoryContinuity({
+      mode: 'race',
+      effectivePeriod: 2,
+      isFinished: true,
+      matchScore: { local: 20, visitor: 18 }, // No coincide con historial 21 - 18
+      history: [
+        { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
+        { gameNumber: 2, localScore: 21, visitorScore: 18, winner: 'local', finishedAt: new Date() },
+      ],
+    });
+    expect(raceMismatch.isValid).toBe(false);
+    expect(raceMismatch.reason).toMatch(/Marcador contradictorio en el periodo final/i);
+  });
+
+  // --- REGRESIONES DEL VALIDADOR COMPARTIDO (T-INTEGRITY-01 a T-INTEGRITY-06) ---
 
   // T-INTEGRITY-01: Race activo no admite el juego actual en gameHistory
   it('T-INTEGRITY-01: Race activo no admite el juego actual en gameHistory', () => {

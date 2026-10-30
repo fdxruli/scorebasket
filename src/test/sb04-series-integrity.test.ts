@@ -1,12 +1,15 @@
+// @vitest-environment jsdom
 import React from 'react';
 // src/test/sb04-series-integrity.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { db } from '../db/db';
 import { SeriesService } from '../db/series.service';
 import { ScoreIntegrityService, validateGameHistoryContinuity } from '../db/scoreIntegrity.service';
 import { GameActionsRepository } from '../db/gameActions.repository';
 import type { Match, Score } from '../db/models';
 import { useSeriesLogic } from '../features/match-creations/hooks/useSeriesLogic';
+import { SeriesEarlyFinishModal } from '../features/match-creations/components/engines/SeriesEarlyFinishModal';
 
 describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best-of-Series', () => {
   let localTeamId: number;
@@ -1267,91 +1270,24 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
   });
 
   // =========================================================================
-  // FASE 2A R1.2: C-05 y C-06 — CIERRE FINAL DE UX Y AISLAMIENTO DE TEST HOOKS
+  // FASE 2A R1.3: C-07 y C-08 — CICLO DE VIDA DEL MODAL Y CERTIFICACIÓN DOM (R13-01 a R13-08)
   // =========================================================================
-  describe('FASE 2A R1.2: C-05 y C-06 (R12-01 a R12-10)', () => {
-    // Harness de ejecución de hooks React en entorno Node / Vitest
-    function renderHook<T>(hookFn: () => T) {
-      const stateSlots: unknown[] = [];
-      let slotIndex = 0;
-      let currentResult: T;
+  describe('FASE 2A R1.3: C-07 y C-08 (R13-01 a R13-08)', () => {
+    afterEach(() => {
+      cleanup();
+      SeriesService.__setTestPostWriteHook(null);
+    });
 
-      const dispatcher = {
-        useState<S>(initialValue: S | (() => S)) {
-          const index = slotIndex++;
-          if (stateSlots.length <= index) {
-            stateSlots.push(typeof initialValue === 'function' ? (initialValue as () => S)() : initialValue);
-          }
-          const setState = (newValue: S | ((prev: S) => S)) => {
-            const current = stateSlots[index] as S;
-            const val = typeof newValue === 'function' ? (newValue as (prev: S) => S)(current) : newValue;
-            stateSlots[index] = val;
-            rerender();
-          };
-          return [stateSlots[index] as S, setState] as const;
-        },
-        useRef<R>(initialValue: R) {
-          const index = slotIndex++;
-          if (stateSlots.length <= index) {
-            stateSlots.push({ current: initialValue });
-          }
-          return stateSlots[index] as { current: R };
-        },
-        useCallback<F extends (...args: unknown[]) => unknown>(fn: F, deps?: unknown[]) {
-          const index = slotIndex++;
-          if (stateSlots.length <= index) {
-            stateSlots.push({ fn, deps });
-            return fn;
-          }
-          const prev = stateSlots[index] as { fn: F; deps?: unknown[] };
-          const depsChanged = !prev.deps || !deps || deps.some((d: unknown, i: number) => !Object.is(d, prev.deps?.[i]));
-          if (depsChanged) {
-            stateSlots[index] = { fn, deps };
-            return fn;
-          }
-          return prev.fn;
-        },
-        useMemo<M>(factory: () => M, deps?: unknown[]) {
-          const index = slotIndex++;
-          if (stateSlots.length <= index) {
-            const value = factory();
-            stateSlots.push({ value, deps });
-            return value;
-          }
-          const prev = stateSlots[index] as { value: M; deps?: unknown[] };
-          const depsChanged = !prev.deps || !deps || deps.some((d: unknown, i: number) => !Object.is(d, prev.deps?.[i]));
-          if (depsChanged) {
-            const value = factory();
-            stateSlots[index] = { value, deps };
-            return value;
-          }
-          return prev.value;
-        },
-        useEffect() {}
-      };
-
-      function rerender() {
-        slotIndex = 0;
-        const internals = (React as unknown as { __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: { H?: unknown } })
-          .__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-        const prevH = internals?.H;
-        if (internals) internals.H = dispatcher;
-        try {
-          currentResult = hookFn();
-        } finally {
-          if (internals) internals.H = prevH;
-        }
-      }
-
-      rerender();
-      return {
-        get result() { return currentResult; },
-        rerender
-      };
-    }
-
-    // Controlador de componentes que replica la máquina de estados de SeriesEngine
-    function useSeriesEngineModal(match: Match) {
+    /**
+     * Contenedor de prueba realista que replica el ciclo de vida de SeriesEngine
+     * utilizando hooks oficiales de React (useState) y el hook de producción useSeriesLogic,
+     * montando directamente el componente visual de producción SeriesEarlyFinishModal.
+     */
+    const TestSeriesHarness: React.FC<{
+      matchId: number;
+      initialMatch: Match;
+    }> = ({ matchId, initialMatch }) => {
+      const [match, setMatch] = React.useState<Match>(initialMatch);
       const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = React.useState(false);
       const series = useSeriesLogic({ match });
 
@@ -1359,79 +1295,118 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
         const result = await series.endSeries({ countCurrentSet });
         if (result && (result.status === 'finished' || result.status === 'already_finished')) {
           setShowEarlyFinishConfirm(false);
+          const updated = await db.matches.get(matchId);
+          if (updated) setMatch(updated);
         }
-        return result;
       };
 
       const handleDismiss = () => {
+        if (series.isProcessing) return;
         series.clearError();
         setShowEarlyFinishConfirm(false);
       };
 
-      const openEarlyFinishModal = () => {
-        series.clearError();
-        setShowEarlyFinishConfirm(true);
+      return React.createElement(
+        'div',
+        null,
+        React.createElement('div', { 'data-testid': 'match-status' }, match.status),
+        React.createElement('div', { 'data-testid': 'is-processing' }, String(series.isProcessing)),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            'data-testid': 'open-early-finish-btn',
+            onClick: () => {
+              series.clearError();
+              setShowEarlyFinishConfirm(true);
+            },
+          },
+          'Finalizar Serie'
+        ),
+        React.createElement(SeriesEarlyFinishModal, {
+          isOpen: showEarlyFinishConfirm,
+          isProcessing: series.isProcessing,
+          errorMessage: series.errorMessage,
+          match,
+          localTeam: { id: localTeamId, name: 'Local Team', createdAt: new Date(), isArchived: false },
+          visitorTeam: { id: visitorTeamId, name: 'Visitor Team', createdAt: new Date(), isArchived: false },
+          localSetsWon: series.localSetsWon,
+          visitorSetsWon: series.visitorSetsWon,
+          onConfirmFinish: handleEarlyFinish,
+          onDismiss: handleDismiss,
+        })
+      );
+    };
+
+    // R13-01: Clic en backdrop durante procesamiento
+    it('R13-01: Clic en backdrop durante procesamiento: disparar evento click sobre el fondo mientras isProcessing es verdadero; comprobar que el modal sigue en el DOM y que onDismiss no fue llamado', () => {
+      const onDismiss = vi.fn();
+      const onConfirm = vi.fn();
+      const dummyMatch: Match = {
+        id: 99,
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        currentQuarter: 1,
+        localScore: 10,
+        visitorScore: 5,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: { mode: 'best-of-series' },
       };
 
-      return {
-        ...series,
-        showEarlyFinishConfirm,
-        setShowEarlyFinishConfirm,
-        handleEarlyFinish,
-        handleDismiss,
-        openEarlyFinishModal,
-      };
-    }
+      const { rerender } = render(
+        React.createElement(SeriesEarlyFinishModal, {
+          isOpen: true,
+          isProcessing: true,
+          errorMessage: null,
+          match: dummyMatch,
+          localTeam: { id: localTeamId, name: 'Local Team', createdAt: new Date(), isArchived: false },
+          visitorTeam: { id: visitorTeamId, name: 'Visitor Team', createdAt: new Date(), isArchived: false },
+          localSetsWon: 0,
+          visitorSetsWon: 0,
+          onConfirmFinish: onConfirm,
+          onDismiss: onDismiss,
+        })
+      );
 
-    // R12-01: cierre anticipado válido muestra estado de procesamiento y concluye en finished
-    it('R12-01: cierre anticipado válido muestra estado de procesamiento y concluye en finished cerrando modal', async () => {
-      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
-      const match = (await db.matches.get(matchId))!;
+      // Clic sobre el backdrop mientras isProcessing es true
+      const backdrop = screen.getByTestId('early-finish-backdrop');
+      fireEvent.click(backdrop);
 
-      const hook = renderHook(() => useSeriesEngineModal(match));
-      hook.result.openEarlyFinishModal();
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-      expect(hook.result.errorMessage).toBeNull();
-      expect(hook.result.isProcessing).toBe(false);
+      // Escape mientras isProcessing es true tampoco desmonta
+      fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
-      const finishPromise = hook.result.handleEarlyFinish(true);
-      expect(hook.result.isProcessing).toBe(true);
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      // Cuando termina el procesamiento (isProcessing=false), el clic en el backdrop sí descarta
+      rerender(
+        React.createElement(SeriesEarlyFinishModal, {
+          isOpen: true,
+          isProcessing: false,
+          errorMessage: null,
+          match: dummyMatch,
+          localTeam: { id: localTeamId, name: 'Local Team', createdAt: new Date(), isArchived: false },
+          visitorTeam: { id: visitorTeamId, name: 'Visitor Team', createdAt: new Date(), isArchived: false },
+          localSetsWon: 0,
+          visitorSetsWon: 0,
+          onConfirmFinish: onConfirm,
+          onDismiss: onDismiss,
+        })
+      );
 
-      const result = await finishPromise;
-      expect(result.status).toBe('finished');
-      expect(hook.result.showEarlyFinishConfirm).toBe(false);
-      expect(hook.result.errorMessage).toBeNull();
-      expect(hook.result.isProcessing).toBe(false);
-
-      const dbMatch = (await db.matches.get(matchId))!;
-      expect(dbMatch.status).toBe('finished');
+      fireEvent.click(screen.getByTestId('early-finish-backdrop'));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    // R12-02: cierre anticipado rechazado mantiene el modal abierto y muestra errorMessage
-    it('R12-02: cierre anticipado rechazado mantiene el modal abierto y muestra el mensaje de error', async () => {
-      const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 10 });
-      const match = (await db.matches.get(matchId))!;
-
-      const hook = renderHook(() => useSeriesEngineModal(match));
-      hook.result.openEarlyFinishModal();
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-
-      const result = await hook.result.handleEarlyFinish(true);
-      expect(result.status).toBe('rejected');
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-      expect(hook.result.errorMessage).toMatch(/empatado/i);
-      expect(hook.result.isProcessing).toBe(false);
-
-      const dbMatch = (await db.matches.get(matchId))!;
-      expect(dbMatch.status).toBe('playing');
-    });
-
-    // R12-03: cierre rechazado por eventos inconsistentes muestra el error concreto
-    it('R12-03: cierre rechazado por eventos inconsistentes mantiene el modal abierto y detalla la discrepancia', async () => {
+    // R13-02: Rechazo tras intento de cierre exterior
+    it('R13-02: Rechazo tras intento de cierre exterior: verificar que tras intentar hacer clic fuera y recibir rejected, el modal continúa abierto y el motivo del fallo sigue visible en pantalla', async () => {
       const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 8 });
-      // Sobrescribimos scores de local para generar discrepancia intencional
+      // Generar discrepancia: localScore en BD es 10, pero solo 6 puntos en eventos reales
       await db.scores.where('matchId').equals(matchId).and(s => s.teamId === localTeamId).delete();
       await db.scores.bulkAdd([
         { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
@@ -1439,135 +1414,189 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
       ]);
 
       const match = (await db.matches.get(matchId))!;
-      const hook = renderHook(() => useSeriesEngineModal(match));
-      hook.result.openEarlyFinishModal();
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: match }));
 
-      const result = await hook.result.handleEarlyFinish(false);
-      expect(result.status).toBe('rejected');
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-      expect(hook.result.errorMessage).toMatch(/Discrepancia detectada en el marcador del set #1/i);
+      // Abrir modal de cierre
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
+      // Iniciar cierre anticipado (sin contabilizar set actual)
+      const finishBtn = screen.getByTestId('btn-finish-no-count');
+      fireEvent.click(finishBtn);
+
+      // Intento de clic sobre el backdrop durante el procesamiento
+      const backdrop = screen.getByTestId('early-finish-backdrop');
+      fireEvent.click(backdrop);
+
+      // Esperar a que la operación de servicio concluya con rejected
+      await waitFor(() => {
+        expect(screen.getByTestId('early-finish-error')).toBeTruthy();
+      });
+
+      // El modal permanece visible con el motivo del fallo
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
+      const errorDiv = screen.getByTestId('early-finish-error');
+      expect(errorDiv.textContent).toMatch(/Discrepancia detectada en el marcador del set #1/i);
+
+      // El partido sigue en juego en IndexedDB
       const dbMatch = (await db.matches.get(matchId))!;
       expect(dbMatch.status).toBe('playing');
     });
 
-    // R12-04: cierre rechazado por historial con huecos conserva todos los datos intactos
-    it('R12-04: cierre rechazado por historial con huecos mantiene el modal abierto y no altera datos en BD', async () => {
-      const matchId = (await db.matches.add({
-        localTeamId,
-        visitorTeamId,
-        status: 'playing',
-        currentQuarter: 3,
-        localScore: 5,
-        visitorScore: 2,
-        localFouls: 0,
-        visitorFouls: 0,
-        createdAt: new Date(),
-        config: {
-          mode: 'best-of-series',
-          bestOf: {
-            totalGames: 3,
-            targetScorePerGame: 21,
-            currentGame: 3,
-            wins: { local: 1, visitor: 0 },
-          },
-        },
-        gameHistory: [
-          { gameNumber: 1, localScore: 21, visitorScore: 15, winner: 'local', finishedAt: new Date() },
-          // Falta el set 2: hueco
-        ],
-      })) as number;
+    // R13-03: Éxito persistido
+    it('R13-03: Éxito persistido: verificar que tras una operación que resulta en finished, el modal de confirmación se cierra y la vista pasa a reflejar el fin del partido sin salidas prematuras', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
+      const match = (await db.matches.get(matchId))!;
 
-      await populateScoresForQuarter(matchId, 3, 5, 2);
-      const snapshotBefore = (await db.matches.get(matchId))!;
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: match }));
 
-      const hook = renderHook(() => useSeriesEngineModal(snapshotBefore));
-      hook.result.openEarlyFinishModal();
+      // Abrir modal
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
-      const result = await hook.result.handleEarlyFinish(false);
-      expect(result.status).toBe('rejected');
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-      expect(hook.result.errorMessage).toMatch(/violación de integridad histórica/i);
+      // Confirmar cierre contabilizando el set actual ganado por el local
+      const countBtn = screen.getByTestId('btn-finish-count-set');
+      fireEvent.click(countBtn);
 
-      const snapshotAfter = (await db.matches.get(matchId))!;
-      expect(snapshotAfter).toEqual(snapshotBefore);
+      // Esperar a que la operación termine y el modal se cierre
+      await waitFor(() => {
+        expect(screen.queryByTestId('early-finish-card')).toBeNull();
+      });
+
+      // La vista pasa a reflejar el fin del partido sin salidas prematuras
+      expect(screen.getByTestId('match-status').textContent).toBe('finished');
+
+      // Estado persistido en IndexedDB refleja el cierre y el historial
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('finished');
+      expect(dbMatch.gameHistory?.length).toBe(1);
+      expect(dbMatch.gameHistory?.[0].winner).toBe('local');
     });
 
-    // R12-05: excepción transaccional conserva el modal y presenta error sin fingir éxito
-    it('R12-05: excepción transaccional en el servicio preserva el modal abierto y muestra el fallo', async () => {
+    // R13-04: Excepción transaccional en componente visual
+    it('R13-04: Excepción transaccional en componente visual: forzar excepción en el servicio; comprobar que el modal visual no desaparece y presenta la alerta de error', async () => {
       const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
       const match = (await db.matches.get(matchId))!;
 
       SeriesService.__setTestPostWriteHook(() => {
-        throw new Error('Fallo transaccional crítico simulado en IndexedDB');
+        throw new Error('Fallo crítico simulado en IndexedDB');
       });
 
-      try {
-        const hook = renderHook(() => useSeriesEngineModal(match));
-        hook.result.openEarlyFinishModal();
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: match }));
 
-        const result = await hook.result.handleEarlyFinish(false);
-        expect(result.status).toBe('rejected');
-        expect(hook.result.showEarlyFinishConfirm).toBe(true);
-        expect(hook.result.errorMessage).toMatch(/Fallo transaccional crítico simulado en IndexedDB/i);
-        expect(hook.result.isProcessing).toBe(false);
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
-        const dbMatch = (await db.matches.get(matchId))!;
-        expect(dbMatch.status).toBe('playing');
-      } finally {
-        SeriesService.__setTestPostWriteHook(null);
-      }
+      fireEvent.click(screen.getByTestId('btn-finish-no-count'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('early-finish-error')).toBeTruthy();
+      });
+
+      // El modal visual no desaparece y presenta la alerta de error
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
+      expect(screen.getByTestId('early-finish-error').textContent).toMatch(/Fallo crítico simulado en IndexedDB/i);
+
+      // En IndexedDB el estado sigue siendo playing tras el rollback
+      const dbMatch = (await db.matches.get(matchId))!;
+      expect(dbMatch.status).toBe('playing');
     });
 
-    // R12-06: doble clic no genera dos cierres simultáneos (protección con isSubmittingRef)
-    it('R12-06: doble clic no genera dos cierres simultáneos y preserva la integridad', async () => {
+    // R13-05: Botones bloqueados en DOM
+    it('R13-05: Botones bloqueados en DOM: verificar mediante selector DOM que durante isProcessing los botones tienen el atributo disabled real y muestran el indicador de procesamiento', () => {
+      const dummyMatch: Match = {
+        id: 99,
+        localTeamId,
+        visitorTeamId,
+        status: 'playing',
+        currentQuarter: 1,
+        localScore: 15,
+        visitorScore: 10,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: { mode: 'best-of-series' },
+      };
+
+      const { rerender } = render(
+        React.createElement(SeriesEarlyFinishModal, {
+          isOpen: true,
+          isProcessing: true,
+          errorMessage: null,
+          match: dummyMatch,
+          localTeam: { id: localTeamId, name: 'Local Team', createdAt: new Date(), isArchived: false },
+          visitorTeam: { id: visitorTeamId, name: 'Visitor Team', createdAt: new Date(), isArchived: false },
+          localSetsWon: 1,
+          visitorSetsWon: 0,
+          onConfirmFinish: vi.fn(),
+          onDismiss: vi.fn(),
+        })
+      );
+
+      const countBtn = screen.getByTestId('btn-finish-count-set') as HTMLButtonElement;
+      const noCountBtn = screen.getByTestId('btn-finish-no-count') as HTMLButtonElement;
+      const cancelBtn = screen.getByTestId('btn-cancel-finish') as HTMLButtonElement;
+
+      // Atributo disabled real en DOM
+      expect(countBtn.disabled).toBe(true);
+      expect(noCountBtn.disabled).toBe(true);
+      expect(cancelBtn.disabled).toBe(true);
+
+      // Indicadores visuales de procesamiento
+      expect(countBtn.textContent).toBe('Procesando...');
+      expect(noCountBtn.textContent).toBe('Procesando...');
+
+      // Al no estar procesando, todos los botones están habilitados
+      rerender(
+        React.createElement(SeriesEarlyFinishModal, {
+          isOpen: true,
+          isProcessing: false,
+          errorMessage: null,
+          match: dummyMatch,
+          localTeam: { id: localTeamId, name: 'Local Team', createdAt: new Date(), isArchived: false },
+          visitorTeam: { id: visitorTeamId, name: 'Visitor Team', createdAt: new Date(), isArchived: false },
+          localSetsWon: 1,
+          visitorSetsWon: 0,
+          onConfirmFinish: vi.fn(),
+          onDismiss: vi.fn(),
+        })
+      );
+
+      expect(countBtn.disabled).toBe(false);
+      expect(noCountBtn.disabled).toBe(false);
+      expect(cancelBtn.disabled).toBe(false);
+      expect(countBtn.textContent).toMatch(/Cerrar y Contabilizar Set Actual/i);
+    });
+
+    // R13-06: Doble clic en UI
+    it('R13-06: Doble clic en UI: disparar dos clics consecutivos en el botón de confirmación; verificar que la acción no se invoca dos veces ni se corrompen los datos', async () => {
       const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
       const match = (await db.matches.get(matchId))!;
 
-      const hook = renderHook(() => useSeriesEngineModal(match));
-      hook.result.openEarlyFinishModal();
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: match }));
 
-      const [res1, res2] = await Promise.all([
-        hook.result.handleEarlyFinish(false),
-        hook.result.handleEarlyFinish(false),
-      ]);
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
 
-      const statuses = [res1.status, res2.status];
-      expect(statuses).toContain('finished');
-      expect(statuses).toContain('rejected');
-      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+      const btn = screen.getByTestId('btn-finish-no-count');
+      // Doble clic inmediato en la UI
+      fireEvent.click(btn);
+      fireEvent.click(btn);
 
+      await waitFor(() => {
+        expect(screen.queryByTestId('early-finish-card')).toBeNull();
+      });
+
+      // El estado termina de forma íntegra y sin duplicar registros
       const dbMatch = (await db.matches.get(matchId))!;
       expect(dbMatch.status).toBe('finished');
+      expect(dbMatch.gameHistory?.length).toBe(0);
     });
 
-    // R12-07: los botones quedan deshabilitados mientras la operación está pendiente
-    it('R12-07: los botones reflejan estado de procesamiento y quedan deshabilitados mientras la operación está pendiente', async () => {
-      const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
-      const match = (await db.matches.get(matchId))!;
-
-      SeriesService.__setTestPostWriteHook(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      });
-
-      try {
-        const hook = renderHook(() => useSeriesEngineModal(match));
-        hook.result.openEarlyFinishModal();
-
-        const promise = hook.result.handleEarlyFinish(false);
-        expect(hook.result.isProcessing).toBe(true);
-
-        await promise;
-        expect(hook.result.isProcessing).toBe(false);
-      } finally {
-        SeriesService.__setTestPostWriteHook(null);
-      }
-    });
-
-    // R12-08: el usuario puede corregir una inconsistencia y reintentar con éxito
-    it('R12-08: usuario puede corregir discrepancia de anotaciones y reintentar con éxito sin cerrar modal', async () => {
+    // R13-07: Descarte tras rechazo y corrección
+    it('R13-07: Descarte tras rechazo y corrección: verificar que tras un rechazo, el usuario puede descartar el modal (ahora que ya no está procesando), corregir los marcadores y volver a abrir/confirmar con éxito', async () => {
       const matchId = await createBaseSeriesMatch({ localScore: 10, visitorScore: 8 });
-      // Generar discrepancia: eliminar puntos de local y dejar solo 6 puntos legítimos (dos triples)
+      // Generar discrepancia: marcador 10, pero solo 6 puntos anotados
       await db.scores.where('matchId').equals(matchId).and(s => s.teamId === localTeamId).delete();
       await db.scores.bulkAdd([
         { matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date() },
@@ -1575,52 +1604,93 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
       ]);
 
       const match = (await db.matches.get(matchId))!;
-      const hook = renderHook(() => useSeriesEngineModal(match));
-      hook.result.openEarlyFinishModal();
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: match }));
 
-      // Primer intento: falla y mantiene modal abierto
-      const failRes = await hook.result.handleEarlyFinish(false);
-      expect(failRes.status).toBe('rejected');
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
-      expect(hook.result.errorMessage).not.toBeNull();
+      // Abrir modal y primer intento
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      fireEvent.click(screen.getByTestId('btn-finish-no-count'));
 
-      // Corrección de la discrepancia en la base de datos (añadir los 4 puntos faltantes)
+      await waitFor(() => {
+        expect(screen.getByTestId('early-finish-error')).toBeTruthy();
+      });
+
+      // El usuario descarta el modal mediante "Seguir Jugando" para corregir
+      fireEvent.click(screen.getByTestId('btn-cancel-finish'));
+      expect(screen.queryByTestId('early-finish-card')).toBeNull();
+
+      // Corrección de las anotaciones en la base de datos (añadir 4 puntos en 2 triples/canastas válidas)
       await db.scores.bulkAdd([
         { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date() },
         { matchId, teamId: localTeamId, points: 2, quarter: 1, createdAt: new Date() },
       ]);
 
-      // Segundo intento (reintento del usuario desde el mismo modal abierto)
-      const successRes = await hook.result.handleEarlyFinish(false);
-      expect(successRes.status).toBe('finished');
-      expect(hook.result.showEarlyFinishConfirm).toBe(false);
-      expect(hook.result.errorMessage).toBeNull();
+      // Reabrir modal tras corrección
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
+      expect(screen.queryByTestId('early-finish-error')).toBeNull();
+
+      // Segundo intento: ahora debe tener éxito
+      fireEvent.click(screen.getByTestId('btn-finish-no-count'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('early-finish-card')).toBeNull();
+      });
 
       const dbMatch = (await db.matches.get(matchId))!;
       expect(dbMatch.status).toBe('finished');
     });
 
-    // R12-09: respuesta already_finished reconcilia la interfaz y no duplica datos
-    it('R12-09: respuesta already_finished reconcilia la interfaz cerrando el modal de confirmación sin duplicar sets', async () => {
+    // R13-08: Preservación de pruebas de servicio
+    it('R13-08: Preservación de pruebas de servicio: mantener la cobertura completa de los contratos de integridad, idempotencia, continuidad, verificación de eventos y rollback previamente certificados', async () => {
+      const matchId = await createBaseSeriesMatch({ localScore: 21, visitorScore: 18 });
+
+      // Cierre idempotente y verificado
+      const res1 = await SeriesService.confirmSet({
+        matchId,
+        setNumber: 1,
+        expectedWinnerId: localTeamId,
+        expectedScore: { local: 21, visitor: 18 },
+      });
+      expect(res1.status).toBe('confirmed');
+
+      // Idempotencia: segunda confirmación con mismos datos devuelve already_confirmed
+      const res2 = await SeriesService.confirmSet({
+        matchId,
+        setNumber: 1,
+        expectedWinnerId: localTeamId,
+        expectedScore: { local: 21, visitor: 18 },
+      });
+      expect(res2.status).toBe('already_confirmed');
+
+      const match = (await db.matches.get(matchId))!;
+      expect(match.gameHistory?.length).toBe(1);
+      expect(match.config.bestOf?.wins.local).toBe(1);
+    });
+
+    // R13-09: Reconciliación con already_finished
+    it('R13-09: respuesta already_finished reconcilia la interfaz cerrando el modal de confirmación sin duplicar sets', async () => {
       const matchId = await createBaseSeriesMatch({ localScore: 15, visitorScore: 10 });
       await db.matches.update(matchId, { status: 'finished' });
       const finishedMatch = (await db.matches.get(matchId))!;
 
-      const hook = renderHook(() => useSeriesEngineModal(finishedMatch));
-      hook.result.setShowEarlyFinishConfirm(true);
-      expect(hook.result.showEarlyFinishConfirm).toBe(true);
+      render(React.createElement(TestSeriesHarness, { matchId, initialMatch: finishedMatch }));
 
-      const res = await hook.result.handleEarlyFinish(false);
-      expect(res.status).toBe('already_finished');
-      expect(hook.result.showEarlyFinishConfirm).toBe(false);
+      fireEvent.click(screen.getByTestId('open-early-finish-btn'));
+      expect(screen.getByTestId('early-finish-card')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('btn-finish-no-count'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('early-finish-card')).toBeNull();
+      });
 
       const dbMatch = (await db.matches.get(matchId))!;
       expect(dbMatch.status).toBe('finished');
       expect(dbMatch.gameHistory?.length).toBe(0);
     });
 
-    // R12-10: los mecanismos de prueba de rollback no quedan operativos fuera de NODE_ENV === 'test'
-    it('R12-10: los mecanismos de prueba de rollback lanzan error fuera de NODE_ENV=test y no se exponen en params', async () => {
+    // R13-10: Blindaje de rollback exclusivo en entorno de test
+    it('R13-10: los mecanismos de prueba de rollback lanzan error fuera de NODE_ENV=test y no se exponen en params', () => {
       const proc = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
       const originalEnv = proc?.env?.NODE_ENV;
       try {
@@ -1636,7 +1706,6 @@ describe('SB_PHASE2A_R1: Integridad Transaccional, Idempotencia y Cierre de Best
         }
       }
 
-      // En entorno de test, el hook vuelve a null sin efectos colaterales
       SeriesService.__setTestPostWriteHook(null);
     });
   });

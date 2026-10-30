@@ -51,16 +51,14 @@ export const SeriesEngine: React.FC = () => {
         showSeriesEndModal,
         confirmSetEnd,
         endSeries,
-        setWinnerId
+        setWinnerId,
+        isProcessing
     } = useSeriesLogic({ match });
 
     const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
 
-    useEffect(() => {
-        if (match.status === 'finished') {
-            navigate('/matches');
-        }
-    }, [match.status, navigate]);
+    // Se preserva la pantalla final de la serie para visualización del resultado,
+    // compartir la tarjeta y salida explícita hacia el historial.
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
@@ -336,16 +334,31 @@ export const SeriesEngine: React.FC = () => {
                         <p>
                             La serie aún no concluye (Sets: {localSetsWon} - {visitorSetsWon} • Set actual: {match.localScore} - {match.visitorScore}).
                         </p>
-                        <div className="modal-actions">
+                        <div className="modal-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {match.localScore !== match.visitorScore && (
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        setShowEarlyFinishConfirm(false);
+                                        await endSeries({ countCurrentSet: true });
+                                    }}
+                                    className="btn-modal-primary"
+                                    style={{ background: 'var(--primary-accent, #3b82f6)' }}
+                                >
+                                    Cerrar y Contabilizar Set Actual ({match.localScore > match.visitorScore ? localTeam.name : visitorTeam.name} +1)
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={async () => {
                                     setShowEarlyFinishConfirm(false);
-                                    await endSeries();
+                                    await endSeries({ countCurrentSet: false });
                                 }}
                                 className="btn-modal-primary btn-finish"
                             >
-                                Sí, Guardar y Cerrar Serie
+                                {match.localScore !== match.visitorScore
+                                    ? 'Cerrar sin Contabilizar Set Actual'
+                                    : 'Sí, Guardar y Cerrar Serie'}
                             </button>
                             <button
                                 type="button"
@@ -376,8 +389,8 @@ export const SeriesEngine: React.FC = () => {
                             El marcador de puntos se reiniciará para el siguiente set.
                         </p>
                         <div className="modal-actions">
-                            <button type="button" onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
-                                Confirmar y Siguiente Set
+                            <button type="button" onClick={confirmSetEnd} disabled={isProcessing} className="btn-modal-primary btn-next-q">
+                                {isProcessing ? 'Confirmando...' : 'Confirmar y Siguiente Set'}
                             </button>
                             <button type="button" onClick={undoLastAction} className="btn-modal-secondary">
                                 Deshacer último punto (Corregir)
@@ -416,8 +429,8 @@ export const SeriesEngine: React.FC = () => {
                             {localSetsWon} - {visitorSetsWon}
                         </div>
                         <div className="modal-actions">
-                            <button type="button" onClick={endSeries} className="btn-modal-primary btn-finish">
-                                Finalizar Partido
+                            <button type="button" onClick={() => navigate('/matches')} className="btn-modal-primary btn-finish">
+                                Ir al Historial de Partidos
                             </button>
                             <button
                                 type="button"

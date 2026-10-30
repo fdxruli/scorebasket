@@ -52,7 +52,9 @@ export const SeriesEngine: React.FC = () => {
         confirmSetEnd,
         endSeries,
         setWinnerId,
-        isProcessing
+        isProcessing,
+        errorMessage,
+        clearError
     } = useSeriesLogic({ match });
 
     const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
@@ -331,6 +333,11 @@ export const SeriesEngine: React.FC = () => {
                             <Flag size={34} color="var(--danger)" />
                         </div>
                         <h3>¿Finalizar la Serie?</h3>
+                        {errorMessage && (
+                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger, #ef4444)', color: '#fca5a5', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
+                                {errorMessage}
+                            </div>
+                        )}
                         <p>
                             La serie aún no concluye (Sets: {localSetsWon} - {visitorSetsWon} • Set actual: {match.localScore} - {match.visitorScore}).
                         </p>
@@ -362,7 +369,10 @@ export const SeriesEngine: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setShowEarlyFinishConfirm(false)}
+                                onClick={() => {
+                                    clearError();
+                                    setShowEarlyFinishConfirm(false);
+                                }}
                                 className="btn-modal-secondary"
                             >
                                 Seguir Jugando
@@ -382,6 +392,11 @@ export const SeriesEngine: React.FC = () => {
                             <Trophy size={40} color="var(--secondary-light)" />
                         </div>
                         <h3>Fin del Set {currentSet}</h3>
+                        {errorMessage && (
+                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger, #ef4444)', color: '#fca5a5', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
+                                {errorMessage}
+                            </div>
+                        )}
                         <p style={{ color: '#fff', marginBottom: '0.5rem' }}>
                             Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong> ({match.localScore} - {match.visitorScore})
                         </p>
@@ -392,7 +407,14 @@ export const SeriesEngine: React.FC = () => {
                             <button type="button" onClick={confirmSetEnd} disabled={isProcessing} className="btn-modal-primary btn-next-q">
                                 {isProcessing ? 'Confirmando...' : 'Confirmar y Siguiente Set'}
                             </button>
-                            <button type="button" onClick={undoLastAction} className="btn-modal-secondary">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    clearError();
+                                    undoLastAction();
+                                }}
+                                className="btn-modal-secondary"
+                            >
                                 Deshacer último punto (Corregir)
                             </button>
                         </div>

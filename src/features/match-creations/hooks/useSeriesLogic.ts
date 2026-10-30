@@ -26,7 +26,12 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
   // Protección inmediata de doble clic (sin depender de renders asíncronos)
   const isSubmittingRef = useRef<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dismissedSeriesModal, setDismissedSeriesModal] = useState<boolean>(false);
+
+  const clearError = useCallback(() => {
+    setErrorMessage(null);
+  }, []);
 
   // Ganador reglamentario derivado de forma reactiva de los puntos visibles
   const detectedSetWinnerId = useMemo(() => {
@@ -54,6 +59,7 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
     isSubmittingRef.current = true;
     setIsProcessing(true);
+    setErrorMessage(null);
 
     try {
       const result = await SeriesService.confirmSet({
@@ -68,9 +74,12 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
       if (result.status === 'rejected') {
         console.error('Error al confirmar set:', result.reason);
+        setErrorMessage(result.reason);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error('Excepción al confirmar set:', err);
+      setErrorMessage(msg);
     } finally {
       isSubmittingRef.current = false;
       setIsProcessing(false);
@@ -91,6 +100,7 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
       isSubmittingRef.current = true;
       setIsProcessing(true);
+      setErrorMessage(null);
 
       try {
         if (match.status === 'finished') {
@@ -105,9 +115,12 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
 
         if (result.status === 'rejected') {
           console.error('Error al finalizar serie:', result.reason);
+          setErrorMessage(result.reason);
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         console.error('Excepción al finalizar serie:', err);
+        setErrorMessage(msg);
       } finally {
         isSubmittingRef.current = false;
         setIsProcessing(false);
@@ -133,5 +146,7 @@ export const useSeriesLogic = ({ match }: UseSeriesLogicProps) => {
     endSeries,
     setWinnerId,
     isProcessing,
+    errorMessage,
+    clearError,
   };
 };

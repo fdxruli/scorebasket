@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useSeriesLogic } from '../../hooks/useSeriesLogic';
+import { SeriesEarlyFinishModal } from './SeriesEarlyFinishModal';
 import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { LiveToolsBar } from '../shared/LiveToolsBar';
@@ -10,7 +11,7 @@ import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
-import { Trophy, Layers, Flag, Share2 } from 'lucide-react';
+import { Trophy, Layers, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Player } from '../../../../db/models';
 
@@ -330,65 +331,22 @@ export const SeriesEngine: React.FC = () => {
                 />
             )}
 
-            {showEarlyFinishConfirm && (
-                <div className="game-modal-overlay" onClick={() => setShowEarlyFinishConfirm(false)}>
-                    <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
-                        <div className="game-modal-status-header">
-                            <ModalLiveStatusPill />
-                        </div>
-                        <div className="modal-icon-wrapper">
-                            <Flag size={34} color="var(--danger)" />
-                        </div>
-                        <h3>¿Finalizar la Serie?</h3>
-                        {errorMessage && (
-                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger, #ef4444)', color: '#fca5a5', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
-                                {errorMessage}
-                            </div>
-                        )}
-                        <p>
-                            La serie aún no concluye (Sets: {localSetsWon} - {visitorSetsWon} • Set actual: {match.localScore} - {match.visitorScore}).
-                        </p>
-                        <div className="modal-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {match.localScore !== match.visitorScore && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleEarlyFinish(true)}
-                                    disabled={isProcessing}
-                                    className="btn-modal-primary"
-                                    style={{ background: 'var(--primary-accent, #3b82f6)' }}
-                                >
-                                    {isProcessing
-                                        ? 'Procesando...'
-                                        : `Cerrar y Contabilizar Set Actual (${match.localScore > match.visitorScore ? localTeam.name : visitorTeam.name} +1)`}
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => handleEarlyFinish(false)}
-                                disabled={isProcessing}
-                                className="btn-modal-primary btn-finish"
-                            >
-                                {isProcessing
-                                    ? 'Procesando...'
-                                    : (match.localScore !== match.visitorScore
-                                        ? 'Cerrar sin Contabilizar Set Actual'
-                                        : 'Sí, Guardar y Cerrar Serie')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    clearError();
-                                    setShowEarlyFinishConfirm(false);
-                                }}
-                                disabled={isProcessing}
-                                className="btn-modal-secondary"
-                            >
-                                Seguir Jugando
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SeriesEarlyFinishModal
+                isOpen={showEarlyFinishConfirm}
+                isProcessing={isProcessing}
+                errorMessage={errorMessage}
+                match={match}
+                localTeam={localTeam}
+                visitorTeam={visitorTeam}
+                localSetsWon={localSetsWon}
+                visitorSetsWon={visitorSetsWon}
+                onConfirmFinish={handleEarlyFinish}
+                onDismiss={() => {
+                    if (isProcessing) return;
+                    clearError();
+                    setShowEarlyFinishConfirm(false);
+                }}
+            />
 
             {showSetEndModal && (
                 <div className="game-modal-overlay">

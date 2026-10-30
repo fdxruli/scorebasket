@@ -5,3 +5,5 @@ export * from './teams.repository';
 export * from './players.repository';
 export * from './gameActions.repository';
 export * from './timeout.service';
+export * from './series.service';
+export * from './scoreIntegrity.service';

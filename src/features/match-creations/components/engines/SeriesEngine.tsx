@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useSeriesLogic } from '../../hooks/useSeriesLogic';
+import { SeriesEarlyFinishModal } from './SeriesEarlyFinishModal';
 import { LiveHeader } from '../shared/LiveHeader';
 import { GameActionControls } from '../shared/GameActionControls';
 import { LiveToolsBar } from '../shared/LiveToolsBar';
@@ -10,7 +11,7 @@ import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
 import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
-import { Trophy, Layers, Flag, Share2 } from 'lucide-react';
+import { Trophy, Layers, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Player } from '../../../../db/models';
 
@@ -37,8 +38,6 @@ export const SeriesEngine: React.FC = () => {
         prevHasAnyPlayersRef.current = hasAnyPlayers;
     }, [hasAnyPlayers]);
 
-    if (!match || !localTeam || !visitorTeam) return null;
-
     const {
         currentSet,
         localSetsWon,
@@ -51,16 +50,11 @@ export const SeriesEngine: React.FC = () => {
         showSeriesEndModal,
         confirmSetEnd,
         endSeries,
-        setWinnerId
+        setWinnerId,
+        isProcessing,
+        errorMessage,
+        clearError
     } = useSeriesLogic({ match });
-
-    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
-
-    useEffect(() => {
-        if (match.status === 'finished') {
-            navigate('/matches');
-        }
-    }, [match.status, navigate]);
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
@@ -69,6 +63,20 @@ export const SeriesEngine: React.FC = () => {
         players: Player[];
         action: GameAction;
     } | null>(null);
+
+    const handleEarlyFinish = async (countCurrentSet: boolean) => {
+        const result = await endSeries({ countCurrentSet });
+        if (result && (result.status === 'finished' || result.status === 'already_finished')) {
+            setShowEarlyFinishConfirm(false);
+        }
+    };
+
+    if (!match || !localTeam || !visitorTeam) return null;
+
+    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
+
+    // Se preserva la pantalla final de la serie para visualización del resultado,
+    // compartir la tarjeta y salida explícita hacia el historial.
 
     const requestAction = (
         teamId: number,
@@ -127,7 +135,7 @@ export const SeriesEngine: React.FC = () => {
             <LiveToolsBar
                 trackPlayers={trackPlayers}
                 onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
-                onEndMatch={() => setShowEarlyFinishConfirm(true)}
+                onEndMatch={() => { clearError(); setShowEarlyFinishConfirm(true); }}
             />
 
             {/* 1. BANNER SUPERIOR COMPACTO DE SETS GANADOS (PLAYOFFS BAR) */}
@@ -323,41 +331,22 @@ export const SeriesEngine: React.FC = () => {
                 />
             )}
 
-            {showEarlyFinishConfirm && (
-                <div className="game-modal-overlay" onClick={() => setShowEarlyFinishConfirm(false)}>
-                    <div className="game-modal-card is-exit" onClick={e => e.stopPropagation()}>
-                        <div className="game-modal-status-header">
-                            <ModalLiveStatusPill />
-                        </div>
-                        <div className="modal-icon-wrapper">
-                            <Flag size={34} color="var(--danger)" />
-                        </div>
-                        <h3>¿Finalizar la Serie?</h3>
-                        <p>
-                            La serie aún no concluye (Sets: {localSetsWon} - {visitorSetsWon} • Set actual: {match.localScore} - {match.visitorScore}).
-                        </p>
-                        <div className="modal-actions">
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    setShowEarlyFinishConfirm(false);
-                                    await endSeries();
-                                }}
-                                className="btn-modal-primary btn-finish"
-                            >
-                                Sí, Guardar y Cerrar Serie
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowEarlyFinishConfirm(false)}
-                                className="btn-modal-secondary"
-                            >
-                                Seguir Jugando
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SeriesEarlyFinishModal
+                isOpen={showEarlyFinishConfirm}
+                isProcessing={isProcessing}
+                errorMessage={errorMessage}
+                match={match}
+                localTeam={localTeam}
+                visitorTeam={visitorTeam}
+                localSetsWon={localSetsWon}
+                visitorSetsWon={visitorSetsWon}
+                onConfirmFinish={handleEarlyFinish}
+                onDismiss={() => {
+                    if (isProcessing) return;
+                    clearError();
+                    setShowEarlyFinishConfirm(false);
+                }}
+            />
 
             {showSetEndModal && (
                 <div className="game-modal-overlay">
@@ -369,6 +358,11 @@ export const SeriesEngine: React.FC = () => {
                             <Trophy size={40} color="var(--secondary-light)" />
                         </div>
                         <h3>Fin del Set {currentSet}</h3>
+                        {errorMessage && (
+                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger, #ef4444)', color: '#fca5a5', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
+                                {errorMessage}
+                            </div>
+                        )}
                         <p style={{ color: '#fff', marginBottom: '0.5rem' }}>
                             Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong> ({match.localScore} - {match.visitorScore})
                         </p>
@@ -376,10 +370,17 @@ export const SeriesEngine: React.FC = () => {
                             El marcador de puntos se reiniciará para el siguiente set.
                         </p>
                         <div className="modal-actions">
-                            <button type="button" onClick={confirmSetEnd} className="btn-modal-primary btn-next-q">
-                                Confirmar y Siguiente Set
+                            <button type="button" onClick={confirmSetEnd} disabled={isProcessing} className="btn-modal-primary btn-next-q">
+                                {isProcessing ? 'Confirmando...' : 'Confirmar y Siguiente Set'}
                             </button>
-                            <button type="button" onClick={undoLastAction} className="btn-modal-secondary">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    clearError();
+                                    undoLastAction();
+                                }}
+                                className="btn-modal-secondary"
+                            >
                                 Deshacer último punto (Corregir)
                             </button>
                         </div>
@@ -416,8 +417,8 @@ export const SeriesEngine: React.FC = () => {
                             {localSetsWon} - {visitorSetsWon}
                         </div>
                         <div className="modal-actions">
-                            <button type="button" onClick={endSeries} className="btn-modal-primary btn-finish">
-                                Finalizar Partido
+                            <button type="button" onClick={() => navigate('/matches')} className="btn-modal-primary btn-finish">
+                                Ir al Historial de Partidos
                             </button>
                             <button
                                 type="button"

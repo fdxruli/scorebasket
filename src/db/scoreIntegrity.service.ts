@@ -49,26 +49,62 @@ export function validateGameHistoryContinuity(params: {
   effectivePeriod: number;
   history?: GameResult[];
   bestOfWins?: { local: number; visitor: number };
+  isFinished?: boolean;
+  matchScore?: { local: number; visitor: number };
 }): HistoryValidationResult {
-  const { mode, effectivePeriod, history, bestOfWins } = params;
+  const { mode, effectivePeriod, history, bestOfWins, isFinished = false, matchScore } = params;
 
-  // Si estamos en el primer periodo (1), el historial debe estar vacío o no definido (C-02 / R1.5.1)
-  // Cualquier entrada (números negativos, cero, fraccionarios, futuros o malformados) invalida el historial
-  if (effectivePeriod === 1) {
-    if (history && history.length > 0) {
-      return {
-        isValid: false,
-        reason: `Historial anómalo: se disputa el periodo #1 pero gameHistory contiene ${history.length} entrada(s). En el periodo 1 el historial debe estar vacío.`,
-      };
-    }
-    return { isValid: true };
+  if (!isFinitePositiveInteger(effectivePeriod)) {
+    return {
+      isValid: false,
+      reason: `effectivePeriod debe ser un entero positivo finito (recibido: ${effectivePeriod}).`,
+    };
   }
 
-  // Si effectivePeriod > 1, history debe existir y contener entradas previas
-  if (!history || history.length === 0) {
+  // Si estamos en el primer periodo (1)
+  if (effectivePeriod === 1) {
+    if (!isFinished) {
+      // En partido activo: cualquier entrada invalida el historial (C-02 / R1.5.1)
+      if (history && history.length > 0) {
+        return {
+          isValid: false,
+          reason: `Historial anómalo: se disputa el periodo #1 pero gameHistory contiene ${history.length} entrada(s). En el periodo 1 el historial debe estar vacío.`,
+        };
+      }
+      return { isValid: true };
+    }
+
+    // En partido finalizado en periodo 1:
+    // Si no tiene historial (cierre prematuro sin juegos finalizados)
+    if (!history || history.length === 0) {
+      if (mode === 'best-of-series') {
+        const storedLocalWins = bestOfWins?.local ?? 0;
+        const storedVisitorWins = bestOfWins?.visitor ?? 0;
+        if (storedLocalWins !== 0 || storedVisitorWins !== 0) {
+          return {
+            isValid: false,
+            reason: `Incoherencia en Best-of-Series: victorias acumuladas (L:${storedLocalWins}, V:${storedVisitorWins}) sin juegos registrados en el historial.`,
+          };
+        }
+      }
+      return { isValid: true };
+    }
+    // Si tiene historial en periodo 1 finalizado, continuamos a la validación detallada de entradas
+  }
+
+  // Si effectivePeriod > 1 y el partido NO está finalizado, history debe existir y contener entradas previas
+  if (!isFinished && (!history || history.length === 0)) {
     return {
       isValid: false,
       reason: `Historial incompleto: se disputa el periodo #${effectivePeriod} pero no existen juegos previos registrados en gameHistory.`,
+    };
+  }
+
+  // Si el partido está finalizado en periodo > 1 y no tiene historial
+  if (!history || history.length === 0) {
+    return {
+      isValid: false,
+      reason: `Historial incompleto: el partido finalizó en el periodo #${effectivePeriod} sin juegos registrados en gameHistory.`,
     };
   }
 
@@ -142,11 +178,21 @@ export function validateGameHistoryContinuity(params: {
     if (g.winner === 'visitor') recordedVisitorWins++;
 
     // 4. Periodo actual cerrado
-    if (g.gameNumber === effectivePeriod) {
+    if (!isFinished && g.gameNumber === effectivePeriod) {
       return {
         isValid: false,
         reason: `El periodo #${effectivePeriod} ya figura cerrado en gameHistory.`,
       };
+    }
+
+    // Si el partido está finalizado y contiene el periodo final, validar concordancia con matchScore
+    if (isFinished && g.gameNumber === effectivePeriod && matchScore) {
+      if (g.localScore !== matchScore.local || g.visitorScore !== matchScore.visitor) {
+        return {
+          isValid: false,
+          reason: `Marcador contradictorio en el periodo final #${effectivePeriod}: el historial registra (${g.localScore}-${g.visitorScore}) pero el marcador persistido del partido es (${matchScore.local}-${matchScore.visitor}).`,
+        };
+      }
     }
 
     // 5. Entradas futuras
@@ -425,11 +471,14 @@ export const ScoreIntegrityService = {
 
     // --- MODALIDAD: RACE ---
     if (mode === 'race') {
-      // Validación estricta de continuidad e identidad de juegos (R1.5)
+      const isFinished = match.status === 'finished';
+      // Validación estricta de continuidad e identidad de juegos (R1.5 / F2A)
       const continuityResult = validateGameHistoryContinuity({
         mode: 'race',
         effectivePeriod,
         history: match.gameHistory,
+        isFinished,
+        matchScore: storedScore,
       });
 
       if (!continuityResult.isValid) {
@@ -510,12 +559,15 @@ export const ScoreIntegrityService = {
 
     // --- MODALIDAD: BEST-OF-SERIES ---
     if (mode === 'best-of-series') {
-      // Validación estricta de continuidad e identidad de sets y victorias (R1.5)
+      const isFinished = match.status === 'finished';
+      // Validación estricta de continuidad e identidad de sets y victorias (R1.5 / F2A)
       const continuityResult = validateGameHistoryContinuity({
         mode: 'best-of-series',
         effectivePeriod,
         history: match.gameHistory,
         bestOfWins: match.config?.bestOf?.wins,
+        isFinished,
+        matchScore: storedScore,
       });
 
       if (!continuityResult.isValid) {

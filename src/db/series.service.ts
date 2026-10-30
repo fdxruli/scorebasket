@@ -29,8 +29,6 @@ export interface ConfirmSetParams {
   setNumber: number;
   expectedWinnerId?: number;
   expectedScore?: { local: number; visitor: number };
-  /** @internal Parámetro exclusivo para pruebas automatizadas de rollback transaccional */
-  _testFailPostWrite?: boolean;
 }
 
 export type FinishSeriesResult =
@@ -50,13 +48,27 @@ export type FinishSeriesResult =
 export interface EarlyFinishSeriesParams {
   matchId: number;
   countCurrentSet: boolean;
-  /** @internal Parámetro exclusivo para pruebas automatizadas de rollback transaccional */
-  _testFailPostWrite?: boolean;
+}
+
+function isTestEnvironment(): boolean {
+  const env = (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
+  return env === 'test';
 }
 
 export class SeriesService {
   /** @internal Hook exclusivo para pruebas automatizadas de rollback transaccional */
-  static _testPostWriteHook: (() => void | Promise<void>) | null = null;
+  private static _testPostWriteHook: (() => void | Promise<void>) | null = null;
+
+  /**
+   * Configura un hook de fallo post-escritura exclusivamente para pruebas unitarias de rollback.
+   * Lanza error si se intenta invocar fuera del entorno de pruebas (NODE_ENV === 'test').
+   */
+  static __setTestPostWriteHook(hook: (() => void | Promise<void>) | null): void {
+    if (!isTestEnvironment()) {
+      throw new Error('Mecanismo de prueba restringido exclusivamente al entorno de pruebas (NODE_ENV=test).');
+    }
+    SeriesService._testPostWriteHook = hook;
+  }
 
   /**
    * Confirma de forma atómica e idempotente el cierre de un set en una serie Best-of-Series.
@@ -65,7 +77,7 @@ export class SeriesService {
    * verificación posterior de invariantes con rollback automático ante fallo (C-03).
    */
   static async confirmSet(params: ConfirmSetParams): Promise<ConfirmSetResult> {
-    const { matchId, setNumber, expectedWinnerId, expectedScore, _testFailPostWrite } = params;
+    const { matchId, setNumber, expectedWinnerId, expectedScore } = params;
 
     if (!isFinitePositiveInteger(matchId)) {
       return { status: 'rejected', reason: 'Identificador de partido inválido.' };
@@ -341,11 +353,9 @@ export class SeriesService {
         });
       }
 
-      // 14. C-03: Inyección de fallo post-escritura para pruebas de rollback
-      if (_testFailPostWrite || SeriesService._testPostWriteHook) {
-        if (SeriesService._testPostWriteHook) {
-          await SeriesService._testPostWriteHook();
-        }
+      // 14. C-03 / C-06: Inyección de fallo post-escritura estrictamente restringida a entorno de pruebas
+      if (isTestEnvironment() && SeriesService._testPostWriteHook) {
+        await SeriesService._testPostWriteHook();
         throw new Error('Inyección de fallo post-escritura para prueba de rollback transaccional.');
       }
 
@@ -430,7 +440,7 @@ export class SeriesService {
    * y se revalida de forma transaccional contrastando anotaciones reales y continuidad previa.
    */
   static async finishSeriesEarly(params: EarlyFinishSeriesParams): Promise<FinishSeriesResult> {
-    const { matchId, countCurrentSet, _testFailPostWrite } = params;
+    const { matchId, countCurrentSet } = params;
 
     if (!isFinitePositiveInteger(matchId)) {
       return { status: 'rejected', reason: 'Identificador de partido inválido.' };
@@ -555,11 +565,9 @@ export class SeriesService {
         },
       });
 
-      // C-03: Inyección de fallo para prueba de rollback
-      if (_testFailPostWrite || SeriesService._testPostWriteHook) {
-        if (SeriesService._testPostWriteHook) {
-          await SeriesService._testPostWriteHook();
-        }
+      // C-03 / C-06: Inyección de fallo post-escritura estrictamente restringida a entorno de pruebas
+      if (isTestEnvironment() && SeriesService._testPostWriteHook) {
+        await SeriesService._testPostWriteHook();
         throw new Error('Inyección de fallo post-escritura para prueba de rollback transaccional.');
       }
 

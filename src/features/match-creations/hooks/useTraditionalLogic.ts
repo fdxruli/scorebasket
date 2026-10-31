@@ -107,7 +107,18 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
 
   // 3. Timer Hook: Pasamos el OBJETO match, no los segundos.
   // El hook se encarga de calcular el tiempo restante basado en la BD y sonar la chicharra en 00:00.
-  const { timeLeft, isRunning, toggleTimer, resetTimer, adjustTime } = useMatchTimer(match ?? undefined);
+  const {
+    timeLeft,
+    isRunning,
+    hasAuthority,
+    isOwner,
+    ownerTabId,
+    requestAuthorityTransfer,
+    lastOperationResult,
+    toggleTimer,
+    resetTimer,
+    adjustTime
+  } = useMatchTimer(match ?? undefined);
 
   // Si el reloj vuelve a tener tiempo (> 0), se resetea cualquier descarte previo para permitir
   // que el modal vuelva a presentarse cuando el reloj expire en este periodo
@@ -207,6 +218,11 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     timerDisplay: formatTime(timeLeft),
     timeLeft,
     isTimerRunning: isRunning,
+    hasAuthority,
+    isOwner,
+    ownerTabId,
+    requestAuthorityTransfer,
+    lastOperationResult,
     toggleTimer,
     resetCurrentQuarter: resetTimer,
     adjustTime,

@@ -76,6 +76,8 @@ export const TraditionalEngine: React.FC = () => {
 
   const {
     timeLeft,
+    hasAuthority,
+    requestAuthorityTransfer,
     isTimerRunning,
     toggleTimer,
     resetCurrentQuarter,
@@ -209,7 +211,7 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const openTimerEditor = () => {
-    if (isTimerRunning) return;
+    if (isTimerRunning || !hasAuthority) return;
     const totalSecs = Math.ceil(timeLeft);
     setCustomMinutes(String(Math.floor(totalSecs / 60)));
     setCustomSeconds(String(totalSecs % 60).padStart(2, '0'));
@@ -232,6 +234,14 @@ export const TraditionalEngine: React.FC = () => {
     await db.matches.update(match.id, { possession: nextPossession });
   };
 
+  const handleToggleTimer = async () => {
+    if (hasAuthority) {
+      await toggleTimer();
+    } else {
+      await requestAuthorityTransfer();
+    }
+  };
+
   const isLocalModal = playerModal.teamId === localTeam.id;
 
   return (
@@ -246,6 +256,42 @@ export const TraditionalEngine: React.FC = () => {
         showBuzzer
       />
 
+      {!hasAuthority && (
+        <div
+          className="observer-notice-pill"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.5rem 1rem',
+            margin: '0.25rem 0',
+            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            color: '#fef08a'
+          }}
+        >
+          <span>Modo observador: Otra pestaña controla el tiempo.</span>
+          <button
+            type="button"
+            onClick={() => { requestAuthorityTransfer(); }}
+            style={{
+              padding: '0.25rem 0.75rem',
+              backgroundColor: '#eab308',
+              color: '#000',
+              border: 'none',
+              borderRadius: '4px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            Reclamar control
+          </button>
+        </div>
+      )}
+
       <Scoreboard
         localName={localTeam.name}
         visitorName={visitorTeam.name}
@@ -255,8 +301,8 @@ export const TraditionalEngine: React.FC = () => {
         visitorFouls={currentQuarterFouls?.visitor ?? 0}
         timeLeft={timeLeft}
         isTimerRunning={isTimerRunning}
-        onTimerClick={openTimerEditor}
-        onToggleTimer={toggleTimer}
+        onTimerClick={hasAuthority ? openTimerEditor : undefined}
+        onToggleTimer={handleToggleTimer}
       />
 
       <MatchControls
@@ -266,11 +312,11 @@ export const TraditionalEngine: React.FC = () => {
         visitorPlayers={visitorTeam.players}
         isTimerRunning={isTimerRunning}
         timeLeft={timeLeft}
-        canEditTimer={!isTimerRunning}
-        onTimerClick={openTimerEditor}
+        canEditTimer={!isTimerRunning && hasAuthority}
+        onTimerClick={hasAuthority ? openTimerEditor : undefined}
         possession={match.possession ?? null}
         onTogglePossession={handleTogglePossession}
-        onToggleTimer={toggleTimer}
+        onToggleTimer={handleToggleTimer}
         onNextQuarter={handleNextQuarterClick}
         nextPeriodLabel={nextPeriodBtnLabel}
         onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}

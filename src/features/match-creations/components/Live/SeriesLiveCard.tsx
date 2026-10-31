@@ -33,7 +33,14 @@ export const SeriesLiveCard = ({ match, localName, visitorName }: Props) => {
   );
 };
 
-const TeamRow = ({ name, sets, points, winsNeeded }: any) => (
+interface SeriesTeamRowProps {
+  name: string;
+  sets: number;
+  points: number;
+  winsNeeded: number;
+}
+
+const TeamRow = ({ name, sets, points, winsNeeded }: SeriesTeamRowProps) => (
   <div className="live-team-row">
     <div className="team-info-group">
       {/* Indicador de Sets ganados visual */}

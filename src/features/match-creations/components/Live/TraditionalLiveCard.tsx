@@ -85,8 +85,15 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
   );
 };
 
+interface TraditionalTeamRowProps {
+  name: string;
+  score: number;
+  fouls: number;
+  isWinning: boolean;
+}
+
 // Subcomponente simple para reutilizar diseño
-const TeamRow = ({ name, score, fouls, isWinning }: any) => (
+const TeamRow = ({ name, score, fouls, isWinning }: TraditionalTeamRowProps) => (
   <div className={`live-team-row ${isWinning ? 'winning' : ''}`}>
     <div className="team-info-group">
       <div className="team-avatar-placeholder">{name.substring(0, 1)}</div>

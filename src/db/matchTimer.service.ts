@@ -41,8 +41,70 @@ export interface TimerServiceOptions {
   epoch?: number;
   /** Periodo o cuarto esperado; si la BD cambió de periodo, se rechaza para evitar stale writes */
   expectedQuarter?: number;
-  /** Omite verificación de autoridad (p. ej. pausas de emergencia del sistema o timeouts deportivos) */
-  skipAuthorityCheck?: boolean;
+  /** Permite a pruebas simular el reloj monotónico (performance.now) */
+  simulatedPerfNowMs?: number;
+}
+
+/**
+ * Almacenamiento en memoria para medición monotónica basada en performance.now()
+ * durante la misma sesión de la pestaña propietaria (Precisión Temporal / C-20).
+ */
+const sessionMonotonicStarts = new Map<number, { perfStart: number; wallStartMs: number }>();
+
+function calculateMonotonicElapsed(
+  matchId: number,
+  lastStartMs: number,
+  nowMs: number,
+  options?: TimerServiceOptions
+): {
+  elapsedSeconds: number;
+  isClockShiftDetected: boolean;
+  clockShiftSeverity: 'none' | 'backward' | 'forward_jump';
+} {
+  if (nowMs < lastStartMs) {
+    return {
+      elapsedSeconds: 0,
+      isClockShiftDetected: true,
+      clockShiftSeverity: 'backward'
+    };
+  }
+
+  const wallElapsed = (nowMs - lastStartMs) / 1000;
+  const localSession = sessionMonotonicStarts.get(matchId);
+
+  // Verificación monotónica si se simula explícitamente o si estamos en runtime real sin nowMs artificial
+  if (localSession && localSession.wallStartMs === lastStartMs) {
+    let perfElapsed: number | null = null;
+
+    if (options?.simulatedPerfNowMs !== undefined) {
+      perfElapsed = Math.max(0, (options.simulatedPerfNowMs - localSession.perfStart) / 1000);
+    } else if (options?.nowMs === undefined && typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      perfElapsed = Math.max(0, (performance.now() - localSession.perfStart) / 1000);
+    }
+
+    if (perfElapsed !== null) {
+      if (Math.abs(wallElapsed - perfElapsed) > 10) {
+        return {
+          elapsedSeconds: perfElapsed,
+          isClockShiftDetected: true,
+          clockShiftSeverity: wallElapsed > perfElapsed ? 'forward_jump' : 'backward'
+        };
+      }
+      return {
+        elapsedSeconds: perfElapsed,
+        isClockShiftDetected: false,
+        clockShiftSeverity: 'none'
+      };
+    }
+  }
+
+  // Medición estándar entre sesiones o pruebas deterministas
+  const isSuspiciousJump = wallElapsed > 86400; // > 24 horas
+  return {
+    elapsedSeconds: wallElapsed,
+    isClockShiftDetected: isSuspiciousJump,
+    clockShiftSeverity: isSuspiciousJump ? 'forward_jump' : 'none'
+  };
 }
 
 /**
@@ -61,8 +123,14 @@ export const MatchTimerService = {
     let effective = baseRemaining;
 
     if (isRunning && match.timerLastStart) {
-      const elapsed = Math.max(0, (nowMs - match.timerLastStart.getTime()) / 1000);
-      effective = Math.max(0, baseRemaining - elapsed);
+      const isCustomNow = Math.abs(nowMs - Date.now()) > 1000;
+      const { elapsedSeconds } = calculateMonotonicElapsed(
+        matchId,
+        match.timerLastStart.getTime(),
+        nowMs,
+        isCustomNow ? { nowMs } : undefined
+      );
+      effective = Math.max(0, baseRemaining - elapsedSeconds);
     }
 
     return {
@@ -87,11 +155,8 @@ export const MatchTimerService = {
     const tabId = options?.tabId ?? authState.tabId;
     const epoch = options?.epoch ?? authState.epoch;
 
-    if (options?.skipAuthorityCheck) {
-      return { valid: true, epoch, tabId };
-    }
-
-    if (!authState.hasAuthority) {
+    const isCurrentTab = tabId === authState.tabId;
+    if (!authState.hasAuthority || !isCurrentTab) {
       return {
         valid: false,
         reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.',
@@ -183,40 +248,38 @@ export const MatchTimerService = {
         };
       }
 
-      // Re-verificación de autoridad y fencing dentro del commit boundary (C-11)
+      // Re-verificación de autoridad y fencing dentro del commit boundary (C-11 / C-19)
       const currentAuth = timerAuthorityCoordinator.getAuthorityState(matchId);
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return {
-            status: 'not_owner',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
-          };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
-          };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
-          };
-        }
+      if (!currentAuth.hasAuthority) {
+        return {
+          status: 'not_owner',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
+        };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
+        };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
+        };
       }
 
       // Si ya está corriendo, idempotencia estricta: NO sobreescribir timerLastStart (TC-04)
@@ -247,6 +310,14 @@ export const MatchTimerService = {
         status: 'playing',
         timerEpoch: callerEpoch,
         timerOwnerTabId: callerTabId
+      });
+
+      // Medición monotónica de hardware en la sesión actual
+      sessionMonotonicStarts.set(matchId, {
+        perfStart:
+          options?.simulatedPerfNowMs ??
+          (typeof performance !== 'undefined' ? performance.now() : 0),
+        wallStartMs: nowMs
       });
 
       return {
@@ -331,40 +402,38 @@ export const MatchTimerService = {
         };
       }
 
-      // Re-verificación de autoridad y fencing dentro de la transacción (C-11)
+      // Re-verificación de autoridad y fencing dentro de la transacción (C-11 / C-19)
       const currentAuth = timerAuthorityCoordinator.getAuthorityState(matchId);
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return {
-            status: 'not_owner',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
-          };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
-          };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
-          };
-        }
+      if (!currentAuth.hasAuthority) {
+        return {
+          status: 'not_owner',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
+        };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
+        };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
+        };
       }
 
       const currentRemaining = Math.max(0, match.timerSecondsRemaining ?? 0);
@@ -380,16 +449,11 @@ export const MatchTimerService = {
         };
       }
 
-      // Cálculo monotónico con protección contra retrocesos de reloj del sistema (INV-T08)
+      // Cálculo monotónico con protección contra retrocesos y saltos sospechosos (INV-T08 / Precisión Temporal)
       const lastStartMs = match.timerLastStart.getTime();
-      let elapsedSeconds = 0;
-      if (nowMs >= lastStartMs) {
-        elapsedSeconds = (nowMs - lastStartMs) / 1000;
-      } else {
-        elapsedSeconds = 0;
-      }
-
+      const { elapsedSeconds } = calculateMonotonicElapsed(matchId, lastStartMs, nowMs, options);
       const newRemaining = Math.max(0, currentRemaining - elapsedSeconds);
+      sessionMonotonicStarts.delete(matchId);
 
       await db.matches.update(matchId, {
         timerLastStart: undefined,
@@ -514,35 +578,33 @@ export const MatchTimerService = {
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return {
-            status: 'not_owner',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
-          };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
-          };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: Boolean(match.timerLastStart),
-            reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
-          };
-        }
+      if (!currentAuth.hasAuthority) {
+        return {
+          status: 'not_owner',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
+        };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
+        };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
+        };
       }
 
       const durationMinutes =
@@ -663,35 +725,33 @@ export const MatchTimerService = {
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return {
-            status: 'not_owner',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: false,
-            reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
-          };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: false,
-            reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
-          };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return {
-            status: 'stale_operation',
-            matchId,
-            timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
-            isRunning: false,
-            reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
-          };
-        }
+      if (!currentAuth.hasAuthority) {
+        return {
+          status: 'not_owner',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: false,
+          reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
+        };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: false,
+          reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
+        };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: false,
+          reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
+        };
       }
 
       const currentSecs = Math.ceil(match.timerSecondsRemaining ?? 0);
@@ -750,21 +810,14 @@ export const MatchTimerService = {
       }
 
       const lastStartMs = match.timerLastStart.getTime();
-      let elapsedSeconds = 0;
-      if (nowMs >= lastStartMs) {
-        elapsedSeconds = (nowMs - lastStartMs) / 1000;
-      } else {
-        elapsedSeconds = 0;
-      }
-
+      const { elapsedSeconds } = calculateMonotonicElapsed(matchId, lastStartMs, nowMs, options);
       const newRemaining = Math.max(0, baseRemaining - elapsedSeconds);
 
       // C-12: Comprobar si quien reconcilia tiene autoridad de escritura en BD
       const currentAuth = timerAuthorityCoordinator.getAuthorityState(matchId);
       const isOwner =
-        options?.skipAuthorityCheck ||
-        (currentAuth.hasAuthority &&
-          (options?.epoch === undefined || options.epoch === currentAuth.epoch));
+        currentAuth.hasAuthority &&
+        (options?.epoch === undefined || options.epoch === currentAuth.epoch);
 
       if (!isOwner) {
         // Pestaña observadora: cálculo de solo lectura, NUNCA escribe en BD (C-12)
@@ -780,6 +833,7 @@ export const MatchTimerService = {
 
       if (newRemaining <= 0) {
         // Expiró durante la suspensión o ejecución: persistir fin de cuarto
+        sessionMonotonicStarts.delete(matchId);
         await db.matches.update(matchId, {
           timerLastStart: undefined,
           timerSecondsRemaining: 0,
@@ -864,17 +918,15 @@ export const MatchTimerService = {
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return { status: 'not_owner', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'No posee autoridad.' };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch atrasado.' };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch menor que base de datos.' };
-        }
+      if (!currentAuth.hasAuthority) {
+        return { status: 'not_owner', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'No posee autoridad.' };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch atrasado.' };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch menor que base de datos.' };
       }
 
       const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
@@ -888,6 +940,8 @@ export const MatchTimerService = {
       const nextQ = currentQ + 1;
       const isNewHalf = currentQ === 2 && nextQ === 3;
       const targetSeconds = minutesPerQuarter * 60;
+
+      sessionMonotonicStarts.delete(matchId);
 
       await db.matches.update(matchId, {
         currentQuarter: nextQ,
@@ -936,22 +990,22 @@ export const MatchTimerService = {
       const callerEpoch = options?.epoch ?? currentAuth.epoch;
       const callerTabId = options?.tabId ?? currentAuth.tabId;
 
-      if (!options?.skipAuthorityCheck) {
-        if (!currentAuth.hasAuthority) {
-          return { status: 'not_owner', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'No posee autoridad.' };
-        }
-        if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
-          return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch atrasado.' };
-        }
-        const persistedEpoch = match.timerEpoch ?? 0;
-        if (callerEpoch < persistedEpoch) {
-          return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch menor que base de datos.' };
-        }
+      if (!currentAuth.hasAuthority) {
+        return { status: 'not_owner', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'No posee autoridad.' };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch atrasado.' };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return { status: 'stale_operation', matchId, timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0), isRunning: false, reason: 'Epoch menor que base de datos.' };
       }
 
       const quartersConfig = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
       const nextQ = (match.currentQuarter || quartersConfig) + 1;
       const targetSeconds = overtimeMinutes * 60;
+
+      sessionMonotonicStarts.delete(matchId);
 
       await db.matches.update(matchId, {
         currentQuarter: nextQ,
@@ -969,6 +1023,147 @@ export const MatchTimerService = {
         timerSecondsRemaining: targetSeconds,
         isRunning: false,
         epoch: callerEpoch
+      };
+    });
+
+    return await timerAuthorityCoordinator.trackOperation(matchId, opPromise);
+  },
+
+  /**
+   * Finaliza el partido de forma atómica y transaccional con verificación de autoridad y fencing (C-19).
+   */
+  async endMatch(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    const matchBefore = await db.matches.get(matchId);
+    if (!matchBefore) {
+      return {
+        status: 'rejected',
+        matchId,
+        timerSecondsRemaining: 0,
+        isRunning: false,
+        reason: 'El partido no existe.'
+      };
+    }
+
+    if (matchBefore.status === 'finished') {
+      return {
+        status: 'already_applied',
+        matchId,
+        timerSecondsRemaining: Math.max(0, matchBefore.timerSecondsRemaining ?? 0),
+        isRunning: false,
+        reason: 'El partido ya ha finalizado.'
+      };
+    }
+
+    const authorityCheck = this._validateAuthority(matchId, options);
+    if (!authorityCheck.valid) {
+      return {
+        status: 'not_owner',
+        matchId,
+        timerSecondsRemaining: Math.max(0, matchBefore.timerSecondsRemaining ?? 0),
+        isRunning: Boolean(matchBefore.timerLastStart),
+        reason: authorityCheck.reason
+      };
+    }
+
+    const nowMs = options?.nowMs ?? Date.now();
+
+    const opPromise = db.transaction('rw', db.matches, async (): Promise<TimerOperationResult> => {
+      const match = await db.matches.get(matchId);
+      if (!match) {
+        return {
+          status: 'rejected',
+          matchId,
+          timerSecondsRemaining: 0,
+          isRunning: false,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (match.status === 'finished') {
+        return {
+          status: 'already_applied',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: false,
+          reason: 'El partido ya ha finalizado.'
+        };
+      }
+
+      if (options?.expectedQuarter !== undefined && match.currentQuarter !== options.expectedQuarter) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Periodo no coincide (esperado: ${options.expectedQuarter}, actual: ${match.currentQuarter}).`
+        };
+      }
+
+      const currentAuth = timerAuthorityCoordinator.getAuthorityState(matchId);
+      const callerEpoch = options?.epoch ?? currentAuth.epoch;
+      const callerTabId = options?.tabId ?? currentAuth.tabId;
+
+      if (!currentAuth.hasAuthority) {
+        return {
+          status: 'not_owner',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: 'Esta pestaña no posee la autoridad del cronómetro para este partido.'
+        };
+      }
+      if (options?.epoch !== undefined && options.epoch !== currentAuth.epoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada localmente (fencing epoch ${options.epoch} !== actual ${currentAuth.epoch}).`
+        };
+      }
+      const persistedEpoch = match.timerEpoch ?? 0;
+      if (callerEpoch < persistedEpoch) {
+        return {
+          status: 'stale_operation',
+          matchId,
+          timerSecondsRemaining: Math.max(0, match.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match.timerLastStart),
+          reason: `Operación atrasada respecto a la base de datos (epoch ${callerEpoch} < persistido ${persistedEpoch}).`
+        };
+      }
+
+      const baseRemaining = Math.max(0, match.timerSecondsRemaining ?? 0);
+      let effectiveRemaining = baseRemaining;
+      if (match.timerLastStart) {
+        const { elapsedSeconds } = calculateMonotonicElapsed(
+          matchId,
+          match.timerLastStart.getTime(),
+          nowMs,
+          options
+        );
+        effectiveRemaining = Math.max(0, baseRemaining - elapsedSeconds);
+      }
+
+      sessionMonotonicStarts.delete(matchId);
+
+      const nextEpoch = Math.max(callerEpoch, persistedEpoch) + 1;
+
+      await db.matches.update(matchId, {
+        status: 'finished',
+        finishedAt: new Date(nowMs),
+        timerSecondsRemaining: effectiveRemaining,
+        timerLastStart: undefined,
+        timerEpoch: nextEpoch,
+        timerOwnerTabId: callerTabId,
+        timerLeaseExpiresAt: 0
+      });
+
+      return {
+        status: 'applied',
+        matchId,
+        timerSecondsRemaining: effectiveRemaining,
+        isRunning: false,
+        epoch: nextEpoch
       };
     });
 

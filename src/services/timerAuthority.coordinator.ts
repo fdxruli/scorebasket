@@ -163,92 +163,105 @@ class TimerAuthorityCoordinator {
       return { acquired: true, epoch: existing.epoch };
     }
 
-    let nextEpoch = ++this.epochCounter;
+    let nextEpoch = this.epochCounter;
 
-    // Modo degradado (sin Web Locks o forzado para tests/navegadores antiguos) (C-14)
+    // Modo degradado (sin Web Locks o forzado para tests/navegadores antiguos) (C-14 / C-16 / C-17 / C-18)
     if (!this.isWebLocksSupported()) {
-      try {
-        if (db.isOpen()) {
-          const leaseResult = await db.transaction('rw', db.matches, async () => {
-            const match = await db.matches.get(matchId);
-            if (!match) return { acquired: false, epoch: 0, ownerTabId: null };
-
-            const now = Date.now();
-            const activeLease =
-              match.timerOwnerTabId &&
-              match.timerOwnerTabId !== this.tabId &&
-              (match.timerLeaseExpiresAt ?? 0) > now;
-
-            if (activeLease) {
-              // Otra pestaña posee el lease activo en IndexedDB: rechazar adquisición múltiple
-              return {
-                acquired: false,
-                epoch: match.timerEpoch ?? 0,
-                ownerTabId: match.timerOwnerTabId
-              };
-            }
-
-            const epochVal = Math.max(this.epochCounter, (match.timerEpoch ?? 0) + 1);
-            this.epochCounter = epochVal;
-            const expiresAt = now + 6000;
-
-            await db.matches.update(matchId, {
-              timerOwnerTabId: this.tabId,
-              timerEpoch: epochVal,
-              timerLeaseExpiresAt: expiresAt
-            });
-
-            return { acquired: true, epoch: epochVal, ownerTabId: this.tabId };
-          });
-
-          if (!leaseResult.acquired) {
-            this.matchStates.set(matchId, {
-              isOwner: false,
-              ownerTabId: leaseResult.ownerTabId ?? null,
-              epoch: leaseResult.epoch
-            });
-            this.notifyListeners(matchId);
-            return { acquired: false, epoch: leaseResult.epoch };
-          }
-
-          nextEpoch = leaseResult.epoch;
-        }
-      } catch (err) {
-        console.warn('Fallback lease check in IndexedDB failed:', err);
+      if (!db.isOpen()) {
+        // C-16: Fail-closed si la base de datos está cerrada
+        this.matchStates.set(matchId, {
+          isOwner: false,
+          ownerTabId: null,
+          epoch: 0
+        });
+        this.notifyListeners(matchId);
+        return { acquired: false, epoch: 0 };
       }
 
-      this.matchStates.set(matchId, {
-        isOwner: true,
-        ownerTabId: this.tabId,
-        epoch: nextEpoch
-      });
+      try {
+        const leaseResult = await db.transaction('rw', db.matches, async () => {
+          const match = await db.matches.get(matchId);
+          if (!match) return { acquired: false, epoch: 0, ownerTabId: null };
 
-      // Iniciar heartbeat de lease cada 2 segundos mientras se retenga autoridad
-      this.clearFallbackHeartbeat(matchId);
-      const heartbeat = setInterval(async () => {
-        try {
-          if (!db.isOpen()) return;
-          const current = this.matchStates.get(matchId);
-          if (!current?.isOwner) return;
+          if (match.status === 'finished') {
+            return {
+              acquired: false,
+              epoch: match.timerEpoch ?? 0,
+              ownerTabId: match.timerOwnerTabId ?? null
+            };
+          }
+
+          const now = Date.now();
+          const activeLease =
+            match.timerOwnerTabId &&
+            match.timerOwnerTabId !== this.tabId &&
+            (match.timerLeaseExpiresAt ?? 0) > now;
+
+          if (activeLease) {
+            // Otra pestaña posee el lease activo en IndexedDB: rechazar adquisición múltiple
+            return {
+              acquired: false,
+              epoch: match.timerEpoch ?? 0,
+              ownerTabId: match.timerOwnerTabId
+            };
+          }
+
+          // C-18: Reservar el siguiente epoch estrictamente mayor que el persistido
+          const epochVal = Math.max(this.epochCounter, match.timerEpoch ?? 0) + 1;
+          this.epochCounter = epochVal;
+          const expiresAt = now + 6000;
+
           await db.matches.update(matchId, {
-            timerLeaseExpiresAt: Date.now() + 6000
+            timerOwnerTabId: this.tabId,
+            timerEpoch: epochVal,
+            timerLeaseExpiresAt: expiresAt
           });
-        } catch {
-          // ignore
+
+          return { acquired: true, epoch: epochVal, ownerTabId: this.tabId };
+        });
+
+        if (!leaseResult.acquired) {
+          this.matchStates.set(matchId, {
+            isOwner: false,
+            ownerTabId: leaseResult.ownerTabId ?? null,
+            epoch: leaseResult.epoch
+          });
+          this.notifyListeners(matchId);
+          return { acquired: false, epoch: leaseResult.epoch };
         }
-      }, 2000);
-      this.fallbackHeartbeats.set(matchId, heartbeat);
 
-      this.broadcastMessage({
-        type: 'AUTHORITY_ACQUIRED',
-        matchId,
-        tabId: this.tabId,
-        epoch: nextEpoch,
-        timestamp: Date.now()
-      });
+        nextEpoch = leaseResult.epoch;
+        this.matchStates.set(matchId, {
+          isOwner: true,
+          ownerTabId: this.tabId,
+          epoch: nextEpoch
+        });
 
-      this.notifyListeners(matchId);
-      return { acquired: true, epoch: nextEpoch };
+        // Iniciar heartbeat transaccional validado cada 2 segundos (C-17)
+        this.startFallbackHeartbeat(matchId);
+
+        this.broadcastMessage({
+          type: 'AUTHORITY_ACQUIRED',
+          matchId,
+          tabId: this.tabId,
+          epoch: nextEpoch,
+          timestamp: Date.now()
+        });
+
+        this.notifyListeners(matchId);
+        return { acquired: true, epoch: nextEpoch };
+      } catch (err) {
+        // C-16: Fail-closed si la transacción IndexedDB falla
+        console.warn('Fallback lease acquisition in IndexedDB failed:', err);
+        this.clearFallbackHeartbeat(matchId);
+        this.matchStates.set(matchId, {
+          isOwner: false,
+          ownerTabId: null,
+          epoch: 0
+        });
+        this.notifyListeners(matchId);
+        return { acquired: false, epoch: 0 };
+      }
     }
 
     const lockName = `scorebasket:timer:${matchId}`;
@@ -269,8 +282,51 @@ class TimerAuthorityCoordinator {
           return;
         }
 
-        // Lock adquirido con éxito
+        // Lock concedido por Web Locks API: reservar epoch en IndexedDB (C-16 / C-18)
+        if (!db.isOpen()) {
+          // C-16: Fail-closed si IndexedDB está cerrada
+          this.matchStates.set(matchId, {
+            isOwner: false,
+            ownerTabId: null,
+            epoch: 0
+          });
+          this.notifyListeners(matchId);
+          resolve({ acquired: false, epoch: 0 });
+          return;
+        }
+
+        let reservedEpoch = nextEpoch;
+        try {
+          reservedEpoch = await db.transaction('rw', db.matches, async () => {
+            const match = await db.matches.get(matchId);
+            if (!match) return Math.max(this.epochCounter, 1);
+            if (match.status === 'finished') {
+              throw new Error('Partido finalizado');
+            }
+            const currentPersisted = match.timerEpoch ?? 0;
+            const next = Math.max(this.epochCounter, currentPersisted) + 1;
+            this.epochCounter = next;
+            await db.matches.update(matchId, {
+              timerEpoch: next,
+              timerOwnerTabId: this.tabId
+            });
+            return next;
+          });
+        } catch (err) {
+          // C-16: Si la transacción falla o el partido ya estaba finalizado, fail-closed
+          console.warn('Web Lock epoch reservation failed in IndexedDB:', err);
+          this.matchStates.set(matchId, {
+            isOwner: false,
+            ownerTabId: null,
+            epoch: 0
+          });
+          this.notifyListeners(matchId);
+          resolve({ acquired: false, epoch: 0 });
+          return;
+        }
+
         lockGranted = true;
+        nextEpoch = reservedEpoch;
         this.matchStates.set(matchId, {
           isOwner: true,
           ownerTabId: this.tabId,
@@ -322,6 +378,100 @@ class TimerAuthorityCoordinator {
     });
   }
 
+  /**
+   * Heartbeat periódico para el modo degradado de lease en IndexedDB (C-17).
+   * Valida transaccionalmente matchId, ownerTabId, epoch y lease antes de renovar.
+   */
+  public async _testTriggerHeartbeat(matchId: number): Promise<boolean> {
+    try {
+      if (!db.isOpen()) {
+        this.handleLeaseLost(matchId, 'IndexedDB no disponible');
+        return false;
+      }
+
+      const currentLocal = this.matchStates.get(matchId);
+      if (!currentLocal?.isOwner) {
+        this.clearFallbackHeartbeat(matchId);
+        return false;
+      }
+
+      const expectedEpoch = currentLocal.epoch;
+
+      const renewed = await db.transaction('rw', db.matches, async () => {
+        const match = await db.matches.get(matchId);
+        if (!match) return { ok: false, reason: 'Partido no encontrado' };
+        if (match.status === 'finished') return { ok: false, reason: 'Partido finalizado' };
+
+        const now = Date.now();
+        if (match.timerOwnerTabId !== this.tabId) {
+          return {
+            ok: false,
+            reason: 'Propietario en BD difiere',
+            ownerTabId: match.timerOwnerTabId,
+            epoch: match.timerEpoch
+          };
+        }
+        if ((match.timerEpoch ?? 0) !== expectedEpoch) {
+          return {
+            ok: false,
+            reason: 'Epoch en BD desfasado',
+            ownerTabId: match.timerOwnerTabId,
+            epoch: match.timerEpoch
+          };
+        }
+        if ((match.timerLeaseExpiresAt ?? 0) < now) {
+          return {
+            ok: false,
+            reason: 'Lease expirado en BD',
+            ownerTabId: match.timerOwnerTabId,
+            epoch: match.timerEpoch
+          };
+        }
+
+        const expiresAt = now + 6000;
+        await db.matches.update(matchId, {
+          timerLeaseExpiresAt: expiresAt
+        });
+        return { ok: true };
+      });
+
+      if (!renewed.ok) {
+        this.handleLeaseLost(matchId, renewed.reason, renewed.ownerTabId, renewed.epoch);
+        return false;
+      }
+      return true;
+    } catch {
+      this.handleLeaseLost(matchId, 'Excepción en transacción de heartbeat');
+      return false;
+    }
+  }
+
+  private startFallbackHeartbeat(matchId: number) {
+    this.clearFallbackHeartbeat(matchId);
+    const heartbeat = setInterval(() => {
+      this._testTriggerHeartbeat(matchId).catch(() => {});
+    }, 2000);
+    this.fallbackHeartbeats.set(matchId, heartbeat);
+  }
+
+  private handleLeaseLost(
+    matchId: number,
+    _reason?: string,
+    ownerTabId?: string | null,
+    epoch?: number
+  ) {
+    this.clearFallbackHeartbeat(matchId);
+    const current = this.matchStates.get(matchId);
+    if (current?.isOwner) {
+      this.matchStates.set(matchId, {
+        isOwner: false,
+        ownerTabId: ownerTabId ?? null,
+        epoch: epoch ?? current.epoch
+      });
+      this.notifyListeners(matchId);
+    }
+  }
+
   private clearFallbackHeartbeat(matchId: number) {
     const hb = this.fallbackHeartbeats.get(matchId);
     if (hb) {
@@ -333,11 +483,12 @@ class TimerAuthorityCoordinator {
   /**
    * Libera voluntariamente la autoridad sobre el cronómetro.
    * Aguarda cualquier operación en vuelo antes de ceder el Web Lock (C-11).
+   * En modo fallback o Web Lock, solo retira el lease/propietario si aún le pertenece (C-17).
    */
   public async releaseAuthority(matchId: number): Promise<void> {
     const state = this.matchStates.get(matchId);
 
-    // 1. Aguardar a que cualquier operación en vuelo en esta pestaña termine antes de ceder el lock (C-11)
+    // 1. Aguardar a que cualquier operación en vuelo en esta pestaña termine antes de ceder el lock (C-11 / C-20)
     const pending = this.inFlightOperations.get(matchId);
     if (pending && pending.size > 0) {
       await Promise.allSettled(Array.from(pending));
@@ -352,12 +503,39 @@ class TimerAuthorityCoordinator {
       });
     }
 
-    // 3. Limpiar heartbeats de fallback si aplica y vaciar lease en BD
+    // 3. Limpiar heartbeats de fallback si aplica y vaciar lease en BD SÓLO si seguimos siendo el dueño legítimo (C-17)
     this.clearFallbackHeartbeat(matchId);
     if (!this.isWebLocksSupported() && db.isOpen()) {
       try {
-        await db.matches.update(matchId, {
-          timerLeaseExpiresAt: 0
+        await db.transaction('rw', db.matches, async () => {
+          const match = await db.matches.get(matchId);
+          if (!match) return;
+          if (
+            match.timerOwnerTabId === this.tabId &&
+            (match.timerEpoch ?? 0) === (state?.epoch ?? 0)
+          ) {
+            await db.matches.update(matchId, {
+              timerLeaseExpiresAt: 0,
+              timerOwnerTabId: undefined
+            });
+          }
+        });
+      } catch {
+        // ignore
+      }
+    } else if (this.isWebLocksSupported() && db.isOpen()) {
+      try {
+        await db.transaction('rw', db.matches, async () => {
+          const match = await db.matches.get(matchId);
+          if (!match) return;
+          if (
+            match.timerOwnerTabId === this.tabId &&
+            (match.timerEpoch ?? 0) === (state?.epoch ?? 0)
+          ) {
+            await db.matches.update(matchId, {
+              timerOwnerTabId: undefined
+            });
+          }
         });
       } catch {
         // ignore
@@ -525,7 +703,16 @@ class TimerAuthorityCoordinator {
   /**
    * Métodos para pruebas automatizadas y aislamiento de estado
    */
-  public async _resetForTesting(options?: { forceFallback?: boolean; tabId?: string }): Promise<void> {
+  public _testSimulateSuspension(matchId: number): void {
+    // Simula la suspensión del runtime deteniendo el heartbeat sin limpiar el lease en BD
+    this.clearFallbackHeartbeat(matchId);
+  }
+
+  public async _resetForTesting(options?: {
+    forceFallback?: boolean;
+    tabId?: string;
+    epochCounter?: number;
+  }): Promise<void> {
     this.fallbackHeartbeats.forEach((t) => clearInterval(t));
     this.fallbackHeartbeats.clear();
     this.inFlightOperations.clear();
@@ -538,7 +725,7 @@ class TimerAuthorityCoordinator {
     this.activeLocks.clear();
     this.matchStates.clear();
     this.listeners.clear();
-    this.epochCounter = 1;
+    this.epochCounter = options?.epochCounter ?? 1;
     this.forceFallback = options?.forceFallback ?? false;
     if (options?.tabId) {
       this.tabId = options.tabId;

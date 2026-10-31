@@ -644,9 +644,10 @@ describe('SB_PHASE2C_AUTONOMOUS_R1: Autoridad del Cronómetro, Concurrencia y Co
     it('TC-42: registros históricos, anotaciones y faltas permanecen intactos ante operaciones del reloj', async () => {
       const mBefore = await db.matches.get(sampleMatchId);
 
+      await timerAuthorityCoordinator.acquireAuthority(sampleMatchId);
       await MatchTimerService.start(sampleMatchId);
-      await MatchTimerService.adjust(sampleMatchId, 0, { skipAuthorityCheck: true });
       await MatchTimerService.pause(sampleMatchId);
+      await MatchTimerService.adjust(sampleMatchId, 0);
       await MatchTimerService.reset(sampleMatchId);
 
       const mAfter = await db.matches.get(sampleMatchId);

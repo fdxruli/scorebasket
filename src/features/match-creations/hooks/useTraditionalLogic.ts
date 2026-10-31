@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useMatchTimer } from '../../../hooks/useMatchTimer';
 import type { Match } from '../../../db/models/Match';
-import { db } from '../../../db/db';
 import { MatchTimerService, type TimerServiceOptions } from '../../../db/matchTimer.service';
 
 interface UseTraditionalLogicProps {
@@ -150,17 +149,18 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     }
   }, [match, hasAuthority, epoch, currentQuarter]);
 
-  // 6. Acción: Finalizar Partido con autoridad (C-13)
+  // 6. Acción: Finalizar Partido con autoridad y fencing transaccional (C-13, C-19)
   const endMatch = useCallback(async () => {
     if (!match?.id || !hasAuthority) return;
-    await db.matches.update(match.id, {
-      status: 'finished',
-      finishedAt: new Date(),
-      timerLastStart: undefined
+    const res = await MatchTimerService.endMatch(match.id, {
+      epoch,
+      expectedQuarter: currentQuarter
     });
-    setManualMatchEndModal(false);
-    setDismissedQuarter(null);
-  }, [match, hasAuthority]);
+    if (res.status === 'applied' || res.status === 'already_applied') {
+      setManualMatchEndModal(false);
+      setDismissedQuarter(null);
+    }
+  }, [match, hasAuthority, epoch, currentQuarter]);
 
   // 7. Acción: Iniciar Tiempo Extra (OT) con autoridad (C-13)
   const startOvertime = useCallback(async (overtimeMinutes = 5) => {

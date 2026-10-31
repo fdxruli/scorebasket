@@ -35,8 +35,8 @@ export async function pauseMatchTimerIdempotent(
     if (!db.isOpen()) return false;
     const authState = timerAuthorityCoordinator.getAuthorityState(matchId);
 
-    // C-12: Si no tiene autoridad y no es una llamada privilegiada explícita, no debe mutar IndexedDB
-    if (!authState.hasAuthority && !options?.skipAuthorityCheck) {
+    // C-12 / C-19: Si no tiene autoridad, no debe mutar IndexedDB
+    if (!authState.hasAuthority) {
       return false;
     }
 
@@ -44,8 +44,7 @@ export async function pauseMatchTimerIdempotent(
       nowMs,
       epoch: options?.epoch ?? authState.epoch,
       expectedQuarter: options?.expectedQuarter,
-      tabId: options?.tabId ?? authState.tabId,
-      skipAuthorityCheck: options?.skipAuthorityCheck
+      tabId: options?.tabId ?? authState.tabId
     });
 
     return result.status === 'applied';

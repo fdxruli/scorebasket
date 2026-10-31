@@ -362,6 +362,11 @@ describe('SB_PHASE2C_R1.1: Cierre de Autoridad, Fencing y Concurrencia (R11-C-01
   // R11-C-11: Mensajes duplicados no provocan transferencias dobles
   // =========================================================================
   it('R11-C-11: mensajes duplicados en BroadcastChannel son procesados de forma idempotente (C-15)', async () => {
+    let listenerNotifications = 0;
+    const unsubscribe = timerAuthorityCoordinator.subscribe(sampleMatchId, () => {
+      listenerNotifications++;
+    });
+
     const bc = new BroadcastChannel('scorebasket:timer:authority');
     const msg = {
       type: 'AUTHORITY_RELEASED' as const,
@@ -375,8 +380,16 @@ describe('SB_PHASE2C_R1.1: Cierre de Autoridad, Fencing y Concurrencia (R11-C-01
     bc.postMessage(msg);
     bc.postMessage(msg);
 
-    await new Promise((r) => setTimeout(r, 50));
-    expect(true).toBe(true); // Sin excepciones ni estados corruptos
+    await new Promise((r) => setTimeout(r, 60));
+
+    const state = timerAuthorityCoordinator.getAuthorityState(sampleMatchId);
+    expect(state.matchId).toBe(sampleMatchId);
+    expect(state.ownerTabId).not.toBe('other_tab');
+    expect(typeof state.epoch).toBe('number');
+    expect(listenerNotifications).toBeGreaterThanOrEqual(1);
+    expect(listenerNotifications).toBeLessThanOrEqual(2);
+
+    unsubscribe();
     bc.close();
   });
 

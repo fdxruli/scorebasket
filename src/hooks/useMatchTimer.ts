@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models/Match';
 import { unlockAudioContext, playBuzzer } from '../utils/soundEffects';
-import { MatchTimerService, type TimerOperationResult, type TimerServiceOptions } from '../db/matchTimer.service';
+import { MatchTimerService, type TimerOperationResult, type TimerServiceOptions, type TimeConfidence } from '../db/matchTimer.service';
 import { timerAuthorityCoordinator, type AuthorityState } from '../services/timerAuthority.coordinator';
 
 export interface UseMatchTimerReturn {
@@ -20,6 +20,8 @@ export interface UseMatchTimerReturn {
   resetTimer: () => Promise<void>;
   adjustTime: (deltaSeconds: number) => Promise<void>;
   keepTimerRunningOnUnmount: () => void;
+  confidence: TimeConfidence;
+  isClockShiftDetected: boolean;
 }
 
 /**
@@ -80,7 +82,7 @@ export function clearAllPendingUnmountPauses() {
  * Hook personalizado para manejar el cronómetro de un partido con autoridad entre pestañas (Fase 2C).
  */
 export function useMatchTimer(match: Match | undefined, enableAutoPause = true): UseMatchTimerReturn {
-  const [, setTick] = useState(0);
+  const [currentNowMs, setCurrentNowMs] = useState(() => Date.now());
   const shouldPauseOnUnmount = useRef(true);
   const matchIdRef = useRef<number | undefined>(undefined);
   const prevMatchIdRef = useRef<number | undefined>(match?.id);
@@ -171,7 +173,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
       if (document.visibilityState === 'visible') {
         // Reconciliar tiempo transcurrido durante la suspensión de la pantalla o segundo plano
         MatchTimerService.reconcile(matchId).then((res) => {
-          if (res.expired && buzzerPlayedRef.current !== match?.currentQuarter) {
+          if (res.expired && res.confidence !== 'uncertain' && buzzerPlayedRef.current !== match?.currentQuarter) {
             buzzerPlayedRef.current = match?.currentQuarter ?? null;
             playBuzzer();
           }
@@ -201,33 +203,12 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     };
   }, [match?.id, match?.currentQuarter, enableAutoPause]);
 
-  // 4. Cálculo monotónico y reactivo del tiempo restante (INV-T01, INV-T08)
-  const getEffectiveTimeLeft = useCallback((): number => {
-    if (!match) return 0;
-
-    const { timerSecondsRemaining, timerLastStart } = match;
-    const baseSeconds = timerSecondsRemaining ?? 0;
-
-    if (timerLastStart) {
-      const nowMs = Date.now();
-      const lastStartMs = timerLastStart.getTime();
-      let elapsed = 0;
-
-      if (nowMs >= lastStartMs) {
-        elapsed = (nowMs - lastStartMs) / 1000;
-      } else {
-        // Protección contra reloj del sistema retrocedido
-        elapsed = 0;
-      }
-
-      return Math.max(0, baseSeconds - elapsed);
-    }
-
-    return Math.max(0, baseSeconds);
-  }, [match]);
-
-  const timeLeft = getEffectiveTimeLeft();
-  const isRunning = Boolean(match?.timerLastStart);
+  // 4. Proyección temporal unificada y reactiva compartida con el dominio (C-26)
+  const projection = MatchTimerService.projectTime(match, currentNowMs);
+  const timeLeft = projection.timeLeft;
+  const isRunning = projection.isRunning;
+  const isClockShiftDetected = projection.isClockShiftDetected;
+  const confidence = projection.confidence;
 
   // Reiniciar registro de chicharra cuando el tiempo vuelve a ser > 0 o cambia de periodo
   useEffect(() => {
@@ -236,16 +217,16 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     }
   }, [timeLeft, match?.currentQuarter]);
 
-  // 5. Intervalo reactivo garantizado
+  // 5. Intervalo reactivo garantizado sincronizado con el reloj del sistema
   useEffect(() => {
-    if (!isRunning || timeLeft <= 0) return;
-    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    if (!isRunning || timeLeft <= 0 || confidence === 'uncertain') return;
+    const interval = setInterval(() => setCurrentNowMs(Date.now()), 500);
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft]);
+  }, [isRunning, timeLeft, confidence, match?.timerLastStart]);
 
-  // 6. Auto-pause y chicharra única cuando llega a 00:00 (C-12: solo el propietario persiste en BD)
+  // 6. Auto-pause y chicharra única cuando llega a 00:00 legítimamente (C-12, C-26)
   useEffect(() => {
-    if (timeLeft <= 0 && isRunning && match?.id) {
+    if (projection.expired && projection.confidence !== 'uncertain' && isRunning && match?.id) {
       if (authorityState.hasAuthority) {
         MatchTimerService.pause(match.id, {
           epoch: authorityState.epoch,
@@ -259,7 +240,8 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
       }
     }
   }, [
-    timeLeft,
+    projection.expired,
+    projection.confidence,
     isRunning,
     match?.id,
     match?.currentQuarter,
@@ -364,6 +346,8 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     pauseTimer,
     resetTimer,
     adjustTime,
-    keepTimerRunningOnUnmount
+    keepTimerRunningOnUnmount,
+    confidence,
+    isClockShiftDetected
   };
 }

@@ -748,6 +748,7 @@ class TimerAuthorityCoordinator {
     tabId?: string;
     epochCounter?: number;
   }): Promise<void> {
+    this.initPlatformCapabilities();
     this.heartbeats.forEach((t) => clearInterval(t));
     this.heartbeats.clear();
     this.inFlightOperations.clear();

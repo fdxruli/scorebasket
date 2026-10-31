@@ -91,7 +91,9 @@ export const TraditionalEngine: React.FC = () => {
     setShowMatchEndModal,
     endMatch,
     startOvertime,
-    isTied
+    isTied,
+    confidence,
+    isClockShiftDetected
   } = useTraditionalLogic({ match, isActionModalOpen: isOverlayBlocking });
 
   useEffect(() => {
@@ -297,6 +299,27 @@ export const TraditionalEngine: React.FC = () => {
           >
             Reclamar control
           </button>
+        </div>
+      )}
+
+      {confidence === 'uncertain' && (
+        <div
+          data-testid="timer-anomaly-warning"
+          data-shift-detected={isClockShiftDetected ? 'true' : 'false'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.5rem 1rem',
+            margin: '0.25rem 0',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            color: '#fca5a5'
+          }}
+        >
+          <span>Desfase o salto anómalo detectado en el reloj del dispositivo. Cronómetro preservado de forma segura.</span>
         </div>
       )}
 

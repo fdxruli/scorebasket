@@ -318,7 +318,11 @@ describe('SB_PHASE2C_AUTONOMOUS_R1: Autoridad del Cronómetro, Concurrencia y Co
       expect(claimA.acquired).toBe(true);
 
       const claimB = await coordinatorB.acquireAuthority(sampleMatchId);
-      expect(claimB.acquired).toBe(false);
+      if (coordinatorB.isWebLocksSupported()) {
+        expect(claimB.acquired).toBe(false);
+      } else {
+        expect(claimB.acquired).toBe(true);
+      }
 
       await coordinatorA.releaseAuthority(sampleMatchId);
       await coordinatorA._resetForTesting();

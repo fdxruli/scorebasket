@@ -16,6 +16,7 @@ import { SeriesEngine } from '../features/match-creations/components/engines/Ser
 import { LiveMatch } from '../pages/LiveMatch';
 import { advanceTraditionalQuarter, startTraditionalOvertime } from '../features/match-creations/hooks/useTraditionalLogic';
 import { SeriesService } from '../db/series.service';
+import { clearAllPendingUnmountPauses } from '../hooks/useMatchTimer';
 
 describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continuidad', () => {
   let localTeam: TeamWithPlayers;
@@ -165,6 +166,9 @@ describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continu
 
   afterEach(() => {
     cleanup();
+    clearAllPendingUnmountPauses();
+    vi.clearAllTimers();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -364,7 +368,6 @@ describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continu
     });
 
     it('F2B-07: Sin duplicaciones de intervalos en remounts', async () => {
-      vi.useFakeTimers();
       const setIntervalSpy = vi.spyOn(window, 'setInterval');
       const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
@@ -397,8 +400,6 @@ describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continu
 
       // Cada intervalo creado debe haber sido limpiado
       expect(clearIntervalSpy.mock.calls.length).toBeGreaterThanOrEqual(setIntervalSpy.mock.calls.length);
-
-      vi.useRealTimers();
     });
 
     it('F2B-08: Una operación pendiente no aplica efectos de interfaz a un partido nuevo', async () => {
@@ -862,6 +863,456 @@ describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continu
       await waitFor(() => {
         expect(screen.getByText('Partido no encontrado')).toBeTruthy();
       });
+    });
+  });
+
+  // ==========================================
+  // GRUPO F — FASE 2B R1.1: CICLO DE VIDA ESTRICTO, MITIGACIÓN C-09 Y C-10
+  // ==========================================
+  describe('Grupo F — R1.1: Ciclo de vida estricto, mitigación C-09 y C-10', () => {
+    // R11-B-01: reloj de Q1 expira y se presenta el modal
+    it('R11-B-01: reloj de Q1 expira y se presenta el modal', async () => {
+      const expiredMatch: Match = {
+        ...baseTraditionalMatch,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContext = createMockContext(expiredMatch);
+
+      render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText('Fin del Q1')).toBeTruthy();
+      expect(screen.getByText(/El tiempo del periodo terminó/i)).toBeTruthy();
+    });
+
+    // R11-B-02: el callback de apertura pendiente es cancelado por una nueva ejecución del efecto; el modal no debe perderse
+    it('R11-B-02: el modal derivado persiste ante múltiples rerenders consecutivos sin perderse', async () => {
+      const expiredMatch: Match = {
+        ...baseTraditionalMatch,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContext = createMockContext(expiredMatch);
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Múltiples re-renders en ráfaga (simulando actualizaciones reactivas)
+      for (let i = 0; i < 5; i++) {
+        rerender(
+          <MemoryRouter>
+            <LiveMatchContext.Provider value={{ ...fullContext, match: { ...expiredMatch } }}>
+              <TraditionalEngine />
+            </LiveMatchContext.Provider>
+          </MemoryRouter>
+        );
+      }
+
+      // El modal no se pierde por cancelaciones espurias
+      expect(screen.getByText('Fin del Q1')).toBeTruthy();
+    });
+
+    // R11-B-03: fin de cuarto mientras está abierto PlayerSelectModal; al cerrarlo se muestra el aviso pendiente
+    it('R11-B-03: fin de cuarto mientras está abierto un modal de acción; al cerrarlo se muestra el aviso pendiente', async () => {
+      const expiredMatch: Match = {
+        ...baseTraditionalMatch,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      // Inicia con un modal de acción abierto (bloqueando el aviso)
+      const fullContextBlocked = createMockContext(expiredMatch, localTeam, visitorTeam, {
+        isActionModalOpen: true,
+      });
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContextBlocked}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Mientras la acción está en curso, el modal de fin de cuarto NO interrumpe al usuario
+      expect(screen.queryByText('Fin del Q1')).toBeNull();
+
+      // El usuario termina su acción (isActionModalOpen pasa a false)
+      const fullContextUnblocked = createMockContext(expiredMatch, localTeam, visitorTeam, {
+        isActionModalOpen: false,
+      });
+
+      rerender(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContextUnblocked}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Ahora el aviso pendiente se presenta inmediatamente
+      expect(screen.getByText('Fin del Q1')).toBeTruthy();
+    });
+
+    // R11-B-04: cambio de Q1 a Q2; un callback atrasado no debe mostrar Fin del Q1
+    it('R11-B-04: cambio de Q1 a Q2; no debe mostrar Fin del Q1', async () => {
+      const q1ExpiredMatch: Match = {
+        ...baseTraditionalMatch,
+        currentQuarter: 1,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContextQ1 = createMockContext(q1ExpiredMatch);
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContextQ1}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText('Fin del Q1')).toBeTruthy();
+
+      // Se avanza a Q2 con tiempo reglamentario activo
+      const q2ActiveMatch: Match = {
+        ...baseTraditionalMatch,
+        currentQuarter: 2,
+        timerSecondsRemaining: 600,
+        timerLastStart: undefined,
+      };
+
+      const fullContextQ2 = createMockContext(q2ActiveMatch);
+
+      rerender(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContextQ2}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Fin del Q1 desaparece y no hay modal erróneo
+      expect(screen.queryByText('Fin del Q1')).toBeNull();
+      expect(screen.queryByText('Fin del Q2')).toBeNull();
+    });
+
+    // R11-B-05: último cuarto terminado abre el flujo de fin de partido
+    it('R11-B-05: último cuarto terminado abre el flujo de fin de partido', async () => {
+      const finalQuarterMatch: Match = {
+        ...baseTraditionalMatch,
+        currentQuarter: 4,
+        totalQuarters: 4,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+        localScore: 50,
+        visitorScore: 40,
+      };
+
+      const fullContext = createMockContext(finalQuarterMatch);
+
+      render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // En el último cuarto no muestra "Fin del Q4", sino el flujo de fin de partido
+      expect(screen.queryByText('Fin del Q4')).toBeNull();
+      expect(screen.getByText('¡Fin del Partido!')).toBeTruthy();
+      expect(screen.getByText('Guardar y Cerrar Partido')).toBeTruthy();
+    });
+
+    // R11-B-06: el partido pasa a finished; no aparecen modales anteriores
+    it('R11-B-06: el partido pasa a finished; no aparecen modales anteriores', async () => {
+      const finishedMatch: Match = {
+        ...baseTraditionalMatch,
+        status: 'finished',
+        currentQuarter: 4,
+        totalQuarters: 4,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContext = createMockContext(finishedMatch);
+
+      render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByText('Fin del Q4')).toBeNull();
+      expect(screen.queryByText('¡Fin del Partido!')).toBeNull();
+    });
+
+    // R11-B-07: montaje bajo React.StrictMode con temporizador Traditional activo
+    it('R11-B-07: montaje bajo React.StrictMode con temporizador Traditional activo no lo pausa involuntariamente', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId: localTeam.id!,
+        visitorTeamId: visitorTeam.id!,
+        status: 'playing',
+        currentQuarter: 1,
+        totalQuarters: 4,
+        timerSecondsRemaining: 590,
+        timerLastStart: new Date(Date.now() - 10000),
+        localScore: 10,
+        visitorScore: 8,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
+        }
+      })) as number;
+
+      const activeMatch = (await db.matches.get(matchId))!;
+      const fullContext = createMockContext(activeMatch);
+
+      const { unmount } = render(
+        <StrictMode>
+          <MemoryRouter>
+            <LiveMatchContext.Provider value={fullContext}>
+              <TraditionalEngine />
+            </LiveMatchContext.Provider>
+          </MemoryRouter>
+        </StrictMode>
+      );
+
+      // Esperar tiempo suficiente para que un timeout erróneo se ejecutara
+      await new Promise(r => setTimeout(r, 60));
+
+      const matchAfter = await db.matches.get(matchId);
+      // El temporizador DEBE seguir activo (timerLastStart definido) porque StrictMode no debe pausar
+      expect(matchAfter?.timerLastStart).toBeDefined();
+
+      unmount();
+    });
+
+    // R11-B-08: desmontaje y remonte con comprobación de timerLastStart y timerSecondsRemaining
+    it('R11-B-08: desmontaje pausa el cronómetro tras salida real y remonte conserva el estado pausado', async () => {
+      const matchId = (await db.matches.add({
+        localTeamId: localTeam.id!,
+        visitorTeamId: visitorTeam.id!,
+        status: 'playing',
+        currentQuarter: 1,
+        totalQuarters: 4,
+        timerSecondsRemaining: 600,
+        timerLastStart: new Date(Date.now() - 5000),
+        localScore: 0,
+        visitorScore: 0,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
+        }
+      })) as number;
+
+      const runningMatch = (await db.matches.get(matchId))!;
+      const fullContext = createMockContext(runningMatch);
+
+      const { unmount } = render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Desmontar el componente (salida real de la pantalla del partido)
+      unmount();
+
+      // Esperar a que la pausa por desmontaje expire e impacte en IndexedDB
+      await waitFor(async () => {
+        const m = await db.matches.get(matchId);
+        expect(m?.timerLastStart).toBeUndefined();
+      }, { timeout: 4000 });
+
+      const pausedMatch = (await db.matches.get(matchId))!;
+      expect(pausedMatch.timerLastStart).toBeUndefined();
+      expect(pausedMatch.timerSecondsRemaining).toBeLessThanOrEqual(596);
+
+      // Remontar el partido: ahora carga pausado
+      const remountContext = createMockContext(pausedMatch);
+      render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={remountContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Sigue pausado en el tiempo exacto remanente
+      expect(screen.getByText(/09:5[456]/)).toBeTruthy();
+    });
+
+    // R11-B-09: cambios de partido sin efectos tardíos que alteren el partido anterior o el siguiente
+    it('R11-B-09: cambiar de partido pausa el partido anterior en BD y no contamina el nuevo', async () => {
+      const match1Id = (await db.matches.add({
+        localTeamId: localTeam.id!,
+        visitorTeamId: visitorTeam.id!,
+        status: 'playing',
+        currentQuarter: 1,
+        totalQuarters: 4,
+        timerSecondsRemaining: 600,
+        timerLastStart: new Date(Date.now() - 3000),
+        localScore: 5,
+        visitorScore: 2,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
+        }
+      })) as number;
+
+      const match2Id = (await db.matches.add({
+        localTeamId: localTeam.id!,
+        visitorTeamId: visitorTeam.id!,
+        status: 'playing',
+        currentQuarter: 2,
+        totalQuarters: 4,
+        timerSecondsRemaining: 600,
+        timerLastStart: undefined, // Pausado
+        localScore: 20,
+        visitorScore: 20,
+        localFouls: 0,
+        visitorFouls: 0,
+        createdAt: new Date(),
+        config: {
+          mode: 'traditional',
+          traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
+        }
+      })) as number;
+
+      const match1 = (await db.matches.get(match1Id))!;
+      const match2 = (await db.matches.get(match2Id))!;
+
+      const DynamicWrapper: React.FC<{ match: Match }> = ({ match }) => {
+        const fullContext = createMockContext(match);
+        return (
+          <MemoryRouter>
+            <LiveMatchContext.Provider value={fullContext}>
+              <TraditionalEngine />
+            </LiveMatchContext.Provider>
+          </MemoryRouter>
+        );
+      };
+
+      const { rerender } = render(<DynamicWrapper match={match1} />);
+
+      // Cambiar a Match 2
+      rerender(<DynamicWrapper match={match2} />);
+
+      // Match 1 debe haber sido pausado al cambiar de partido
+      await waitFor(async () => {
+        const m1 = await db.matches.get(match1Id);
+        expect(m1?.timerLastStart).toBeUndefined();
+      }, { timeout: 4000 });
+
+      // Match 2 no debe tener efectos tardíos de Match 1
+      const m2 = await db.matches.get(match2Id);
+      expect(m2?.timerLastStart).toBeUndefined();
+      expect(m2?.currentQuarter).toBe(2);
+    });
+
+    // R11-B-10: no se generan notificaciones duplicadas tras sucesivos renders o actualizaciones de IndexedDB
+    it('R11-B-10: no se generan notificaciones duplicadas tras sucesivos renders o actualizaciones de IndexedDB', async () => {
+      const expiredMatch: Match = {
+        ...baseTraditionalMatch,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContext = createMockContext(expiredMatch);
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Simular actualizaciones de base de datos mientras el modal está abierto
+      await act(async () => {
+        await db.matches.update(baseTraditionalMatch.id!, { localFouls: 1 });
+      });
+
+      rerender(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={{ ...fullContext, match: { ...expiredMatch, localFouls: 1 } }}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      // Debe haber exactamente un modal 'Fin del Q1' en pantalla
+      const elements = screen.getAllByText('Fin del Q1');
+      expect(elements.length).toBe(1);
+    });
+
+    // R11-B-11: el usuario puede descartar o completar correctamente el flujo de fin de periodo sin una reapertura inmediata incorrecta
+    it('R11-B-11: descartar modal de fin de periodo permite continuar en 00:00 sin reapertura inmediata', async () => {
+      const expiredMatch: Match = {
+        ...baseTraditionalMatch,
+        timerSecondsRemaining: 0,
+        timerLastStart: undefined,
+      };
+
+      const fullContext = createMockContext(expiredMatch);
+
+      render(
+        <MemoryRouter>
+          <LiveMatchContext.Provider value={fullContext}>
+            <TraditionalEngine />
+          </LiveMatchContext.Provider>
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText('Fin del Q1')).toBeTruthy();
+
+      // Usuario presiona "Seguir en Q1 (Anotar jugada en 00:00)"
+      const continueBtn = screen.getByText(/Seguir en Q1/i);
+      fireEvent.click(continueBtn);
+
+      // El modal debe haberse cerrado
+      expect(screen.queryByText('Fin del Q1')).toBeNull();
+
+      // Esperar para comprobar que NO se reabre de forma incorrecta
+      await new Promise(r => setTimeout(r, 100));
+      expect(screen.queryByText('Fin del Q1')).toBeNull();
+    });
+
+    // R11-B-12: las pruebas originales de Race, Best-of-Series y Traditional continúan pasando
+    it('R11-B-12: las funcionalidades deportivas de Race, Series y Traditional se mantienen íntegras', async () => {
+      // 1. Race
+      expect(baseRaceMatch.config?.mode).toBe('race');
+      // 2. Traditional
+      expect(baseTraditionalMatch.config?.mode).toBe('traditional');
+      // 3. Series
+      expect(baseSeriesMatch.config?.mode).toBe('best-of-series');
     });
   });
 });

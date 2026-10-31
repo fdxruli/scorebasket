@@ -40,7 +40,7 @@ class TimerAuthorityCoordinator {
   private listeners = new Map<number, Set<AuthorityListener>>();
   private inFlightOperations = new Map<number, Set<Promise<unknown>>>();
   private acquiringPromises = new Map<number, Promise<{ acquired: boolean; epoch: number }>>();
-  private fallbackHeartbeats = new Map<number, ReturnType<typeof setInterval>>();
+  private heartbeats = new Map<number, ReturnType<typeof setInterval>>();
   private broadcastChannel: BroadcastChannel | null = null;
   private isLocksSupported = false;
   private forceFallback = false;
@@ -123,6 +123,13 @@ class TimerAuthorityCoordinator {
       epoch,
       tabId: this.tabId
     };
+  }
+
+  /**
+   * Indica si esta instancia mantiene actualmente un Web Lock nativo activo para el partido.
+   */
+  public hasActiveLock(matchId: number): boolean {
+    return this.activeLocks.has(matchId);
   }
 
   /**
@@ -214,7 +221,8 @@ class TimerAuthorityCoordinator {
           await db.matches.update(matchId, {
             timerOwnerTabId: this.tabId,
             timerEpoch: epochVal,
-            timerLeaseExpiresAt: expiresAt
+            timerLeaseExpiresAt: expiresAt,
+            timerLockMode: 'fallback'
           });
 
           return { acquired: true, epoch: epochVal, ownerTabId: this.tabId };
@@ -237,8 +245,8 @@ class TimerAuthorityCoordinator {
           epoch: nextEpoch
         });
 
-        // Iniciar heartbeat transaccional validado cada 2 segundos (C-17)
-        this.startFallbackHeartbeat(matchId);
+        // Iniciar heartbeat unificado validado cada 2 segundos (C-17 / C-23)
+        this.startHeartbeat(matchId);
 
         this.broadcastMessage({
           type: 'AUTHORITY_ACQUIRED',
@@ -253,7 +261,7 @@ class TimerAuthorityCoordinator {
       } catch (err) {
         // C-16: Fail-closed si la transacción IndexedDB falla
         console.warn('Fallback lease acquisition in IndexedDB failed:', err);
-        this.clearFallbackHeartbeat(matchId);
+        this.clearHeartbeat(matchId);
         this.matchStates.set(matchId, {
           isOwner: false,
           ownerTabId: null,
@@ -282,7 +290,7 @@ class TimerAuthorityCoordinator {
           return;
         }
 
-        // Lock concedido por Web Locks API: reservar epoch en IndexedDB (C-16 / C-18)
+        // Lock concedido por Web Locks API: reservar epoch y lease unificado en IndexedDB (C-16 / C-18 / C-23)
         if (!db.isOpen()) {
           // C-16: Fail-closed si IndexedDB está cerrada
           this.matchStates.set(matchId, {
@@ -297,21 +305,53 @@ class TimerAuthorityCoordinator {
 
         let reservedEpoch = nextEpoch;
         try {
-          reservedEpoch = await db.transaction('rw', db.matches, async () => {
+          const leaseResult = await db.transaction('rw', db.matches, async () => {
             const match = await db.matches.get(matchId);
-            if (!match) return Math.max(this.epochCounter, 1);
+            if (!match) throw new Error('Partido no existe');
             if (match.status === 'finished') {
               throw new Error('Partido finalizado');
             }
+            const now = Date.now();
+            const activeLease =
+              match.timerOwnerTabId &&
+              match.timerOwnerTabId !== this.tabId &&
+              (match.timerLeaseExpiresAt ?? 0) > now;
+
+            if (activeLease) {
+              // Otra pestaña posee un lease activo en IndexedDB (incluso si provino de fallback) (C-23)
+              return {
+                acquired: false,
+                epoch: match.timerEpoch ?? 0,
+                ownerTabId: match.timerOwnerTabId
+              };
+            }
+
             const currentPersisted = match.timerEpoch ?? 0;
             const next = Math.max(this.epochCounter, currentPersisted) + 1;
             this.epochCounter = next;
+            const expiresAt = now + 6000;
             await db.matches.update(matchId, {
               timerEpoch: next,
-              timerOwnerTabId: this.tabId
+              timerOwnerTabId: this.tabId,
+              timerLeaseExpiresAt: expiresAt,
+              timerLockMode: 'web_locks'
             });
-            return next;
+            return { acquired: true, epoch: next, ownerTabId: this.tabId };
           });
+
+          if (!leaseResult.acquired) {
+            // El Web Lock no puede retenerse porque hay un lease persistido activo en otra pestaña
+            this.matchStates.set(matchId, {
+              isOwner: false,
+              ownerTabId: leaseResult.ownerTabId ?? null,
+              epoch: leaseResult.epoch
+            });
+            this.notifyListeners(matchId);
+            resolve({ acquired: false, epoch: leaseResult.epoch });
+            return;
+          }
+
+          reservedEpoch = leaseResult.epoch;
         } catch (err) {
           // C-16: Si la transacción falla o el partido ya estaba finalizado, fail-closed
           console.warn('Web Lock epoch reservation failed in IndexedDB:', err);
@@ -332,6 +372,9 @@ class TimerAuthorityCoordinator {
           ownerTabId: this.tabId,
           epoch: nextEpoch
         });
+
+        // Iniciar heartbeat unificado cada 2 segundos también para Web Locks (C-23)
+        this.startHeartbeat(matchId);
 
         let releaseLock!: () => void;
         const lockLifetimePromise = new Promise<void>((rel) => {
@@ -379,10 +422,10 @@ class TimerAuthorityCoordinator {
   }
 
   /**
-   * Heartbeat periódico para el modo degradado de lease en IndexedDB (C-17).
+   * Heartbeat periódico unificado para renovación transaccional de lease en IndexedDB (C-17 / C-23).
    * Valida transaccionalmente matchId, ownerTabId, epoch y lease antes de renovar.
    */
-  public async _testTriggerHeartbeat(matchId: number): Promise<boolean> {
+  public async renewLease(matchId: number): Promise<boolean> {
     try {
       if (!db.isOpen()) {
         this.handleLeaseLost(matchId, 'IndexedDB no disponible');
@@ -391,7 +434,7 @@ class TimerAuthorityCoordinator {
 
       const currentLocal = this.matchStates.get(matchId);
       if (!currentLocal?.isOwner) {
-        this.clearFallbackHeartbeat(matchId);
+        this.clearHeartbeat(matchId);
         return false;
       }
 
@@ -446,12 +489,16 @@ class TimerAuthorityCoordinator {
     }
   }
 
-  private startFallbackHeartbeat(matchId: number) {
-    this.clearFallbackHeartbeat(matchId);
+  public async _testTriggerHeartbeat(matchId: number): Promise<boolean> {
+    return this.renewLease(matchId);
+  }
+
+  private startHeartbeat(matchId: number) {
+    this.clearHeartbeat(matchId);
     const heartbeat = setInterval(() => {
-      this._testTriggerHeartbeat(matchId).catch(() => {});
+      this.renewLease(matchId).catch(() => {});
     }, 2000);
-    this.fallbackHeartbeats.set(matchId, heartbeat);
+    this.heartbeats.set(matchId, heartbeat);
   }
 
   private handleLeaseLost(
@@ -460,7 +507,12 @@ class TimerAuthorityCoordinator {
     ownerTabId?: string | null,
     epoch?: number
   ) {
-    this.clearFallbackHeartbeat(matchId);
+    this.clearHeartbeat(matchId);
+    const lock = this.activeLocks.get(matchId);
+    if (lock) {
+      lock.release().catch(() => {});
+      this.activeLocks.delete(matchId);
+    }
     const current = this.matchStates.get(matchId);
     if (current?.isOwner) {
       this.matchStates.set(matchId, {
@@ -472,11 +524,11 @@ class TimerAuthorityCoordinator {
     }
   }
 
-  private clearFallbackHeartbeat(matchId: number) {
-    const hb = this.fallbackHeartbeats.get(matchId);
+  private clearHeartbeat(matchId: number) {
+    const hb = this.heartbeats.get(matchId);
     if (hb) {
       clearInterval(hb);
-      this.fallbackHeartbeats.delete(matchId);
+      this.heartbeats.delete(matchId);
     }
   }
 
@@ -503,9 +555,9 @@ class TimerAuthorityCoordinator {
       });
     }
 
-    // 3. Limpiar heartbeats de fallback si aplica y vaciar lease en BD SÓLO si seguimos siendo el dueño legítimo (C-17)
-    this.clearFallbackHeartbeat(matchId);
-    if (!this.isWebLocksSupported() && db.isOpen()) {
+    // 3. Limpiar heartbeats y vaciar lease en BD SÓLO si seguimos siendo el dueño legítimo (C-17 / C-23)
+    this.clearHeartbeat(matchId);
+    if (db.isOpen()) {
       try {
         await db.transaction('rw', db.matches, async () => {
           const match = await db.matches.get(matchId);
@@ -516,23 +568,6 @@ class TimerAuthorityCoordinator {
           ) {
             await db.matches.update(matchId, {
               timerLeaseExpiresAt: 0,
-              timerOwnerTabId: undefined
-            });
-          }
-        });
-      } catch {
-        // ignore
-      }
-    } else if (this.isWebLocksSupported() && db.isOpen()) {
-      try {
-        await db.transaction('rw', db.matches, async () => {
-          const match = await db.matches.get(matchId);
-          if (!match) return;
-          if (
-            match.timerOwnerTabId === this.tabId &&
-            (match.timerEpoch ?? 0) === (state?.epoch ?? 0)
-          ) {
-            await db.matches.update(matchId, {
               timerOwnerTabId: undefined
             });
           }
@@ -705,7 +740,7 @@ class TimerAuthorityCoordinator {
    */
   public _testSimulateSuspension(matchId: number): void {
     // Simula la suspensión del runtime deteniendo el heartbeat sin limpiar el lease en BD
-    this.clearFallbackHeartbeat(matchId);
+    this.clearHeartbeat(matchId);
   }
 
   public async _resetForTesting(options?: {
@@ -713,8 +748,8 @@ class TimerAuthorityCoordinator {
     tabId?: string;
     epochCounter?: number;
   }): Promise<void> {
-    this.fallbackHeartbeats.forEach((t) => clearInterval(t));
-    this.fallbackHeartbeats.clear();
+    this.heartbeats.forEach((t) => clearInterval(t));
+    this.heartbeats.clear();
     this.inFlightOperations.clear();
 
     const promises: Promise<void>[] = [];

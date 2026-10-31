@@ -419,6 +419,8 @@ describe('SB_PHASE2C_AUTONOMOUS_R1: Autoridad del Cronómetro, Concurrencia y Co
     });
 
     it('TC-27: ausencia de Web Locks activa el modo degradado conservador sin excepciones', async () => {
+      await timerAuthorityCoordinator.releaseAuthority(sampleMatchId);
+
       const fallbackCoord = new TimerAuthorityCoordinator();
       await fallbackCoord._resetForTesting({ forceFallback: true });
 

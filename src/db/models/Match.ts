@@ -42,6 +42,7 @@ export interface Match {
   timerEpoch?: number;
   timerOwnerTabId?: string;
   timerLeaseExpiresAt?: number;
+  timerLockMode?: 'web_locks' | 'fallback';
   
   // Solo para modos RACE y BEST-OF (sin tiempo)
   gameHistory?: GameResult[];   // Historial de partidos completados

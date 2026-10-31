@@ -70,8 +70,7 @@ export const TraditionalEngine: React.FC = () => {
     }
   }, [match?.status, navigate]);
 
-  if (!match || !localTeam || !visitorTeam) return null;
-
+  // Hooks incondicionales al nivel superior del componente (Rules of Hooks)
   const isOverlayBlocking =
     isActionModalOpen || playerModal.isOpen || showTimerModal || confirmDialog !== null;
 
@@ -100,15 +99,11 @@ export const TraditionalEngine: React.FC = () => {
     setCustomSeconds(String(totalSecs % 60).padStart(2, '0'));
   }, [timeLeft, showTimerModal]);
 
-  const periodLabel = formatPeriodLabel(currentQuarter, totalQuarters);
-  const isLastQuarter = currentQuarter >= totalQuarters;
-  const nextPeriodBtnLabel = isLastQuarter ? 'Cerrar Q' : `Ir a ${formatPeriodLabel(currentQuarter + 1, totalQuarters)}`;
-
   const currentQuarterFouls = useLiveQuery(async () => {
-    if (!match.id) {
+    if (!match?.id) {
       return {
-        local: match.localFouls || 0,
-        visitor: match.visitorFouls || 0
+        local: match?.localFouls || 0,
+        visitor: match?.visitorFouls || 0
       };
     }
 
@@ -119,7 +114,24 @@ export const TraditionalEngine: React.FC = () => {
       local: quarterFouls.filter(foul => foul.teamId === match.localTeamId).length,
       visitor: quarterFouls.filter(foul => foul.teamId === match.visitorTeamId).length
     };
-  }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
+  }, [match?.id, match?.localTeamId, match?.visitorTeamId, match?.localFouls, match?.visitorFouls, currentQuarter]);
+
+  // Limpieza de estado local al cambiar el partido
+  const currentMatchIdRef = useRef<number | undefined>(match?.id);
+  useEffect(() => {
+    if (currentMatchIdRef.current !== match?.id) {
+      currentMatchIdRef.current = match?.id;
+      setPlayerModal(prev => ({ ...prev, isOpen: false }));
+      setShowTimerModal(false);
+      setConfirmDialog(null);
+    }
+  }, [match?.id]);
+
+  if (!match || !localTeam || !visitorTeam) return null;
+
+  const periodLabel = formatPeriodLabel(currentQuarter, totalQuarters);
+  const isLastQuarter = currentQuarter >= totalQuarters;
+  const nextPeriodBtnLabel = isLastQuarter ? 'Cerrar Q' : `Ir a ${formatPeriodLabel(currentQuarter + 1, totalQuarters)}`;
 
   const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);

@@ -15,7 +15,7 @@ export interface TeamWithPlayers extends Team {
   players: Player[];
 }
 
-interface LiveMatchContextState {
+export interface LiveMatchContextState {
   match: Match | undefined;
   localTeam: TeamWithPlayers | undefined;
   visitorTeam: TeamWithPlayers | undefined;
@@ -50,6 +50,13 @@ export const LiveMatchContext = createContext<LiveMatchContextState | undefined>
 
 export const LiveMatchProvider: React.FC<LiveMatchProviderProps> = ({ matchId, children }) => {
   const [openModals, setOpenModals] = useState<Record<string, boolean>>({});
+  const [prevMatchId, setPrevMatchId] = useState<number>(matchId);
+
+  // Limpiar modales abiertos si cambia el matchId (ajuste de estado durante el render)
+  if (matchId !== prevMatchId) {
+    setPrevMatchId(matchId);
+    setOpenModals({});
+  }
 
   const setActionModalOpen = useCallback((modalKey: string, isOpen: boolean) => {
     setOpenModals(prev => {

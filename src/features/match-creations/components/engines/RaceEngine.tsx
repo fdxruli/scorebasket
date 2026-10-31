@@ -37,8 +37,7 @@ export const RaceEngine: React.FC = () => {
         prevHasAnyPlayersRef.current = hasAnyPlayers;
     }, [hasAnyPlayers]);
 
-    if (!match || !localTeam || !visitorTeam) return null;
-
+    // Hooks incondicionales al nivel superior del componente (Rules of Hooks)
     const {
         targetScore,
         hasRematches,
@@ -50,13 +49,11 @@ export const RaceEngine: React.FC = () => {
         winnerTeamId
     } = useRaceLogic({ match });
 
-    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
-
     useEffect(() => {
-        if (match.status === 'finished') {
+        if (match?.status === 'finished') {
             navigate('/matches');
         }
-    }, [match.status, navigate]);
+    }, [match?.status, navigate]);
 
     const [currentAction, setCurrentAction] = useState<{
         teamId: number;
@@ -65,6 +62,20 @@ export const RaceEngine: React.FC = () => {
         players: Player[];
         action: GameAction;
     } | null>(null);
+
+    // Limpieza de estado local si cambia el identificador del partido
+    const currentMatchIdRef = useRef<number | undefined>(match?.id);
+    useEffect(() => {
+        if (currentMatchIdRef.current !== match?.id) {
+            currentMatchIdRef.current = match?.id;
+            setCurrentAction(null);
+            setShowEarlyFinishConfirm(false);
+        }
+    }, [match?.id]);
+
+    if (!match || !localTeam || !visitorTeam) return null;
+
+    const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
 
     const requestAction = (
         teamId: number,

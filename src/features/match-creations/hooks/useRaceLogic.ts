@@ -1,17 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { Match } from '../../../db/models/Match';
 import type { GameResult } from '../../../db/models/MatchConfig';
 import { db } from '../../../db/db';
 import { calculateRaceWinner, resolveRaceGameResult } from '../../../utils/raceLogicHelpers';
 
 interface UseRaceLogicProps {
-  match: Match;
+  match?: Match | null;
 }
 
 const getRaceWinnerTeamId = (match: Match, targetScore: number): number | null => {
   const localScore = match.localScore || 0;
   const visitorScore = match.visitorScore || 0;
-  const winByTwo = match.config.race?.winByTwo ?? false;
+  const winByTwo = match.config?.race?.winByTwo ?? false;
 
   const winnerSide = calculateRaceWinner(localScore, visitorScore, targetScore, winByTwo);
   if (winnerSide === 'local') return match.localTeamId;
@@ -37,32 +37,38 @@ const appendGameResultOnce = (history: GameResult[], entry: GameResult): GameRes
 };
 
 export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
-  const targetScore = match.config.race?.targetScore || 21;
-  const hasRematches = match.config.race?.hasRematches || false;
-  const winByTwo = match.config.race?.winByTwo ?? false;
-  const scoringSystem = match.config.race?.scoringSystem || 'standard';
-
-  const [showMatchEndModal, setShowMatchEndModal] = useState(false);
+  const targetScore = match?.config?.race?.targetScore || 21;
+  const hasRematches = match?.config?.race?.hasRematches || false;
+  const winByTwo = match?.config?.race?.winByTwo ?? false;
+  const scoringSystem = match?.config?.race?.scoringSystem || 'standard';
 
   // 1. Derivar el ganador reglamentario directamente de los datos visibles.
   const winnerTeamId = useMemo(() => {
+    if (!match) return null;
     return getRaceWinnerTeamId(match, targetScore);
   }, [match, targetScore]);
 
-  // 2. EFECTO UNIFICADO: Controla la visibilidad del modal
-  useEffect(() => {
-    const shouldShow = match.status !== 'finished' && Boolean(winnerTeamId);
-    if (showMatchEndModal !== shouldShow) {
-      const timerId = window.setTimeout(() => {
-        setShowMatchEndModal(shouldShow);
-      }, 0);
-      return () => window.clearTimeout(timerId);
+  // 2. Control de visibilidad del modal: puramente derivado, sin efectos ni setState en useEffect
+  const [dismissedWinnerId, setDismissedWinnerId] = useState<number | null>(null);
+
+  const showMatchEndModal = Boolean(
+    match &&
+    match.status !== 'finished' &&
+    winnerTeamId &&
+    winnerTeamId !== dismissedWinnerId
+  );
+
+  const setShowMatchEndModal = useCallback((show: boolean) => {
+    if (!show) {
+      setDismissedWinnerId(winnerTeamId);
+    } else {
+      setDismissedWinnerId(null);
     }
-  }, [match.status, winnerTeamId, showMatchEndModal]);
+  }, [winnerTeamId]);
 
   // Acción 1: Finalizar Partido
   const endMatch = useCallback(async () => {
-    if (!match.id) return;
+    if (!match?.id) return;
 
     await db.transaction('rw', db.matches, async () => {
       const currentMatch = await db.matches.get(match.id!);
@@ -110,11 +116,11 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
 
       await db.matches.update(currentMatch.id!, updates);
     });
-  }, [match.id, targetScore, winByTwo]);
+  }, [match, targetScore, winByTwo]);
 
   // Acción 2: Revancha / Dar Vuelta
   const handleRematch = useCallback(async () => {
-    if (!match.id) return;
+    if (!match?.id) return;
 
     await db.transaction('rw', db.matches, async () => {
       const currentMatch = await db.matches.get(match.id!);
@@ -147,7 +153,7 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
         }
       });
     });
-  }, [match.id, targetScore]);
+  }, [match, targetScore]);
 
   return {
     targetScore,
@@ -159,7 +165,7 @@ export const useRaceLogic = ({ match }: UseRaceLogicProps) => {
     endMatch,
     handleRematch,
     winnerTeamId,
-    localProgress: Math.min(100, ((match.localScore || 0) / targetScore) * 100),
-    visitorProgress: Math.min(100, ((match.visitorScore || 0) / targetScore) * 100),
+    localProgress: Math.min(100, (((match?.localScore || 0) / targetScore) * 100)),
+    visitorProgress: Math.min(100, (((match?.visitorScore || 0) / targetScore) * 100)),
   };
 };

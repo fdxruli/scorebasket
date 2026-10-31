@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models/Match';
 import { unlockAudioContext, playBuzzer } from '../utils/soundEffects';
-import { MatchTimerService, type TimerOperationResult } from '../db/matchTimer.service';
+import { MatchTimerService, type TimerOperationResult, type TimerServiceOptions } from '../db/matchTimer.service';
 import { timerAuthorityCoordinator, type AuthorityState } from '../services/timerAuthority.coordinator';
 
 export interface UseMatchTimerReturn {
@@ -23,24 +23,31 @@ export interface UseMatchTimerReturn {
 }
 
 /**
- * Pausa el cronómetro de un partido de forma transaccional e idempotente (R1.2-B).
- * Si el reloj ya está pausado (`timerLastStart === undefined`), no realiza ningún descuento
- * ni arranca accidentalmente el cronómetro.
- *
- * Mantiene compatibilidad estricta con versiones anteriores delegando en MatchTimerService.
+ * Pausa el cronómetro de un partido de forma transaccional e idempotente (R1.2-B, C-11, C-12).
+ * Respeta el contrato de autoridad: pestañas observadoras no pueden escribir a la base de datos.
  */
 export async function pauseMatchTimerIdempotent(
   matchId: number,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  options?: TimerServiceOptions
 ): Promise<boolean> {
   try {
     if (!db.isOpen()) return false;
+    const authState = timerAuthorityCoordinator.getAuthorityState(matchId);
+
+    // C-12: Si no tiene autoridad y no es una llamada privilegiada explícita, no debe mutar IndexedDB
+    if (!authState.hasAuthority && !options?.skipAuthorityCheck) {
+      return false;
+    }
+
     const result = await MatchTimerService.pause(matchId, {
       nowMs,
-      skipAuthorityCheck: true
+      epoch: options?.epoch ?? authState.epoch,
+      expectedQuarter: options?.expectedQuarter,
+      tabId: options?.tabId ?? authState.tabId,
+      skipAuthorityCheck: options?.skipAuthorityCheck
     });
-    // Devuelve true solo si la pausa fue aplicada (el reloj estaba corriendo);
-    // si ya estaba pausado (already_applied) o rechazado, devuelve false.
+
     return result.status === 'applied';
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'DatabaseClosedError') {
@@ -94,17 +101,26 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
         }
   );
 
-  // 1. Coordinación de cambio de partido y cancelación de pausas en remounts (C-10)
+  // 1. Coordinación de cambio de partido y cancelación de pausas en remounts (C-10, C-12)
   useEffect(() => {
     const currentId = match?.id;
 
-    // Si cambió de partido (ej. Match 1 -> Match 2), pausamos y liberamos autoridad del anterior
+    // Si cambió de partido (ej. Match 1 -> Match 2), pausamos y liberamos autoridad del anterior si éramos dueños
     if (prevMatchIdRef.current && currentId && prevMatchIdRef.current !== currentId) {
-      cancelPendingUnmountPause(prevMatchIdRef.current);
-      if (shouldPauseOnUnmount.current) {
-        pauseMatchTimerIdempotent(prevMatchIdRef.current);
-      }
-      timerAuthorityCoordinator.releaseAuthority(prevMatchIdRef.current);
+      const prevId = prevMatchIdRef.current;
+      cancelPendingUnmountPause(prevId);
+      (async () => {
+        await timerAuthorityCoordinator.waitForAcquisition(prevId);
+        const prevAuth = timerAuthorityCoordinator.getAuthorityState(prevId);
+        if (shouldPauseOnUnmount.current && prevAuth.hasAuthority) {
+          try {
+            await pauseMatchTimerIdempotent(prevId);
+          } catch {
+            // ignore
+          }
+        }
+        await timerAuthorityCoordinator.releaseAuthority(prevId);
+      })();
     }
 
     prevMatchIdRef.current = currentId;
@@ -169,8 +185,8 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     };
 
     const handlePageHide = () => {
-      // Si la pestaña se cierra o navega fuera, intentar pausa segura e inmediata si somos dueños
-      if (shouldPauseOnUnmount.current && timerAuthorityCoordinator.getAuthorityState(matchId).isOwner) {
+      // Si la pestaña se cierra o navega fuera, intentar pausa segura si somos dueños (C-12)
+      if (shouldPauseOnUnmount.current && timerAuthorityCoordinator.getAuthorityState(matchId).hasAuthority) {
         pauseMatchTimerIdempotent(matchId).catch(() => {});
       }
     };
@@ -228,27 +244,50 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     return () => clearInterval(interval);
   }, [isRunning, timeLeft]);
 
-  // 6. Auto-pause y chicharra única cuando llega a 00:00
+  // 6. Auto-pause y chicharra única cuando llega a 00:00 (C-12: solo el propietario persiste en BD)
   useEffect(() => {
     if (timeLeft <= 0 && isRunning && match?.id) {
-      pauseMatchTimerIdempotent(match.id);
+      if (authorityState.hasAuthority) {
+        MatchTimerService.pause(match.id, {
+          epoch: authorityState.epoch,
+          expectedQuarter: match.currentQuarter,
+          tabId: authorityState.tabId
+        }).catch(() => {});
+      }
       if (enableAutoPause && buzzerPlayedRef.current !== match.currentQuarter) {
         buzzerPlayedRef.current = match.currentQuarter ?? 0;
         playBuzzer();
       }
     }
-  }, [timeLeft, isRunning, match?.id, match?.currentQuarter, enableAutoPause]);
+  }, [
+    timeLeft,
+    isRunning,
+    match?.id,
+    match?.currentQuarter,
+    enableAutoPause,
+    authorityState.hasAuthority,
+    authorityState.epoch,
+    authorityState.tabId
+  ]);
 
-  // 7. Limpieza al desmontar: diferida por 25ms para tolerar StrictMode remounts (C-10)
+  // 7. Limpieza al desmontar: diferida por 25ms para tolerar StrictMode remounts (C-10, C-12)
   useEffect(() => {
     return () => {
       const id = matchIdRef.current;
       if (id && shouldPauseOnUnmount.current) {
         cancelPendingUnmountPause(id);
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
           pendingUnmountPauses.delete(id);
-          pauseMatchTimerIdempotent(id).catch(() => {});
-          timerAuthorityCoordinator.releaseAuthority(id);
+          await timerAuthorityCoordinator.waitForAcquisition(id);
+          const currentAuth = timerAuthorityCoordinator.getAuthorityState(id);
+          if (currentAuth.hasAuthority) {
+            try {
+              await pauseMatchTimerIdempotent(id);
+            } catch {
+              // ignore
+            }
+          }
+          await timerAuthorityCoordinator.releaseAuthority(id);
         }, 25);
         pendingUnmountPauses.set(id, timer);
       }
@@ -262,10 +301,11 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
 
     const result = await MatchTimerService.toggle(match.id, {
       epoch: authorityState.epoch,
-      expectedQuarter: match.currentQuarter
+      expectedQuarter: match.currentQuarter,
+      tabId: authorityState.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch]);
+  }, [match, authorityState.epoch, authorityState.tabId]);
 
   const pauseTimer = useCallback(async () => {
     if (!match?.id) return;
@@ -273,30 +313,33 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
 
     const result = await MatchTimerService.pause(match.id, {
       epoch: authorityState.epoch,
-      expectedQuarter: match.currentQuarter
+      expectedQuarter: match.currentQuarter,
+      tabId: authorityState.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch]);
+  }, [match, authorityState.epoch, authorityState.tabId]);
 
   const resetTimer = useCallback(async () => {
     if (!match?.id) return;
 
     const result = await MatchTimerService.reset(match.id, {
       epoch: authorityState.epoch,
-      expectedQuarter: match.currentQuarter
+      expectedQuarter: match.currentQuarter,
+      tabId: authorityState.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch]);
+  }, [match, authorityState.epoch, authorityState.tabId]);
 
   const adjustTime = useCallback(async (deltaSeconds: number) => {
     if (!match?.id) return;
 
     const result = await MatchTimerService.adjust(match.id, deltaSeconds, {
       epoch: authorityState.epoch,
-      expectedQuarter: match.currentQuarter
+      expectedQuarter: match.currentQuarter,
+      tabId: authorityState.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch]);
+  }, [match, authorityState.epoch, authorityState.tabId]);
 
   const requestAuthorityTransfer = useCallback(async (): Promise<boolean> => {
     if (!match?.id) return false;

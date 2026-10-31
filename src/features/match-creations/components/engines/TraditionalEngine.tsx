@@ -168,6 +168,10 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const executeNextQuarter = async () => {
+    if (!hasAuthority) {
+      await requestAuthorityTransfer();
+      return;
+    }
     setConfirmDialog(null);
     if (isLastQuarter) {
       if (isTied || timeLeft <= 0) {
@@ -181,6 +185,10 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handleNextQuarterClick = async () => {
+    if (!hasAuthority) {
+      await requestAuthorityTransfer();
+      return;
+    }
     if (timeLeft > 0) {
       setConfirmDialog('next-quarter');
       return;
@@ -517,8 +525,14 @@ export const TraditionalEngine: React.FC = () => {
               El tiempo del periodo terminó. El siguiente periodo iniciará pausado.
             </p>
             <div className="modal-actions">
-              <button type="button" onClick={nextQuarter} className="btn-modal-primary btn-next-q">
-                Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
+              <button
+                type="button"
+                onClick={hasAuthority ? nextQuarter : requestAuthorityTransfer}
+                className="btn-modal-primary btn-next-q"
+              >
+                {hasAuthority
+                  ? `Iniciar ${formatPeriodLabel(currentQuarter + 1, totalQuarters)}`
+                  : 'Reclamar control para avanzar'}
               </button>
               <button
                 type="button"
@@ -561,11 +575,19 @@ export const TraditionalEngine: React.FC = () => {
             </div>
             {isTied ? (
               <div className="modal-actions">
-                <button type="button" onClick={() => startOvertime(3)} className="btn-modal-primary btn-overtime">
-                  Iniciar OT (+3 min)
+                <button
+                  type="button"
+                  onClick={hasAuthority ? () => startOvertime(3) : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-overtime"
+                >
+                  {hasAuthority ? 'Iniciar OT (+3 min)' : 'Reclamar control para OT (+3 min)'}
                 </button>
-                <button type="button" onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
-                  Iniciar OT (+5 min)
+                <button
+                  type="button"
+                  onClick={hasAuthority ? () => startOvertime(5) : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-overtime"
+                >
+                  {hasAuthority ? 'Iniciar OT (+5 min)' : 'Reclamar control para OT (+5 min)'}
                 </button>
                 <button
                   type="button"
@@ -587,14 +609,22 @@ export const TraditionalEngine: React.FC = () => {
                 <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                   Deshacer última acción / Corregir
                 </button>
-                <button type="button" onClick={endMatch} className="btn-modal-secondary">
-                  Terminar en Empate
+                <button
+                  type="button"
+                  onClick={hasAuthority ? endMatch : requestAuthorityTransfer}
+                  className="btn-modal-secondary"
+                >
+                  {hasAuthority ? 'Terminar en Empate' : 'Reclamar control para terminar'}
                 </button>
               </div>
             ) : (
               <div className="modal-actions">
-                <button type="button" onClick={endMatch} className="btn-modal-primary btn-finish">
-                  Guardar y Cerrar Partido
+                <button
+                  type="button"
+                  onClick={hasAuthority ? endMatch : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-finish"
+                >
+                  {hasAuthority ? 'Guardar y Cerrar Partido' : 'Reclamar control para finalizar'}
                 </button>
                 <button
                   type="button"

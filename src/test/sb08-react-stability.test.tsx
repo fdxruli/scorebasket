@@ -17,6 +17,7 @@ import { LiveMatch } from '../pages/LiveMatch';
 import { advanceTraditionalQuarter, startTraditionalOvertime } from '../features/match-creations/hooks/useTraditionalLogic';
 import { SeriesService } from '../db/series.service';
 import { clearAllPendingUnmountPauses } from '../hooks/useMatchTimer';
+import { timerAuthorityCoordinator } from '../services/timerAuthority.coordinator';
 
 describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continuidad', () => {
   let localTeam: TeamWithPlayers;
@@ -791,6 +792,7 @@ describe('SB_PHASE2B_R1: Estabilidad React 19, Rules of Hooks, Efectos y Continu
 
     it('F2B-22: Traditional conserva el avance de cuarto y overtime', async () => {
       const matchId = baseTraditionalMatch.id!;
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
 
       // Avanzar de Q1 a Q2
       const advanced = await advanceTraditionalQuarter(matchId);

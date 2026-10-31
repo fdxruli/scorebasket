@@ -1,4 +1,4 @@
-// src/hooks/useMatchTimer.ts (VERSIÓN CORREGIDA)
+// src/hooks/useMatchTimer.ts (VERSIÓN CORREGIDA F2B R1.1)
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models/Match';
@@ -23,36 +23,78 @@ export async function pauseMatchTimerIdempotent(
   matchId: number,
   nowMs = Date.now()
 ): Promise<boolean> {
-  return db.transaction('rw', db.matches, async () => {
-    const match = await db.matches.get(matchId);
-    if (!match || !match.timerLastStart) {
+  try {
+    if (!db.isOpen()) return false;
+    return await db.transaction('rw', db.matches, async () => {
+      const match = await db.matches.get(matchId);
+      if (!match || !match.timerLastStart) {
+        return false;
+      }
+
+      const elapsed = Math.max(0, (nowMs - match.timerLastStart.getTime()) / 1000);
+      await db.matches.update(matchId, {
+        timerLastStart: undefined,
+        timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
+      });
+      return true;
+    });
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'DatabaseClosedError') {
       return false;
     }
+    if (err instanceof Error && err.message.includes('Database has been closed')) {
+      return false;
+    }
+    throw err;
+  }
+}
 
-    const elapsed = Math.max(0, (nowMs - match.timerLastStart.getTime()) / 1000);
-    await db.matches.update(matchId, {
-      timerLastStart: undefined,
-      timerSecondsRemaining: Math.max(0, (match.timerSecondsRemaining || 0) - elapsed)
-    });
-    return true;
-  });
+/** Mapa para coordinar pausas de desmontaje y tolerar remounts de React.StrictMode (C-10) */
+const pendingUnmountPauses = new Map<number, ReturnType<typeof setTimeout>>();
+
+export function cancelPendingUnmountPause(matchId: number) {
+  const timer = pendingUnmountPauses.get(matchId);
+  if (timer) {
+    clearTimeout(timer);
+    pendingUnmountPauses.delete(matchId);
+  }
+}
+
+/** Cancela y limpia todas las pausas de desmontaje pendientes (útil para aislamiento de pruebas) */
+export function clearAllPendingUnmountPauses() {
+  pendingUnmountPauses.forEach(timer => clearTimeout(timer));
+  pendingUnmountPauses.clear();
 }
 
 /**
  * Hook personalizado para manejar el timer de un partido
- * 
- * CORRECCIÓN APLICADA:
- * - Eliminadas dependencias del efecto de cleanup para evitar reconstrucciones
- * - El flag shouldPauseOnUnmount ahora se verifica en el momento del desmontaje,
- *   no en el momento de la creación del efecto
  */
 export function useMatchTimer(match: Match | undefined, enableAutoPause = true): UseMatchTimerReturn {
   const [, setTick] = useState(0);
   const shouldPauseOnUnmount = useRef(true);
   const matchIdRef = useRef<number | undefined>(undefined);
+  const prevMatchIdRef = useRef<number | undefined>(match?.id);
 
+  // Coordinación de cambio de partido y cancelación de pausas en remounts (C-10)
   useEffect(() => {
-    matchIdRef.current = match?.id;
+    const currentId = match?.id;
+
+    // Si cambió de partido (ej. Match 1 -> Match 2), pausamos inmediatamente el anterior si correspondía
+    if (prevMatchIdRef.current && currentId && prevMatchIdRef.current !== currentId) {
+      cancelPendingUnmountPause(prevMatchIdRef.current);
+      if (shouldPauseOnUnmount.current) {
+        pauseMatchTimerIdempotent(prevMatchIdRef.current);
+      }
+    }
+
+    prevMatchIdRef.current = currentId;
+    matchIdRef.current = currentId;
+
+    // Si el partido entrante tenía una pausa de desmontaje programada (ej. por remount de StrictMode),
+    // la cancelamos de inmediato para preservar la continuidad del cronómetro
+    if (currentId) {
+      cancelPendingUnmountPause(currentId);
+    }
   }, [match?.id]);
 
   useEffect(() => {
@@ -100,17 +142,22 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     }
   }, [timeLeft, isRunning, match, enableAutoPause]);
 
-  // 🔧 CORRECCIÓN DEL BUG: Efecto sin dependencias
-  // Solo se ejecuta al montar/desmontar, no se reconstruye
+  // Limpieza al desmontar: diferida por 25ms para permitir que un remount inmediato
+  // de React.StrictMode cancele la pausa y no detenga accidentalmente el reloj (C-10).
+  // En un desmontaje real (navegación away), el timeout expira y pausa el partido normalmente.
   useEffect(() => {
     return () => {
-      // Usamos los REFS para leer el valor actual al momento de desmontar
-      // sin importar si 'match' era undefined al principio.
-      if (matchIdRef.current && shouldPauseOnUnmount.current) {
-        pauseMatchTimerIdempotent(matchIdRef.current);
+      const id = matchIdRef.current;
+      if (id && shouldPauseOnUnmount.current) {
+        cancelPendingUnmountPause(id);
+        const timer = setTimeout(() => {
+          pendingUnmountPauses.delete(id);
+          pauseMatchTimerIdempotent(id).catch(() => {});
+        }, 25);
+        pendingUnmountPauses.set(id, timer);
       }
     };
-  }, []); // ✅ Array vacío - evita reconstrucciones del efecto
+  }, []);
 
   const toggleTimer = useCallback(async () => {
     if (!match) return;
@@ -147,6 +194,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
 
   const pauseTimer = useCallback(async () => {
     if (!match?.id) return;
+    cancelPendingUnmountPause(match.id);
     await pauseMatchTimerIdempotent(match.id);
   }, [match]);
 

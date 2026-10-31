@@ -76,6 +76,8 @@ export const TraditionalEngine: React.FC = () => {
 
   const {
     timeLeft,
+    hasAuthority,
+    requestAuthorityTransfer,
     isTimerRunning,
     toggleTimer,
     resetCurrentQuarter,
@@ -166,6 +168,10 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const executeNextQuarter = async () => {
+    if (!hasAuthority) {
+      await requestAuthorityTransfer();
+      return;
+    }
     setConfirmDialog(null);
     if (isLastQuarter) {
       if (isTied || timeLeft <= 0) {
@@ -179,6 +185,10 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handleNextQuarterClick = async () => {
+    if (!hasAuthority) {
+      await requestAuthorityTransfer();
+      return;
+    }
     if (timeLeft > 0) {
       setConfirmDialog('next-quarter');
       return;
@@ -209,7 +219,7 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const openTimerEditor = () => {
-    if (isTimerRunning) return;
+    if (isTimerRunning || !hasAuthority) return;
     const totalSecs = Math.ceil(timeLeft);
     setCustomMinutes(String(Math.floor(totalSecs / 60)));
     setCustomSeconds(String(totalSecs % 60).padStart(2, '0'));
@@ -232,6 +242,14 @@ export const TraditionalEngine: React.FC = () => {
     await db.matches.update(match.id, { possession: nextPossession });
   };
 
+  const handleToggleTimer = async () => {
+    if (hasAuthority) {
+      await toggleTimer();
+    } else {
+      await requestAuthorityTransfer();
+    }
+  };
+
   const isLocalModal = playerModal.teamId === localTeam.id;
 
   return (
@@ -246,6 +264,42 @@ export const TraditionalEngine: React.FC = () => {
         showBuzzer
       />
 
+      {!hasAuthority && (
+        <div
+          className="observer-notice-pill"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.5rem 1rem',
+            margin: '0.25rem 0',
+            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            color: '#fef08a'
+          }}
+        >
+          <span>Modo observador: Otra pestaña controla el tiempo.</span>
+          <button
+            type="button"
+            onClick={() => { requestAuthorityTransfer(); }}
+            style={{
+              padding: '0.25rem 0.75rem',
+              backgroundColor: '#eab308',
+              color: '#000',
+              border: 'none',
+              borderRadius: '4px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            Reclamar control
+          </button>
+        </div>
+      )}
+
       <Scoreboard
         localName={localTeam.name}
         visitorName={visitorTeam.name}
@@ -255,8 +309,8 @@ export const TraditionalEngine: React.FC = () => {
         visitorFouls={currentQuarterFouls?.visitor ?? 0}
         timeLeft={timeLeft}
         isTimerRunning={isTimerRunning}
-        onTimerClick={openTimerEditor}
-        onToggleTimer={toggleTimer}
+        onTimerClick={hasAuthority ? openTimerEditor : undefined}
+        onToggleTimer={handleToggleTimer}
       />
 
       <MatchControls
@@ -266,11 +320,11 @@ export const TraditionalEngine: React.FC = () => {
         visitorPlayers={visitorTeam.players}
         isTimerRunning={isTimerRunning}
         timeLeft={timeLeft}
-        canEditTimer={!isTimerRunning}
-        onTimerClick={openTimerEditor}
+        canEditTimer={!isTimerRunning && hasAuthority}
+        onTimerClick={hasAuthority ? openTimerEditor : undefined}
         possession={match.possession ?? null}
         onTogglePossession={handleTogglePossession}
-        onToggleTimer={toggleTimer}
+        onToggleTimer={handleToggleTimer}
         onNextQuarter={handleNextQuarterClick}
         nextPeriodLabel={nextPeriodBtnLabel}
         onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}
@@ -471,8 +525,14 @@ export const TraditionalEngine: React.FC = () => {
               El tiempo del periodo terminó. El siguiente periodo iniciará pausado.
             </p>
             <div className="modal-actions">
-              <button type="button" onClick={nextQuarter} className="btn-modal-primary btn-next-q">
-                Iniciar {formatPeriodLabel(currentQuarter + 1, totalQuarters)}
+              <button
+                type="button"
+                onClick={hasAuthority ? nextQuarter : requestAuthorityTransfer}
+                className="btn-modal-primary btn-next-q"
+              >
+                {hasAuthority
+                  ? `Iniciar ${formatPeriodLabel(currentQuarter + 1, totalQuarters)}`
+                  : 'Reclamar control para avanzar'}
               </button>
               <button
                 type="button"
@@ -515,11 +575,19 @@ export const TraditionalEngine: React.FC = () => {
             </div>
             {isTied ? (
               <div className="modal-actions">
-                <button type="button" onClick={() => startOvertime(3)} className="btn-modal-primary btn-overtime">
-                  Iniciar OT (+3 min)
+                <button
+                  type="button"
+                  onClick={hasAuthority ? () => startOvertime(3) : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-overtime"
+                >
+                  {hasAuthority ? 'Iniciar OT (+3 min)' : 'Reclamar control para OT (+3 min)'}
                 </button>
-                <button type="button" onClick={() => startOvertime(5)} className="btn-modal-primary btn-overtime">
-                  Iniciar OT (+5 min)
+                <button
+                  type="button"
+                  onClick={hasAuthority ? () => startOvertime(5) : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-overtime"
+                >
+                  {hasAuthority ? 'Iniciar OT (+5 min)' : 'Reclamar control para OT (+5 min)'}
                 </button>
                 <button
                   type="button"
@@ -541,14 +609,22 @@ export const TraditionalEngine: React.FC = () => {
                 <button type="button" onClick={handleUndoFromModal} className="btn-modal-secondary">
                   Deshacer última acción / Corregir
                 </button>
-                <button type="button" onClick={endMatch} className="btn-modal-secondary">
-                  Terminar en Empate
+                <button
+                  type="button"
+                  onClick={hasAuthority ? endMatch : requestAuthorityTransfer}
+                  className="btn-modal-secondary"
+                >
+                  {hasAuthority ? 'Terminar en Empate' : 'Reclamar control para terminar'}
                 </button>
               </div>
             ) : (
               <div className="modal-actions">
-                <button type="button" onClick={endMatch} className="btn-modal-primary btn-finish">
-                  Guardar y Cerrar Partido
+                <button
+                  type="button"
+                  onClick={hasAuthority ? endMatch : requestAuthorityTransfer}
+                  className="btn-modal-primary btn-finish"
+                >
+                  {hasAuthority ? 'Guardar y Cerrar Partido' : 'Reclamar control para finalizar'}
                 </button>
                 <button
                   type="button"

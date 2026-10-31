@@ -37,6 +37,12 @@ export interface Match {
   possession?: 'local' | 'visitor' | null;
   localTimeouts?: number;
   visitorTimeouts?: number;
+
+  // Fencing y autoridad transaccional del cronómetro (Fase 2C R1.1 - C-11/C-14)
+  timerEpoch?: number;
+  timerOwnerTabId?: string;
+  timerLeaseExpiresAt?: number;
+  timerLockMode?: 'web_locks' | 'fallback';
   
   // Solo para modos RACE y BEST-OF (sin tiempo)
   gameHistory?: GameResult[];   // Historial de partidos completados

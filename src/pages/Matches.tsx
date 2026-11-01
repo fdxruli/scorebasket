@@ -9,6 +9,7 @@ import { startQuickPickupMatch } from '../utils/matchHelpers';
 
 import { ActiveMatchCard } from '../features/match-creations/components/ActiveMatchCard';
 import { HistoryMatchTicket } from '../features/match-creations/components/HistoryMatchTicket';
+import { LocalBackupControls } from '../components/matches/LocalBackupControls';
 
 type FilterMode = 'all' | 'traditional' | 'race' | 'best-of-series';
 
@@ -91,6 +92,9 @@ export function Matches() {
           </Link>
         </div>
       </header>
+
+      {/* --- CONTROLES DE RESPALDO Y PERSISTENCIA LOCAL --- */}
+      <LocalBackupControls />
 
       {/* --- MODAL DE REPORTE / BOX SCORE --- */}
       {selectedMatchId && (

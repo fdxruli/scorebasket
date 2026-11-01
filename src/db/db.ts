@@ -45,68 +45,63 @@ export class BasketControlDB extends Dexie {
             });
         });
 
+        // V6: migración histórica de contadores. Agregación O(eventos + partidos)
+        // en lugar de filtrar TODAS las acciones una vez por cada partido.
         this.version(6).stores({
-            matches: '++id, status, createdAt, totalQuarters' 
+            matches: '++id, status, createdAt, totalQuarters'
         }).upgrade(async tx => {
-            const matches = await tx.table('matches').toArray();
-            const scores = await tx.table('scores').toArray();
-            const fouls = await tx.table('fouls').toArray();
-
-            for (const m of matches) {
-                const mScores = scores.filter((s: Score) => s.matchId === m.id);
-                const mFouls = fouls.filter((f: Foul) => f.matchId === m.id);
-
-                const localScore = mScores
-                    .filter((s: Score) => s.teamId === m.localTeamId)
-                    .reduce((acc: number, curr: Score) => acc + curr.points, 0);
-                
-                const visitorScore = mScores
-                    .filter((s: Score) => s.teamId === m.visitorTeamId)
-                    .reduce((acc: number, curr: Score) => acc + curr.points, 0);
-
-                const localFouls = mFouls
-                    .filter((f: Foul) => f.teamId === m.localTeamId).length;
-                
-                const visitorFouls = mFouls
-                    .filter((f: Foul) => f.teamId === m.visitorTeamId).length;
-
-                await tx.table('matches').update(m.id, {
-                    localScore,
-                    visitorScore,
-                    localFouls,
-                    visitorFouls
-                });
-            }
+            const scoreTotals = new Map<number, Map<number, number>>();
+            const foulTotals = new Map<number, Map<number, number>>();
+            const accumulate = (
+                totals: Map<number, Map<number, number>>,
+                matchId: number,
+                teamId: number,
+                delta: number
+            ) => {
+                let teams = totals.get(matchId);
+                if (!teams) {
+                    teams = new Map<number, number>();
+                    totals.set(matchId, teams);
+                }
+                teams.set(teamId, (teams.get(teamId) ?? 0) + delta);
+            };
+            // Los callbacks de each() son sincrónicos y no dejan morir la
+            // transacción upgrade de IndexedDB.
+            await tx.table('scores').each((score: Score) => {
+                accumulate(scoreTotals, score.matchId, score.teamId, score.points);
+            });
+            await tx.table('fouls').each((foul: Foul) => {
+                accumulate(foulTotals, foul.matchId, foul.teamId, 1);
+            });
+            await tx.table('matches').toCollection().modify((match: Match) => {
+                const scoreByTeam = scoreTotals.get(match.id ?? -1);
+                const foulsByTeam = foulTotals.get(match.id ?? -1);
+                match.localScore = scoreByTeam?.get(match.localTeamId) ?? 0;
+                match.visitorScore = scoreByTeam?.get(match.visitorTeamId) ?? 0;
+                match.localFouls = foulsByTeam?.get(match.localTeamId) ?? 0;
+                match.visitorFouls = foulsByTeam?.get(match.visitorTeamId) ?? 0;
+            });
         });
 
-        // 🆕 VERSIÓN 7: Migración a nuevo sistema de configuración
+        // V7: adaptación de config. Modificación por cursor, sin cargar
+        // la tabla entera ni lanzar una escritura por cada partido.
         this.version(7).stores({
             matches: '++id, status, createdAt, config.mode'
-        }).upgrade(async tx => {
-            const matches = await tx.table('matches').toArray();
-            
-            for (const match of matches) {
-                // Crear configuración tradicional desde campos legacy
-                const config = {
-                    mode: 'traditional' as const,
+        }).upgrade(tx =>
+            tx.table('matches').toCollection().modify((match: Match) => {
+                match.config = {
+                    mode: 'traditional',
                     traditional: {
                         totalQuarters: match.totalQuarters || 4,
                         minutesPerQuarter: match.quarterDuration || 10
                     }
                 };
-                
-                // Asegurar que los scores existan (si no hay migración previa)
-                const updates: Partial<Match> = { 
-                    config,
-                    localScore: match.localScore ?? 0,
-                    visitorScore: match.visitorScore ?? 0,
-                    localFouls: match.localFouls ?? 0,
-                    visitorFouls: match.visitorFouls ?? 0
-                };
-                
-                await tx.table('matches').update(match.id, updates);
-            }
-        });
+                match.localScore = match.localScore ?? 0;
+                match.visitorScore = match.visitorScore ?? 0;
+                match.localFouls = match.localFouls ?? 0;
+                match.visitorFouls = match.visitorFouls ?? 0;
+            })
+        );
 
         // 🆕 VERSIÓN 8: Incorporación de índices relacionales en matches (SB-01)
         this.version(8).stores({

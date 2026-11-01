@@ -32,3 +32,7 @@ Verificar migraciones v2, v6, v7 y v8 hacia v9; que los ID y enlaces sobreviven 
 - Se conservan fechas `Date` y `gameHistory[*].finishedAt`; el restore utiliza una única transacción de escritura para rollback completo ante cualquier fallo.
 - La protección adicional `navigator.storage.persist()` se solicita **solo mediante clic** y puede ser denegada; no reemplaza un respaldo físico.
 - Limitaciones: exportación JSON completa en memoria, sin cifrado, ni reconciliación de respaldos con datos existentes; probar con grandes bases en dispositivos de gama baja.
+
+## Rendimiento de instalaciones históricas
+
+Las migraciones v6 y v7 conservan el mismo resultado funcional: v6 agrupa puntos y faltas una sola vez por match/equipo y actualiza los partidos mediante cursor; v7 normaliza `config` mediante `Collection.modify`. Se evita filtrar todo el historial por partido y realizar múltiples escrituras individuales. Las pruebas existentes cubren upgrades v2, v6 y v7 y verifican los mismos totales e identificadores.

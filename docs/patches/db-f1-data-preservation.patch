@@ -1,9 +1,9 @@
-﻿diff --git a/src/components/matches/LocalBackupControls.tsx b/src/components/matches/LocalBackupControls.tsx
+diff --git a/src/components/matches/LocalBackupControls.tsx b/src/components/matches/LocalBackupControls.tsx
 new file mode 100644
-index 0000000..9df2efd
+index 0000000..bbc3c60
 --- /dev/null
 +++ b/src/components/matches/LocalBackupControls.tsx
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,362 @@
 +// src/components/matches/LocalBackupControls.tsx
 +import { useState, useEffect, useRef } from 'react';
 +import {
@@ -56,10 +56,16 @@ index 0000000..9df2efd
 +    setErrorMessage(null);
 +    setSuccessMessage(null);
 +    try {
-+      const { filename, counts } = await LocalBackupService.exportToFile();
-+      setSuccessMessage(
-+        `Respaldo guardado como "${filename}" (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas).`
-+      );
++      const { filename, counts, downloadInitiated } = await LocalBackupService.exportToFile();
++      if (downloadInitiated) {
++        setSuccessMessage(
++          `Respaldo generado exitosamente. Descarga iniciada como "${filename}" (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas). Revisa tu bandeja de descargas.`
++        );
++      } else {
++        setSuccessMessage(
++          `Respaldo generado exitosamente (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas).`
++        );
++      }
 +    } catch (err: unknown) {
 +      const msg = err instanceof Error ? err.message : 'Error desconocido al generar el respaldo.';
 +      setErrorMessage(`No se pudo generar el respaldo: ${msg}`);
@@ -82,8 +88,8 @@ index 0000000..9df2efd
 +      if (!isEmpty) {
 +        const counts = await LocalBackupService.getDatabaseCounts();
 +        setErrorMessage(
-+          `Restauraci├│n bloqueada: la base de datos ya contiene datos (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos). ` +
-+          'Para proteger la integridad de tus registros y evitar sobreescritura accidental, la restauraci├│n requiere una base de datos completamente vac├¡a.'
++          `Restauración bloqueada: la base de datos ya contiene datos (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos). ` +
++          'Para proteger la integridad de tus registros y evitar sobreescritura accidental, la restauración requiere una base de datos completamente vacía.'
 +        );
 +        return;
 +      }
@@ -117,12 +123,12 @@ index 0000000..9df2efd
 +      const counts: BackupCounts = await LocalBackupService.restoreIntoEmpty(showConfirmRestore.fileContent);
 +      setShowConfirmRestore(null);
 +      setSuccessMessage(
-+        `┬íRestauraci├│n exitosa! Se cargaron ${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones y ${counts.fouls} faltas.`
++        `¡Restauración exitosa! Se cargaron ${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones y ${counts.fouls} faltas.`
 +      );
 +      loadStorageStatus();
 +    } catch (err: unknown) {
-+      const msg = err instanceof Error ? err.message : 'Error durante la restauraci├│n.';
-+      setErrorMessage(`Fallo en la restauraci├│n: ${msg}`);
++      const msg = err instanceof Error ? err.message : 'Error durante la restauración.';
++      setErrorMessage(`Fallo en la restauración: ${msg}`);
 +      setShowConfirmRestore(null);
 +    } finally {
 +      setIsRestoring(false);
@@ -137,7 +143,7 @@ index 0000000..9df2efd
 +      if (granted) {
 +        setSuccessMessage('El navegador ha concedido almacenamiento persistente protegido.');
 +      } else {
-+        setErrorMessage('El navegador no concedi├│ almacenamiento persistente en este momento.');
++        setErrorMessage('El navegador no concedió almacenamiento persistente en este momento.');
 +      }
 +    } catch {
 +      setErrorMessage('No se pudo solicitar la persistencia de almacenamiento.');
@@ -181,7 +187,7 @@ index 0000000..9df2efd
 +
 +      {isOpen && (
 +        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-+          {/* Mensajes de ├®xito y error */}
++          {/* Mensajes de éxito y error */}
 +          {successMessage && (
 +            <div
 +              style={{
@@ -204,7 +210,7 @@ index 0000000..9df2efd
 +                onClick={() => setSuccessMessage(null)}
 +                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
 +              >
-+                Ô£ò
++                ✕
 +              </button>
 +            </div>
 +          )}
@@ -231,12 +237,12 @@ index 0000000..9df2efd
 +                onClick={() => setErrorMessage(null)}
 +                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
 +              >
-+                Ô£ò
++                ✕
 +              </button>
 +            </div>
 +          )}
 +
-+          {/* Di├ílogo de confirmaci├│n para restauraci├│n */}
++          {/* Diálogo de confirmación para restauración */}
 +          {showConfirmRestore && (
 +            <div
 +              style={{
@@ -248,11 +254,11 @@ index 0000000..9df2efd
 +              }}
 +            >
 +              <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--warning, #f59e0b)', fontSize: '0.95rem' }}>
-+                Confirmar Restauraci├│n
++                Confirmar Restauración
 +              </h4>
 +              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-+                Se restaurar├ín todos los datos del archivo <strong>{showConfirmRestore.fileName}</strong> en la base de datos local vac├¡a.
-+                Esta operaci├│n es at├│mica e importar├í los equipos, jugadores, partidos y estad├¡sticas con sus identificadores intactos.
++                Se restaurarán todos los datos del archivo <strong>{showConfirmRestore.fileName}</strong> en la base de datos local vacía.
++                Esta operación es atómica e importará los equipos, jugadores, partidos y estadísticas con sus identificadores intactos.
 +              </p>
 +              <div style={{ display: 'flex', gap: '0.5rem' }}>
 +                <button
@@ -261,7 +267,7 @@ index 0000000..9df2efd
 +                  disabled={isRestoring}
 +                  className="btn btn-sm btn-primary"
 +                >
-+                  {isRestoring ? 'Restaurando...' : 'S├¡, Restaurar Datos'}
++                  {isRestoring ? 'Restaurando...' : 'Sí, Restaurar Datos'}
 +                </button>
 +                <button
 +                  type="button"
@@ -332,7 +338,7 @@ index 0000000..9df2efd
 +                <span>
 +                  {storageStatus.persisted
 +                    ? 'Almacenamiento persistente activo (protegido contra desalojo).'
-+                    : 'Almacenamiento est├índar (el navegador podr├¡a limpiar datos si se queda sin espacio).'}
++                    : 'Almacenamiento estándar (el navegador podría limpiar datos si se queda sin espacio).'}
 +                </span>
 +                {storageStatus.usageFormatted && (
 +                  <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -360,6 +366,169 @@ index 0000000..9df2efd
 +    </section>
 +  );
 +}
+diff --git a/src/config/validations.ts b/src/config/validations.ts
+index 41420cc..d812ee5 100644
+--- a/src/config/validations.ts
++++ b/src/config/validations.ts
+@@ -26,77 +26,119 @@ export const VALIDATION_RULES = {
+ } as const;
+ 
+ /**
+- * Valida una configuración de partido
++ * Valida una configuración de partido.
++ * Inspecciona rigurosamente tipos, límites numéricos enteros, ausencia de NaN/Infinity,
++ * presencia de subconfiguraciones requeridas y coherencia deportiva.
+  */
+-export function validateMatchConfig(config: MatchConfig): {
++export function validateMatchConfig(config: unknown): {
+   isValid: boolean;
+   errors: string[];
+ } {
+   const errors: string[] = [];
+-  
+-  switch (config.mode) {
++
++  if (!config || typeof config !== 'object' || Array.isArray(config)) {
++    return {
++      isValid: false,
++      errors: ['Configuración de partido inválida o ausente (debe ser un objeto)']
++    };
++  }
++
++  const cfg = config as Partial<MatchConfig>;
++
++  if (!cfg.mode || !['traditional', 'race', 'best-of-series'].includes(cfg.mode)) {
++    return {
++      isValid: false,
++      errors: [`Modo de juego inválido o no reconocido: "${String(cfg.mode)}". Los modos válidos son traditional, race y best-of-series.`]
++    };
++  }
++
++  const isStrictInteger = (val: unknown, min: number, max: number): boolean => {
++    return (
++      typeof val === 'number' &&
++      Number.isInteger(val) &&
++      !Number.isNaN(val) &&
++      Number.isFinite(val) &&
++      val >= min &&
++      val <= max
++    );
++  };
++
++  switch (cfg.mode) {
+     case 'traditional': {
+-      if (!config.traditional) {
+-        errors.push('Configuración tradicional requerida');
++      if (!cfg.traditional || typeof cfg.traditional !== 'object' || Array.isArray(cfg.traditional)) {
++        errors.push('Configuración tradicional requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = config.traditional;
++
++      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = cfg.traditional;
+       const rules = VALIDATION_RULES.traditional;
+-      
+-      if (totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
+-        errors.push(`Los cuartos deben estar entre ${rules.minQuarters} y ${rules.maxQuarters}`);
++
++      if (!isStrictInteger(totalQuarters, rules.minQuarters, rules.maxQuarters)) {
++        errors.push(
++          `Los cuartos deben ser un número entero entre ${rules.minQuarters} y ${rules.maxQuarters}`
++        );
+       }
+-      
+-      if (minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
+-        errors.push(`Los minutos deben estar entre ${rules.minMinutes} y ${rules.maxMinutes}`);
++
++      if (!isStrictInteger(minutesPerQuarter, rules.minMinutes, rules.maxMinutes)) {
++        errors.push(
++          `Los minutos deben ser un número entero entre ${rules.minMinutes} y ${rules.maxMinutes}`
++        );
+       }
+ 
+-      if (timeoutsPerTeam !== undefined && (timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
+-        errors.push(`Los tiempos fuera deben estar entre ${rules.minTimeouts} y ${rules.maxTimeouts}`);
++      if (
++        timeoutsPerTeam !== undefined &&
++        !isStrictInteger(timeoutsPerTeam, rules.minTimeouts, rules.maxTimeouts)
++      ) {
++        errors.push(
++          `Los tiempos fuera deben ser un número entero entre ${rules.minTimeouts} y ${rules.maxTimeouts}`
++        );
+       }
+       break;
+     }
+-    
++
+     case 'race': {
+-      if (!config.race) {
+-        errors.push('Configuración Race requerida');
++      if (!cfg.race || typeof cfg.race !== 'object' || Array.isArray(cfg.race)) {
++        errors.push('Configuración Race requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { targetScore } = config.race;
++
++      const { targetScore } = cfg.race;
+       const rules = VALIDATION_RULES.race;
+-      
+-      if (targetScore < rules.minScore || targetScore > rules.maxScore) {
+-        errors.push(`El puntaje objetivo debe estar entre ${rules.minScore} y ${rules.maxScore}`);
++
++      if (!isStrictInteger(targetScore, rules.minScore, rules.maxScore)) {
++        errors.push(
++          `El puntaje objetivo debe ser un número entero entre ${rules.minScore} y ${rules.maxScore}`
++        );
+       }
+       break;
+     }
+-    
++
+     case 'best-of-series': {
+-      if (!config.bestOf) {
+-        errors.push('Configuración Best-of requerida');
++      if (!cfg.bestOf || typeof cfg.bestOf !== 'object' || Array.isArray(cfg.bestOf)) {
++        errors.push('Configuración Best-of requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { totalGames, targetScorePerGame } = config.bestOf;
++
++      const { totalGames, targetScorePerGame } = cfg.bestOf;
+       const rules = VALIDATION_RULES.bestOf;
+-      
+-      if (totalGames < rules.minGames || totalGames > rules.maxGames) {
+-        errors.push(`El número de partidos debe estar entre ${rules.minGames} y ${rules.maxGames}`);
+-      }
+-      
+-      if (totalGames % 2 === 0) {
++
++      if (!isStrictInteger(totalGames, rules.minGames, rules.maxGames)) {
++        errors.push(
++          `El número de partidos debe ser un número entero entre ${rules.minGames} y ${rules.maxGames}`
++        );
++      } else if (totalGames % 2 === 0) {
+         errors.push('El número de partidos debe ser impar (ej: 3, 5, 7)');
+       }
+-      
+-      if (targetScorePerGame < rules.minScorePerGame || targetScorePerGame > rules.maxScorePerGame) {
+-        errors.push(`El puntaje por partido debe estar entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`);
++
++      if (!isStrictInteger(targetScorePerGame, rules.minScorePerGame, rules.maxScorePerGame)) {
++        errors.push(
++          `El puntaje por partido debe ser un número entero entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`
++        );
+       }
+       break;
+     }
+   }
+-  
++
+   return {
+     isValid: errors.length === 0,
+     errors
 diff --git a/src/db/index.ts b/src/db/index.ts
 index c9997f9..333a1ec 100644
 --- a/src/db/index.ts
@@ -371,10 +540,10 @@ index c9997f9..333a1ec 100644
 +export * from './localBackup.service';
 diff --git a/src/db/localBackup.service.ts b/src/db/localBackup.service.ts
 new file mode 100644
-index 0000000..437e423
+index 0000000..45c6a8f
 --- /dev/null
 +++ b/src/db/localBackup.service.ts
-@@ -0,0 +1,854 @@
+@@ -0,0 +1,994 @@
 +// src/db/localBackup.service.ts
 +import { db } from './db';
 +import type { Team } from './models/Team';
@@ -387,6 +556,9 @@ index 0000000..437e423
 +
 +export const LOCAL_BACKUP_FORMAT = 'scorebasket-local-backup';
 +export const LOCAL_BACKUP_VERSION = 1;
++
++export const MIN_PLAUSIBLE_TIMESTAMP = 946684800000; // 2000-01-01T00:00:00.000Z
++export const MAX_PLAUSIBLE_TIMESTAMP = 4102444800000; // 2100-01-01T00:00:00.000Z
 +
 +export class BackupValidationError extends Error {
 +  constructor(message: string) {
@@ -448,7 +620,7 @@ index 0000000..437e423
 +] as const;
 +
 +/**
-+ * Constantes K de la especificaci├│n FIPS 180-4 (SHA-256).
++ * Constantes K de la especificación FIPS 180-4 (SHA-256).
 + */
 +const SHA256_K = [
 +  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -462,8 +634,8 @@ index 0000000..437e423
 +];
 +
 +/**
-+ * Implementaci├│n determinista pura de SHA-256 (FIPS 180-4) en TypeScript.
-+ * Garantiza que el c├ílculo del checksum produzca exactamente los mismos
++ * Implementación determinista pura de SHA-256 (FIPS 180-4) en TypeScript.
++ * Garantiza que el cálculo del checksum produzca exactamente los mismos
 + * 256 bits (64 caracteres hexadecimales) en cualquier navegador, entorno
 + * sin `crypto.subtle`, Web Worker o runtime de pruebas.
 + */
@@ -532,7 +704,7 @@ index 0000000..437e423
 +
 +/**
 + * Calcula un checksum SHA-256 determinista para el contenido serializado.
-+ * Utiliza Web Crypto cuando est├í disponible por aceleraci├│n por hardware;
++ * Utiliza Web Crypto cuando está disponible por aceleración por hardware;
 + * si no existe o falla, recurre a `computePureSha256`, garantizando
 + * EXACTAMENTE el mismo valor hexadecimal en cualquier entorno.
 + */
@@ -546,11 +718,18 @@ index 0000000..437e423
 +      const hashArray = Array.from(new Uint8Array(hashBuffer));
 +      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 +    } catch {
-+      // Si crypto.subtle lanza error imprevisto, se ejecuta el c├ílculo puro FIPS
++      // Si crypto.subtle lanza error imprevisto, se ejecuta el cálculo puro FIPS
 +    }
 +  }
 +
 +  return computePureSha256(data);
++}
++
++/**
++ * Función compatible para cómputo de checksum SHA-256.
++ */
++export async function computeSha256(text: string): Promise<string> {
++  return computeDataChecksum(text);
 +}
 +
 +function parseRecord(value: unknown, fieldName: string): Record<string, unknown> {
@@ -562,46 +741,44 @@ index 0000000..437e423
 +
 +function parseValidId(value: unknown, fieldName: string): number {
 +  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
-+    throw new BackupValidationError(`ID inv├ílido en "${fieldName}". Se esperaba un entero positivo.`);
++    throw new BackupValidationError(`ID inválido en "${fieldName}". Se esperaba un entero positivo.`);
 +  }
 +  return value;
 +}
 +
-+function parseValidDate(raw: unknown, fieldName: string): Date {
++/**
++ * Valida y normaliza un campo de fecha. Distingue entre campos obligatorios y opcionales,
++ * rechazando nulos o ausencias cuando isRequired es verdadero, y validando rango admisible (2000-2100).
++ */
++export function parseValidDate(raw: unknown, fieldName: string, isRequired: boolean): Date | undefined {
++  if (raw === undefined || raw === null || raw === '') {
++    if (isRequired) {
++      throw new BackupValidationError(`El campo de fecha obligatorio "${fieldName}" está ausente o es nulo.`);
++    }
++    return undefined;
++  }
++
++  let date: Date;
 +  if (raw instanceof Date) {
-+    if (!Number.isFinite(raw.getTime())) {
-+      throw new BackupValidationError(`Fecha inv├ílida en "${fieldName}".`);
-+    }
-+    return raw;
++    date = raw;
++  } else if (typeof raw === 'string' || typeof raw === 'number') {
++    date = new Date(raw);
++  } else {
++    throw new BackupValidationError(`Fecha en "${fieldName}" no tiene formato serializable válido.`);
 +  }
 +
-+  if (typeof raw !== 'string' && typeof raw !== 'number') {
-+    throw new BackupValidationError(`Fecha en "${fieldName}" no tiene formato serializable v├ílido.`);
++  const time = date.getTime();
++  if (!Number.isFinite(time)) {
++    throw new BackupValidationError(`Fecha inválida en "${fieldName}": ${String(raw)}.`);
 +  }
 +
-+  const date = new Date(raw);
-+  if (!Number.isFinite(date.getTime())) {
-+    throw new BackupValidationError(`Fecha inv├ílida en "${fieldName}": ${String(raw)}.`);
++  if (time < MIN_PLAUSIBLE_TIMESTAMP || time > MAX_PLAUSIBLE_TIMESTAMP) {
++    throw new BackupValidationError(
++      `Fecha fuera del rango histórico admisible (2000-2100) en "${fieldName}": ${date.toISOString()}.`
++    );
 +  }
++
 +  return date;
-+}
-+
-+function recoverDateFields<T>(
-+  row: T,
-+  dateFieldNames: readonly string[],
-+  recordLabel: string
-+): T {
-+  const record = parseRecord(row, recordLabel);
-+  const result: Record<string, unknown> = { ...record };
-+
-+  for (const name of dateFieldNames) {
-+    const val = result[name];
-+    if (val !== undefined && val !== null) {
-+      result[name] = parseValidDate(val, `${recordLabel}.${name}`);
-+    }
-+  }
-+
-+  return result as T;
 +}
 +
 +function assertUniqueIds(rows: { id?: number }[], tableLabel: string): Set<number> {
@@ -618,8 +795,8 @@ index 0000000..437e423
 +
 +/**
 + * Valida la estructura, tipos, relaciones, fechas y reglas de negocio del respaldo.
-+ * Aplica compatibilidad hist├│rica no destructiva para esquemas v2 - v7 y
-+ * resuelve la seguridad temporal ante la restauraci├│n de partidos con cron├│metro en marcha.
++ * Aplica compatibilidad histórica no destructiva para esquemas v2 - v7 y
++ * resuelve la seguridad temporal ante la restauración de partidos.
 + */
 +export function validateAndNormalizeBackup(
 +  envelope: unknown,
@@ -635,17 +812,31 @@ index 0000000..437e423
 +
 +  if (root.version !== LOCAL_BACKUP_VERSION) {
 +    throw new BackupValidationError(
-+      `Versi├│n de formato de respaldo no soportada: ${String(root.version)}. Se esperaba versi├│n ${LOCAL_BACKUP_VERSION}.`
++      `Versión de formato de respaldo no soportada: ${String(root.version)}. Se esperaba versión ${LOCAL_BACKUP_VERSION}.`
 +    );
 +  }
 +
-+  const sourceSchema = typeof root.sourceSchemaVersion === 'number'
-+    ? root.sourceSchemaVersion
-+    : currentSchemaVersion;
-+
-+  if (sourceSchema > currentSchemaVersion) {
++  if (root.app !== 'ScoreBasket') {
 +    throw new BackupValidationError(
-+      `El respaldo proviene de una versi├│n de esquema posterior (${sourceSchema} > ${currentSchemaVersion}). Actualiza ScoreBasket antes de restaurar.`
++      `Aplicación no compatible: "${String(root.app)}". Se esperaba "ScoreBasket".`
++    );
++  }
++
++  parseValidDate(root.exportedAt, 'archivo.exportedAt', true);
++
++  if (
++    typeof root.sourceSchemaVersion !== 'number' ||
++    !Number.isInteger(root.sourceSchemaVersion) ||
++    root.sourceSchemaVersion < 1
++  ) {
++    throw new BackupValidationError(
++      `Versión de esquema origen inválida: "${String(root.sourceSchemaVersion)}".`
++    );
++  }
++
++  if (root.sourceSchemaVersion > currentSchemaVersion) {
++    throw new BackupValidationError(
++      `El respaldo proviene de una versión de esquema posterior (${root.sourceSchemaVersion} > ${currentSchemaVersion}). Actualiza ScoreBasket antes de restaurar.`
 +    );
 +  }
 +
@@ -657,83 +848,123 @@ index 0000000..437e423
 +  }
 +
 +  // 1. Deserializar fechas y normalizar modelos sin alterar campos originales
-+  const teams: Team[] = (rawData.teams as Team[]).map((row, idx) => {
-+    const recovered = recoverDateFields(row, ['createdAt', 'archivedAt'], `teams[${idx}]`);
++  const teams: Team[] = (rawData.teams as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `teams[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `teams[${idx}].createdAt`, true)!;
++    const archivedAt = parseValidDate(row.archivedAt, `teams[${idx}].archivedAt`, false);
++
++    if (typeof row.name !== 'string' || row.name.trim() === '') {
++      throw new BackupValidationError(`Nombre de equipo inválido en teams[${idx}].`);
++    }
++
 +    return {
-+      ...recovered,
-+      isArchived: recovered.isArchived ?? false
++      ...(row as unknown as Team),
++      createdAt,
++      ...(archivedAt ? { archivedAt } : {}),
++      isArchived: Boolean(row.isArchived ?? false)
 +    };
 +  });
 +
-+  const players: Player[] = (rawData.players as Player[]).map((row, idx) => {
-+    const recovered = recoverDateFields(row, ['createdAt', 'archivedAt'], `players[${idx}]`);
++  const players: Player[] = (rawData.players as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `players[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `players[${idx}].createdAt`, true)!;
++    const archivedAt = parseValidDate(row.archivedAt, `players[${idx}].archivedAt`, false);
++
++    if (typeof row.name !== 'string' || row.name.trim() === '') {
++      throw new BackupValidationError(`Nombre de jugador inválido en players[${idx}].`);
++    }
++
++    if (
++      row.number !== undefined &&
++      row.number !== null &&
++      (typeof row.number !== 'number' || !Number.isInteger(row.number) || row.number < 0)
++    ) {
++      throw new BackupValidationError(`Número de dorsal inválido en players[${idx}]: debe ser un entero >= 0.`);
++    }
++
 +    return {
-+      ...recovered,
-+      isArchived: recovered.isArchived ?? false
++      ...(row as unknown as Player),
++      createdAt,
++      ...(archivedAt ? { archivedAt } : {}),
++      isArchived: Boolean(row.isArchived ?? false)
 +    };
 +  });
 +
-+  const rawScores = rawData.scores as Score[];
-+  const rawFouls = rawData.fouls as Foul[];
++  const rawScores = rawData.scores as unknown[];
++  const rawFouls = rawData.fouls as unknown[];
 +
-+  const matches: Match[] = (rawData.matches as Match[]).map((row, idx) => {
-+    const recovered = recoverDateFields(
-+      row,
-+      ['createdAt', 'finishedAt', 'timerLastStart'],
-+      `matches[${idx}]`
-+    );
++  const matches: Match[] = (rawData.matches as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `matches[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `matches[${idx}].createdAt`, true)!;
++    const finishedAt = parseValidDate(row.finishedAt, `matches[${idx}].finishedAt`, false);
++    const timerLastStart = parseValidDate(row.timerLastStart, `matches[${idx}].timerLastStart`, false);
 +
 +    // Deserializar fechas anidadas en gameHistory
 +    let gameHistory: GameResult[] | undefined = undefined;
-+    if (recovered.gameHistory !== undefined) {
-+      if (!Array.isArray(recovered.gameHistory)) {
++    if (row.gameHistory !== undefined) {
++      if (!Array.isArray(row.gameHistory)) {
 +        throw new BackupValidationError(`matches[${idx}].gameHistory debe ser un arreglo de juegos.`);
 +      }
-+      gameHistory = recovered.gameHistory.map((game, gIdx) => {
-+        return recoverDateFields(game, ['finishedAt'], `matches[${idx}].gameHistory[${gIdx}]`);
++      gameHistory = row.gameHistory.map((rawGame, gIdx) => {
++        const game = parseRecord(rawGame, `matches[${idx}].gameHistory[${gIdx}]`);
++        const gameFinishedAt = parseValidDate(
++          game.finishedAt,
++          `matches[${idx}].gameHistory[${gIdx}].finishedAt`,
++          false
++        );
++        return {
++          ...(game as unknown as GameResult),
++          ...(gameFinishedAt ? { finishedAt: gameFinishedAt } : {})
++        };
 +      });
 +    }
 +
-+    // Compatibilidad hist├│rica para registros anteriores a v7
-+    let config = recovered.config;
++    // Compatibilidad histórica para registros anteriores a v7
++    let config = row.config as Match['config'] | undefined;
 +    if (!config) {
 +      config = {
 +        mode: 'traditional',
 +        traditional: {
-+          totalQuarters: recovered.totalQuarters || 4,
-+          minutesPerQuarter: recovered.quarterDuration || 10
++          totalQuarters: (row.totalQuarters as number) || 4,
++          minutesPerQuarter: (row.quarterDuration as number) || 10
 +        }
 +      };
 +    }
 +
-+    // Compatibilidad hist├│rica para marcadores desnormalizados anteriores a v6:
-+    // Si el registro legacy no conten├¡a localScore/visitorScore, agregamos desde scores y fouls del respaldo
-+    let localScore = recovered.localScore;
-+    let visitorScore = recovered.visitorScore;
-+    let localFouls = recovered.localFouls;
-+    let visitorFouls = recovered.visitorFouls;
++    // Compatibilidad histórica para marcadores desnormalizados anteriores a v6:
++    let localScore = row.localScore as number | undefined;
++    let visitorScore = row.visitorScore as number | undefined;
++    let localFouls = row.localFouls as number | undefined;
++    let visitorFouls = row.visitorFouls as number | undefined;
 +
-+    if (localScore === undefined && recovered.id !== undefined) {
-+      localScore = rawScores
-+        .filter(s => s.matchId === recovered.id && s.teamId === recovered.localTeamId)
-+        .reduce((acc, curr) => acc + (curr.points || 0), 0);
++    const rowId = row.id as number | undefined;
++    const localTeamId = row.localTeamId as number | undefined;
++    const visitorTeamId = row.visitorTeamId as number | undefined;
++
++    if (localScore === undefined && rowId !== undefined) {
++      localScore = (rawScores as Record<string, unknown>[])
++        .filter(s => s.matchId === rowId && s.teamId === localTeamId)
++        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
 +    }
-+    if (visitorScore === undefined && recovered.id !== undefined) {
-+      visitorScore = rawScores
-+        .filter(s => s.matchId === recovered.id && s.teamId === recovered.visitorTeamId)
-+        .reduce((acc, curr) => acc + (curr.points || 0), 0);
++    if (visitorScore === undefined && rowId !== undefined) {
++      visitorScore = (rawScores as Record<string, unknown>[])
++        .filter(s => s.matchId === rowId && s.teamId === visitorTeamId)
++        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
 +    }
-+    if (localFouls === undefined && recovered.id !== undefined) {
-+      localFouls = rawFouls
-+        .filter(f => f.matchId === recovered.id && f.teamId === recovered.localTeamId).length;
++    if (localFouls === undefined && rowId !== undefined) {
++      localFouls = (rawFouls as Record<string, unknown>[])
++        .filter(f => f.matchId === rowId && f.teamId === localTeamId).length;
 +    }
-+    if (visitorFouls === undefined && recovered.id !== undefined) {
-+      visitorFouls = rawFouls
-+        .filter(f => f.matchId === recovered.id && f.teamId === recovered.visitorTeamId).length;
++    if (visitorFouls === undefined && rowId !== undefined) {
++      visitorFouls = (rawFouls as Record<string, unknown>[])
++        .filter(f => f.matchId === rowId && f.teamId === visitorTeamId).length;
 +    }
 +
 +    const match: Match = {
-+      ...recovered,
++      ...(row as unknown as Match),
++      createdAt,
++      ...(finishedAt ? { finishedAt } : {}),
++      ...(timerLastStart ? { timerLastStart } : {}),
 +      config,
 +      ...(gameHistory !== undefined ? { gameHistory } : {}),
 +      localScore: localScore ?? 0,
@@ -742,34 +973,66 @@ index 0000000..437e423
 +      visitorFouls: visitorFouls ?? 0
 +    };
 +
-+    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS ACTIVOS:
-+    // Si el partido fue respaldado mientras el cron├│metro estaba corriendo (timerLastStart definido),
-+    // la referencia f├¡sica de reloj de la sesi├│n anterior no existe en la m├íquina o pesta├▒a destino.
-+    // Para evitar que la proyecci├│n temporal descuente horas/d├¡as acumulados y vac├¡e el cuarto a 00:00:
-+    // 1. Se detiene el cron├│metro preventivamente (timerLastStart = undefined).
-+    // 2. Se preservan intactos los segundos restantes exactos (timerSecondsRemaining).
-+    // 3. Se limpian los identificadores de pesta├▒a y contratos de lease obsoletos.
-+    // 4. Se establece `timerRecoveryState: 'recovery_required'` para que TraditionalEngine
-+    //    despliegue el panel de confirmaci├│n y ajuste manual del ├írbitro (Fase 2C C-29 / C-31).
-+    if (recovered.timerLastStart !== undefined && match.status !== 'finished') {
++    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS RESTAURADOS (R2-04):
++    // La sesión o pestaña que generó el respaldo es externa a la instancia receptora.
++    // 1. SIEMPRE invalidar autoridades efímeras de la sesión previa:
++    match.timerOwnerTabId = undefined;
++    match.timerLeaseExpiresAt = 0;
++    match.timerLockMode = undefined;
++
++    // 2. Estado de reloj según el estado deportivo del partido:
++    if (match.status === 'finished') {
 +      match.timerLastStart = undefined;
-+      match.timerOwnerTabId = undefined;
-+      match.timerLeaseExpiresAt = 0;
-+      match.timerLockMode = undefined;
-+      match.timerRecoveryState = 'recovery_required';
-+      match.timerRecoveryReason =
-+        'Partido restaurado desde respaldo con cron├│metro en marcha. Tiempo detenido preventivamente para evitar salto an├│malo.';
++      match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
++    } else {
++      // Partido activo ('playing', 'paused', 'created')
++      if (timerLastStart !== undefined) {
++        // Estaba corriendo: pausar preventivamente al tiempo exacto del respaldo
++        match.timerLastStart = undefined;
++        match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
++        match.timerRecoveryState = 'recovery_required';
++        match.timerRecoveryReason =
++          'Partido restaurado desde respaldo con cronómetro en marcha. Tiempo detenido preventivamente para evitar salto anómalo.';
++      } else {
++        // Estaba pausado: preservar tiempo y estado de recuperación previo
++        const remaining = match.timerSecondsRemaining ?? 0;
++        if (!Number.isFinite(remaining) || remaining < 0) {
++          match.timerSecondsRemaining = Math.max(0, Math.floor(remaining || 0));
++          match.timerRecoveryState = 'recovery_required';
++          match.timerRecoveryReason =
++            'Tiempo restante anómalo detectado en el respaldo. Ajuste y confirmación requeridos.';
++        } else {
++          match.timerSecondsRemaining = Math.floor(remaining);
++          if (row.timerRecoveryState === 'recovery_required') {
++            match.timerRecoveryState = 'recovery_required';
++            match.timerRecoveryReason =
++              (row.timerRecoveryReason as string) || 'Recuperación pendiente conservada desde el respaldo.';
++          } else {
++            match.timerRecoveryState = 'normal';
++          }
++        }
++      }
 +    }
 +
 +    return match;
 +  });
 +
-+  const scores: Score[] = rawScores.map((row, idx) => {
-+    return recoverDateFields(row, ['createdAt'], `scores[${idx}]`);
++  const scores: Score[] = (rawScores as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `scores[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `scores[${idx}].createdAt`, true)!;
++    return {
++      ...(row as unknown as Score),
++      createdAt
++    };
 +  });
 +
-+  const fouls: Foul[] = rawFouls.map((row, idx) => {
-+    return recoverDateFields(row, ['createdAt'], `fouls[${idx}]`);
++  const fouls: Foul[] = (rawFouls as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `fouls[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `fouls[${idx}].createdAt`, true)!;
++    return {
++      ...(row as unknown as Foul),
++      createdAt
++    };
 +  });
 +
 +  // 2. Unicidad e integridad de IDs primarios
@@ -782,17 +1045,17 @@ index 0000000..437e423
 +  const playerMap = new Map(players.map(p => [p.id!, p]));
 +  const matchMap = new Map(matches.map(m => [m.id!, m]));
 +
-+  // 3. Validaci├│n relacional de jugadores -> equipos
++  // 3. Validación relacional de jugadores -> equipos
 +  for (const player of players) {
 +    const teamId = parseValidId(player.teamId, `player[#${player.id}].teamId`);
 +    if (!teamIds.has(teamId)) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: el jugador "${player.name}" (#${player.id}) referencia al equipo inexistente #${teamId}.`
++        `Relación inválida: el jugador "${player.name}" (#${player.id}) referencia al equipo inexistente #${teamId}.`
 +      );
 +    }
 +  }
 +
-+  // 4. Validaci├│n de partidos
++  // 4. Validación de partidos
 +  const validStatuses = new Set(['created', 'playing', 'paused', 'finished']);
 +  for (const match of matches) {
 +    const localId = parseValidId(match.localTeamId, `match[#${match.id}].localTeamId`);
@@ -800,30 +1063,30 @@ index 0000000..437e423
 +
 +    if (!teamIds.has(localId)) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: el partido #${match.id} referencia a un equipo local inexistente (#${localId}).`
++        `Relación inválida: el partido #${match.id} referencia a un equipo local inexistente (#${localId}).`
 +      );
 +    }
 +    if (!teamIds.has(visitorId)) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: el partido #${match.id} referencia a un equipo visitante inexistente (#${visitorId}).`
++        `Relación inválida: el partido #${match.id} referencia a un equipo visitante inexistente (#${visitorId}).`
 +      );
 +    }
 +    if (localId === visitorId) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: el partido #${match.id} tiene al mismo equipo como local y visitante (#${localId}).`
++        `Relación inválida: el partido #${match.id} tiene al mismo equipo como local y visitante (#${localId}).`
 +      );
 +    }
 +
 +    if (!validStatuses.has(match.status)) {
 +      throw new BackupValidationError(
-+        `Estado deportivo inv├ílido en el partido #${match.id}: "${match.status}".`
++        `Estado deportivo inválido en el partido #${match.id}: "${match.status}".`
 +      );
 +    }
 +
 +    const configValidation = validateMatchConfig(match.config);
 +    if (!configValidation.isValid) {
 +      throw new BackupValidationError(
-+        `Configuraci├│n deportiva inv├ílida en el partido #${match.id}: ${configValidation.errors.join(', ')}.`
++        `Configuración deportiva inválida en el partido #${match.id}: ${configValidation.errors.join(', ')}.`
 +      );
 +    }
 +
@@ -835,7 +1098,7 @@ index 0000000..437e423
 +    ] as const) {
 +      if (typeof val !== 'number' || !Number.isSafeInteger(val) || val < 0) {
 +        throw new BackupValidationError(
-+          `Contador deportivo inv├ílido en partido #${match.id}: ${fieldName} debe ser un entero >= 0.`
++          `Contador deportivo inválido en partido #${match.id}: ${fieldName} debe ser un entero >= 0.`
 +        );
 +      }
 +    }
@@ -843,51 +1106,57 @@ index 0000000..437e423
 +    if (match.gameHistory) {
 +      for (let gIdx = 0; gIdx < match.gameHistory.length; gIdx++) {
 +        const gh = match.gameHistory[gIdx];
-+        if (typeof gh.gameNumber !== 'number' || gh.gameNumber < 1) {
-+          throw new BackupValidationError(`Historial inv├ílido en partido #${match.id}: gameNumber debe ser >= 1.`);
++        if (typeof gh.gameNumber !== 'number' || !Number.isInteger(gh.gameNumber) || gh.gameNumber < 1) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: gameNumber debe ser un entero >= 1.`);
 +        }
 +        if (!['local', 'visitor', 'tie'].includes(gh.winner)) {
-+          throw new BackupValidationError(`Historial inv├ílido en partido #${match.id}: ganador no reconocido.`);
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: ganador no reconocido.`);
++        }
++        if (typeof gh.localScore !== 'number' || !Number.isInteger(gh.localScore) || gh.localScore < 0) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: localScore debe ser un entero >= 0.`);
++        }
++        if (typeof gh.visitorScore !== 'number' || !Number.isInteger(gh.visitorScore) || gh.visitorScore < 0) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: visitorScore debe ser un entero >= 0.`);
 +        }
 +      }
 +    }
 +  }
 +
-+  // 5. Validaci├│n relacional de acciones (scores y fouls)
++  // 5. Validación relacional de acciones (scores y fouls)
 +  for (const score of scores) {
 +    const matchId = parseValidId(score.matchId, `score[#${score.id}].matchId`);
 +    if (!matchIds.has(matchId)) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: la anotaci├│n #${score.id} referencia a un partido inexistente (#${matchId}).`
++        `Relación inválida: la anotación #${score.id} referencia a un partido inexistente (#${matchId}).`
 +      );
 +    }
 +    const match = matchMap.get(matchId)!;
 +
 +    if (score.teamId !== match.localTeamId && score.teamId !== match.visitorTeamId) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: la anotaci├│n #${score.id} pertenece al equipo #${score.teamId}, que no participa en el partido #${matchId}.`
++        `Relación inválida: la anotación #${score.id} pertenece al equipo #${score.teamId}, que no participa en el partido #${matchId}.`
 +      );
 +    }
 +
 +    if (!Number.isSafeInteger(score.quarter) || score.quarter < 1) {
-+      throw new BackupValidationError(`Periodo inv├ílido en la anotaci├│n #${score.id}: debe ser un entero >= 1.`);
++      throw new BackupValidationError(`Periodo inválido en la anotación #${score.id}: debe ser un entero >= 1.`);
 +    }
 +
 +    if (![1, 2, 3].includes(score.points)) {
-+      throw new BackupValidationError(`Puntuaci├│n inv├ílida en la anotaci├│n #${score.id}: ${score.points} (debe ser 1, 2 o 3).`);
++      throw new BackupValidationError(`Puntuación inválida en la anotación #${score.id}: ${score.points} (debe ser 1, 2 o 3).`);
 +    }
 +
 +    if (score.playerId !== undefined && score.playerId !== null) {
 +      const playerId = parseValidId(score.playerId, `score[#${score.id}].playerId`);
 +      if (!playerIds.has(playerId)) {
 +        throw new BackupValidationError(
-+          `Relaci├│n inv├ílida: la anotaci├│n #${score.id} referencia al jugador inexistente #${playerId}.`
++          `Relación inválida: la anotación #${score.id} referencia al jugador inexistente #${playerId}.`
 +        );
 +      }
 +      const player = playerMap.get(playerId)!;
 +      if (player.teamId !== score.teamId) {
 +        throw new BackupValidationError(
-+          `Relaci├│n inv├ílida: la anotaci├│n #${score.id} asigna puntos al jugador #${playerId} que pertenece al equipo #${player.teamId}, pero la anotaci├│n es para el equipo #${score.teamId}.`
++          `Relación inválida: la anotación #${score.id} asigna puntos al jugador #${playerId} que pertenece al equipo #${player.teamId}, pero la anotación es para el equipo #${score.teamId}.`
 +        );
 +      }
 +    }
@@ -897,32 +1166,32 @@ index 0000000..437e423
 +    const matchId = parseValidId(foul.matchId, `foul[#${foul.id}].matchId`);
 +    if (!matchIds.has(matchId)) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: la falta #${foul.id} referencia a un partido inexistente (#${matchId}).`
++        `Relación inválida: la falta #${foul.id} referencia a un partido inexistente (#${matchId}).`
 +      );
 +    }
 +    const match = matchMap.get(matchId)!;
 +
 +    if (foul.teamId !== match.localTeamId && foul.teamId !== match.visitorTeamId) {
 +      throw new BackupValidationError(
-+        `Relaci├│n inv├ílida: la falta #${foul.id} pertenece al equipo #${foul.teamId}, que no participa en el partido #${matchId}.`
++        `Relación inválida: la falta #${foul.id} pertenece al equipo #${foul.teamId}, que no participa en el partido #${matchId}.`
 +      );
 +    }
 +
 +    if (!Number.isSafeInteger(foul.quarter) || foul.quarter < 1) {
-+      throw new BackupValidationError(`Periodo inv├ílido en la falta #${foul.id}: debe ser un entero >= 1.`);
++      throw new BackupValidationError(`Periodo inválido en la falta #${foul.id}: debe ser un entero >= 1.`);
 +    }
 +
 +    if (foul.playerId !== undefined && foul.playerId !== null) {
 +      const playerId = parseValidId(foul.playerId, `foul[#${foul.id}].playerId`);
 +      if (!playerIds.has(playerId)) {
 +        throw new BackupValidationError(
-+          `Relaci├│n inv├ílida: la falta #${foul.id} referencia al jugador inexistente #${playerId}.`
++          `Relación inválida: la falta #${foul.id} referencia al jugador inexistente #${playerId}.`
 +        );
 +      }
 +      const player = playerMap.get(playerId)!;
 +      if (player.teamId !== foul.teamId) {
 +        throw new BackupValidationError(
-+          `Relaci├│n inv├ílida: la falta #${foul.id} se registra para el jugador #${playerId} del equipo #${player.teamId}, pero la falta corresponde al equipo #${foul.teamId}.`
++          `Relación inválida: la falta #${foul.id} se registra para el jugador #${playerId} del equipo #${player.teamId}, pero la falta corresponde al equipo #${foul.teamId}.`
 +        );
 +      }
 +    }
@@ -1002,8 +1271,8 @@ index 0000000..437e423
 +
 +export const LocalBackupService = {
 +  /**
-+   * Exporta todos los registros de los 5 almacenes locales en una ├║nica
-+   * transacci├│n de lectura consistente, calculando un checksum SHA-256 est├índar.
++   * Exporta todos los registros de los 5 almacenes locales en una única
++   * transacción de lectura consistente, calculando un checksum SHA-256 estándar.
 +   */
 +  async exportJson(): Promise<string> {
 +    const data = await db.transaction(
@@ -1046,8 +1315,14 @@ index 0000000..437e423
 +
 +  /**
 +   * Dispara la descarga del archivo de respaldo en el navegador.
++   * Emplea desasociación asíncrona de URL para compatibilidad móvil
++   * e informa fehacientemente si la descarga fue iniciada.
 +   */
-+  async exportToFile(customFilename?: string): Promise<{ filename: string; counts: BackupCounts }> {
++  async exportToFile(customFilename?: string): Promise<{
++    filename: string;
++    counts: BackupCounts;
++    downloadInitiated: boolean;
++  }> {
 +    const json = await this.exportJson();
 +    const parsed = JSON.parse(json) as BackupEnvelope;
 +    const now = new Date();
@@ -1055,6 +1330,7 @@ index 0000000..437e423
 +    const defaultFilename = `scorebasket-backup-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`;
 +    const filename = customFilename || defaultFilename;
 +
++    let downloadInitiated = false;
 +    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
 +      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
 +      const url = URL.createObjectURL(blob);
@@ -1064,14 +1340,27 @@ index 0000000..437e423
 +      document.body.appendChild(a);
 +      a.click();
 +      document.body.removeChild(a);
-+      URL.revokeObjectURL(url);
++
++      // Desasociar URL de forma asíncrona para compatibilidad con navegadores móviles
++      setTimeout(() => {
++        try {
++          URL.revokeObjectURL(url);
++        } catch {
++          // Ignorar si ya fue revocado
++        }
++      }, 1500);
++      downloadInitiated = true;
 +    }
 +
-+    return { filename, counts: parsed.metadata.counts };
++    return {
++      filename,
++      counts: parsed.metadata.counts,
++      downloadInitiated
++    };
 +  },
 +
 +  /**
-+   * Comprueba si la base de datos local est├í completamente vac├¡a.
++   * Comprueba si la base de datos local está completamente vacía.
 +   */
 +  async isDatabaseEmpty(): Promise<boolean> {
 +    const counts = await Promise.all([
@@ -1099,10 +1388,10 @@ index 0000000..437e423
 +  },
 +
 +  /**
-+   * Restaura un respaldo JSON estrictamente sobre una base de datos vac├¡a.
-+   * Valida envelope, formato, checksum SHA-256, relaciones, fechas y modalidades
-+   * ANTES de escribir. La escritura es 100% transaccional y at├│mica; cualquier falla
-+   * provoca rollback total autom├ítico en IndexedDB.
++   * Restaura un respaldo JSON estrictamente sobre una base de datos vacía.
++   * Valida obligatoriedad y formato estricto del checksum SHA-256, coherencia
++   * del manifiesto, relaciones, fechas obligatorias y modalidades ANTES de escribir.
++   * La escritura es 100% transaccional y atómica; cualquier falla provoca rollback total.
 +   */
 +  async restoreIntoEmpty(
 +    rawJson: string,
@@ -1113,65 +1402,85 @@ index 0000000..437e423
 +    try {
 +      envelope = JSON.parse(rawJson);
 +    } catch {
-+      throw new BackupValidationError('El contenido provisto no es un JSON v├ílido.');
++      throw new BackupValidationError('El contenido provisto no es un JSON válido.');
 +    }
 +
-+    // 2. Verificar suma de integridad (checksum) si est├í presente
 +    const root = parseRecord(envelope, 'archivo');
-+    if (root.metadata && typeof root.metadata === 'object' && !Array.isArray(root.metadata)) {
-+      const meta = root.metadata as Record<string, unknown>;
-+      if (typeof meta.checksum === 'string' && root.data) {
-+        const serializedPayload = JSON.stringify(root.data);
-+        const actualChecksum = meta.checksum;
 +
-+        if (actualChecksum.startsWith('sha256:')) {
-+          const rawHash = actualChecksum.slice('sha256:'.length);
-+          const computed = await computeDataChecksum(serializedPayload);
-+          if (computed !== rawHash) {
-+            throw new BackupValidationError(
-+              'La suma de verificaci├│n SHA-256 no coincide con los datos del respaldo. El archivo est├í incompleto o fue alterado.'
-+            );
-+          }
-+        } else if (actualChecksum.startsWith('fnv1a:')) {
-+          // Compatibilidad con respaldos emitidos en versiones de desarrollo tempranas
-+          let hash = 0x811c9dc5;
-+          for (let i = 0; i < serializedPayload.length; i++) {
-+            hash ^= serializedPayload.charCodeAt(i);
-+            hash = Math.imul(hash, 0x01000193);
-+          }
-+          const computedFnv = `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-+          if (computedFnv !== actualChecksum) {
-+            throw new BackupValidationError(
-+              'La suma de verificaci├│n FNV-1a no coincide con los datos del respaldo.'
-+            );
-+          }
-+        } else {
-+          // Si el hash no tiene prefijo, se eval├║a contra SHA-256 directo
-+          const computed = await computeDataChecksum(serializedPayload);
-+          if (computed !== actualChecksum) {
-+            throw new BackupValidationError(
-+              'La suma de verificaci├│n del archivo no coincide con los datos. El archivo est├í corrupto o fue modificado externamente.'
-+            );
-+          }
-+        }
++    // 2. Validación obligatoria de metadatos y Checksum SHA-256 (R2-01, R2-05)
++    if (!root.metadata || typeof root.metadata !== 'object' || Array.isArray(root.metadata)) {
++      throw new BackupValidationError(
++        'El archivo de respaldo no incluye la sección obligatoria "metadata".'
++      );
++    }
++    const meta = root.metadata as Record<string, unknown>;
++
++    if (typeof meta.checksum !== 'string' || meta.checksum.trim() === '') {
++      throw new BackupValidationError(
++        'La suma de verificación (checksum) obligatoria está ausente o vacía en los metadatos del respaldo. No se permite restaurar respaldos sin verificar.'
++      );
++    }
++
++    if (meta.checksumAlgorithm !== 'SHA-256') {
++      throw new BackupValidationError(
++        `Algoritmo de suma de verificación no admitido: "${String(meta.checksumAlgorithm)}". Solo se admite "SHA-256".`
++      );
++    }
++
++    const CHECKSUM_PATTERN = /^sha256:[a-f0-9]{64}$/i;
++    if (!CHECKSUM_PATTERN.test(meta.checksum)) {
++      throw new BackupValidationError(
++        `Formato de suma de verificación inválido o malformado: "${meta.checksum}". Debe cumplir el formato "sha256:<64_hex>".`
++      );
++    }
++
++    // Validación de coherencia del manifiesto (R2-05)
++    if (!meta.counts || typeof meta.counts !== 'object' || Array.isArray(meta.counts)) {
++      throw new BackupValidationError(
++        'Los metadatos del manifiesto no contienen la sección "counts" con el conteo de tablas.'
++      );
++    }
++    const declaredCounts = meta.counts as Record<string, unknown>;
++    const rawDataObj = parseRecord(root.data, 'data');
++    for (const key of REQUIRED_TABLE_KEYS) {
++      const tableArr = rawDataObj[key];
++      if (!Array.isArray(tableArr)) {
++        throw new BackupValidationError(`Falta la tabla requerida "${key}" en los datos del respaldo.`);
 +      }
++      const declared = declaredCounts[key];
++      if (typeof declared !== 'number' || !Number.isInteger(declared) || declared !== tableArr.length) {
++        throw new BackupValidationError(
++          `Manifiesto inconsistente en la tabla "${key}": el conteo declarado (${String(declared)}) no coincide con la cantidad real de registros (${tableArr.length}).`
++        );
++      }
++    }
++
++    // Verificación criptográfica SHA-256 sobre el cuerpo de datos serializado
++    const expectedHash = meta.checksum.slice('sha256:'.length).toLowerCase();
++    const serializedPayload = JSON.stringify(root.data);
++    const computedHash = (await computeDataChecksum(serializedPayload)).toLowerCase();
++
++    if (computedHash !== expectedHash) {
++      throw new BackupValidationError(
++        'La suma de verificación SHA-256 no coincide con los datos del respaldo. El archivo está corrupto, truncado o fue alterado externamente.'
++      );
 +    }
 +
 +    // 3. Validar y normalizar los datos
 +    const normalizedData = validateAndNormalizeBackup(envelope, db.verno);
 +
-+    // 4. Verificaci├│n previa fuera de la transacci├│n
++    // 4. Verificación previa fuera de la transacción
 +    const preCheckEmpty = await this.isDatabaseEmpty();
 +    if (!preCheckEmpty) {
 +      throw new DatabaseNotEmptyError(
-+        'Restauraci├│n bloqueada: la base de datos local contiene datos existentes. ' +
-+        'Para evitar p├®rdida accidental de informaci├│n o sobreescritura, la restauraci├│n requiere una base de datos completamente vac├¡a.'
++        'Restauración bloqueada: la base de datos local contiene datos existentes. ' +
++        'Para evitar pérdida accidental de información o sobreescritura, la restauración requiere una base de datos completamente vacía.'
 +      );
 +    }
 +
-+    // 5. Escritura at├│mica en transacci├│n multi-tabla
++    // 5. Escritura atómica en transacción multi-tabla
 +    await db.transaction('rw', [db.teams, db.players, db.matches, db.scores, db.fouls], async () => {
-+      // Re-verificar vaciado dentro del bloqueo transaccional (protecci├│n contra carreras concurrentes)
++      // Re-verificar vaciado dentro del bloqueo transaccional (protección contra carreras concurrentes)
 +      const existing = await Promise.all([
 +        db.teams.count(),
 +        db.players.count(),
@@ -1181,11 +1490,11 @@ index 0000000..437e423
 +      ]);
 +      if (existing.some(c => c > 0)) {
 +        throw new DatabaseNotEmptyError(
-+          'Restauraci├│n bloqueada: se detectaron registros concurrentes en la base de datos local.'
++          'Restauración bloqueada: se detectaron registros concurrentes en la base de datos local.'
 +        );
 +      }
 +
-+      // Inserci├│n preservando identificadores originales
++      // Inserción preservando identificadores originales
 +      if (options?._faultInjectionAtTable === 'teams') {
 +        throw new Error('Simulated failure during teams bulkAdd');
 +      }
@@ -1253,10 +1562,10 @@ index 9c05b68..fc46a10 100644
          <MatchHistoryModal
 diff --git a/src/test/sb14-local-backup-preservation.test.ts b/src/test/sb14-local-backup-preservation.test.ts
 new file mode 100644
-index 0000000..ca36b47
+index 0000000..b7fc115
 --- /dev/null
 +++ b/src/test/sb14-local-backup-preservation.test.ts
-@@ -0,0 +1,1337 @@
+@@ -0,0 +1,1719 @@
 +// src/test/sb14-local-backup-preservation.test.ts
 +import { describe, it, expect, beforeEach } from 'vitest';
 +import { db } from '../db/db';
@@ -1269,13 +1578,64 @@ index 0000000..ca36b47
 +  LOCAL_BACKUP_VERSION,
 +  computePureSha256,
 +  computeDataChecksum,
-+  type BackupEnvelope
++  type BackupEnvelope,
++  type BackupData,
++  type BackupMetadata,
++  type BackupCounts
 +} from '../db/localBackup.service';
 +import { GameActionsRepository } from '../db/gameActions.repository';
 +import { MatchTimerService } from '../db/matchTimer.service';
 +import type { Match, Team, Player, Score, Foul } from '../db/models';
 +
-+describe('DB-F1: Conservaci├│n, Respaldo y Recuperaci├│n Local (QA-01 a QA-24)', () => {
++/**
++ * Función auxiliar para generar respaldos de prueba íntegros y válidos,
++ * calculando automáticamente los conteos del manifiesto y la suma SHA-256.
++ */
++async function buildTestBackup(
++  data: Partial<BackupData>,
++  metaOverrides?: Partial<BackupMetadata>,
++  rootOverrides?: Record<string, unknown>
++): Promise<string> {
++  const fullData: BackupData = {
++    teams: data.teams ?? [],
++    players: data.players ?? [],
++    matches: data.matches ?? [],
++    scores: data.scores ?? [],
++    fouls: data.fouls ?? []
++  };
++
++  const counts: BackupCounts = {
++    teams: fullData.teams.length,
++    players: fullData.players.length,
++    matches: fullData.matches.length,
++    scores: fullData.scores.length,
++    fouls: fullData.fouls.length
++  };
++
++  const serialized = JSON.stringify(fullData);
++  const rawHash = await computeDataChecksum(serialized);
++
++  const envelope = {
++    format: LOCAL_BACKUP_FORMAT,
++    version: LOCAL_BACKUP_VERSION,
++    app: 'ScoreBasket',
++    sourceSchemaVersion: 8,
++    exportedAt: new Date().toISOString(),
++    metadata: {
++      counts,
++      checksumAlgorithm: 'SHA-256',
++      checksum: `sha256:${rawHash}`,
++      generatedBy: 'ScoreBasket Test Helper',
++      ...metaOverrides
++    },
++    data: fullData,
++    ...rootOverrides
++  };
++
++  return JSON.stringify(envelope);
++}
++
++describe('DB-F1: Conservación, Respaldo y Recuperación Local (QA-01 a QA-38)', () => {
 +  beforeEach(async () => {
 +    await db.matches.clear();
 +    await db.teams.clear();
@@ -1284,8 +1644,8 @@ index 0000000..ca36b47
 +    await db.fouls.clear();
 +  });
 +
-+  // QA-01: Respaldo de base vac├¡a
-+  it('QA-01: Respaldo de base vac├¡a genera un envelope v├ílido y estructurado con contadores en cero', async () => {
++  // QA-01: Respaldo de base vacía
++  it('QA-01: Respaldo de base vacía genera un envelope válido y estructurado con contadores en cero', async () => {
 +    const json = await LocalBackupService.exportJson();
 +    expect(typeof json).toBe('string');
 +
@@ -1305,8 +1665,8 @@ index 0000000..ca36b47
 +    expect(envelope.data.matches).toEqual([]);
 +  });
 +
-+  // QA-02: Respaldo con m├║ltiples equipos y jugadores
-+  it('QA-02: Respaldo con m├║ltiples equipos y jugadores conserva todos los campos', async () => {
++  // QA-02: Respaldo con múltiples equipos y jugadores
++  it('QA-02: Respaldo con múltiples equipos y jugadores conserva todos los campos', async () => {
 +    const team1Id = (await db.teams.add({
 +      name: 'Lakers',
 +      createdAt: new Date('2026-01-01T10:00:00Z'),
@@ -1329,7 +1689,7 @@ index 0000000..ca36b47
 +
 +    const p2Id = (await db.players.add({
 +      name: 'Jayson Tatum',
-+      number: 0, // Dorsal cero (v├ílido en baloncesto)
++      number: 0, // Dorsal cero (válido en baloncesto)
 +      teamId: team2Id,
 +      createdAt: new Date('2026-01-01T11:05:00Z'),
 +      isArchived: false
@@ -1451,7 +1811,7 @@ index 0000000..ca36b47
 +  });
 +
 +  // QA-05: Respaldo de Best-of-Series con varios sets
-+  it('QA-05: Respaldo de Best-of-Series con varios sets conserva estad├¡sticas de serie completas', async () => {
++  it('QA-05: Respaldo de Best-of-Series con varios sets conserva estadísticas de serie completas', async () => {
 +    const team1Id = (await db.teams.add({ name: 'Series A', createdAt: new Date() })) as number;
 +    const team2Id = (await db.teams.add({ name: 'Series B', createdAt: new Date() })) as number;
 +
@@ -1509,47 +1869,39 @@ index 0000000..ca36b47
 +    expect(exportedMatch?.status).toBe('finished');
 +  });
 +
-+  // QA-06: Conservaci├│n de IDs originales
-+  it('QA-06: La restauraci├│n sobre base vac├¡a preserva exactamente los IDs primarios originales', async () => {
-+    const rawBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 1, matches: 1, scores: 1, fouls: 1 } },
-+      data: {
-+        teams: [
-+          { id: 42, name: 'Team 42', createdAt: '2026-01-01T00:00:00Z', isArchived: false },
-+          { id: 99, name: 'Team 99', createdAt: '2026-01-01T00:00:00Z', isArchived: false }
-+        ],
-+        players: [
-+          { id: 105, name: 'Player 105', number: 7, teamId: 42, createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        matches: [
-+          {
-+            id: 777,
-+            localTeamId: 42,
-+            visitorTeamId: 99,
-+            status: 'playing',
-+            createdAt: '2026-01-01T00:00:00Z',
-+            config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
-+            localScore: 3,
-+            visitorScore: 0,
-+            localFouls: 1,
-+            visitorFouls: 0
-+          }
-+        ],
-+        scores: [
-+          { id: 9001, matchId: 777, teamId: 42, playerId: 105, points: 3, quarter: 1, createdAt: '2026-01-01T00:01:00Z' }
-+        ],
-+        fouls: [
-+          { id: 8001, matchId: 777, teamId: 42, playerId: 105, quarter: 1, createdAt: '2026-01-01T00:02:00Z' }
-+        ]
-+      }
-+    };
++  // QA-06: Conservación de IDs originales
++  it('QA-06: La restauración sobre base vacía preserva exactamente los IDs primarios originales', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 42, name: 'Team 42', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 99, name: 'Team 99', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 105, name: 'Player 105', number: 7, teamId: 42, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 777,
++          localTeamId: 42,
++          visitorTeamId: 99,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 3,
++          visitorScore: 0,
++          localFouls: 1,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 9001, matchId: 777, teamId: 42, playerId: 105, points: 3, quarter: 1, createdAt: new Date('2026-01-01T00:01:00Z') }
++      ],
++      fouls: [
++        { id: 8001, matchId: 777, teamId: 42, playerId: 105, quarter: 1, createdAt: new Date('2026-01-01T00:02:00Z') }
++      ]
++    });
 +
-+    await LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup));
++    await LocalBackupService.restoreIntoEmpty(rawBackup);
 +
 +    const restoredTeam42 = await db.teams.get(42);
 +    expect(restoredTeam42?.name).toBe('Team 42');
@@ -1570,8 +1922,8 @@ index 0000000..ca36b47
 +    expect(restoredFoul?.matchId).toBe(777);
 +  });
 +
-+  // QA-07: Conservaci├│n de relaciones
-+  it('QA-07: Conservaci├│n de relaciones for├íneas entre equipos, jugadores, partidos y eventos', async () => {
++  // QA-07: Conservación de relaciones
++  it('QA-07: Conservación de relaciones foráneas entre equipos, jugadores, partidos y eventos', async () => {
 +    const tLocal = (await db.teams.add({ name: 'Alpha', createdAt: new Date() })) as number;
 +    const tVisitor = (await db.teams.add({ name: 'Beta', createdAt: new Date() })) as number;
 +    const player = (await db.players.add({ name: 'Shooter', teamId: tLocal, createdAt: new Date() })) as number;
@@ -1630,8 +1982,8 @@ index 0000000..ca36b47
 +    expect(rFoul?.playerId).toBe(rPlayer?.id);
 +  });
 +
-+  // QA-08: Conservaci├│n de jugadores archivados
-+  it('QA-08: Conservaci├│n de jugadores y equipos archivados con fecha archivedAt intacta', async () => {
++  // QA-08: Conservación de jugadores archivados
++  it('QA-08: Conservación de jugadores y equipos archivados con fecha archivedAt intacta', async () => {
 +    const archiveDate = new Date('2026-05-10T12:00:00Z');
 +    const teamId = (await db.teams.add({
 +      name: 'Archived Team',
@@ -1666,57 +2018,51 @@ index 0000000..ca36b47
 +    expect(restoredPlayer?.archivedAt instanceof Date).toBe(true);
 +  });
 +
-+  // QA-09: Conservaci├│n de fechas
++  // QA-09: Conservación de fechas
 +  it('QA-09: Las fechas se deserializan estrictamente como instancias nativas de Date (incluyendo fechas anidadas)', async () => {
-+    const rawBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 0, matches: 1, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [
-+          { id: 1, name: 'T1', createdAt: '2026-01-15T08:30:00.000Z' },
-+          { id: 2, name: 'T2', createdAt: '2026-01-15T08:35:00.000Z' }
-+        ],
-+        players: [],
-+        matches: [
-+          {
-+            id: 10,
-+            localTeamId: 1,
-+            visitorTeamId: 2,
-+            status: 'finished',
-+            createdAt: '2026-01-15T09:00:00.000Z',
-+            finishedAt: '2026-01-15T10:15:00.000Z',
-+            timerLastStart: '2026-01-15T10:10:00.000Z',
-+            config: { mode: 'race', race: { targetScore: 10, hasRematches: false, currentGame: 1 } },
-+            localScore: 10,
-+            visitorScore: 8,
-+            localFouls: 0,
-+            visitorFouls: 0,
-+            gameHistory: [
-+              {
-+                gameNumber: 1,
-+                localScore: 10,
-+                visitorScore: 8,
-+                winner: 'local',
-+                finishedAt: '2026-01-15T10:14:55.000Z'
-+              }
-+            ]
-+          }
-+        ],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-15T08:30:00.000Z'), archivedAt: new Date('2026-01-15T09:00:00.000Z'), isArchived: true },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-15T08:35:00.000Z'), isArchived: false }
++      ],
++      players: [],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-15T09:00:00.000Z'),
++          finishedAt: new Date('2026-01-15T10:15:00.000Z'),
++          config: { mode: 'race', race: { targetScore: 10, hasRematches: false, currentGame: 1 } },
++          localScore: 10,
++          visitorScore: 8,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 10,
++              visitorScore: 8,
++              winner: 'local',
++              finishedAt: new Date('2026-01-15T10:14:55.000Z')
++            }
++          ]
++        }
++      ],
++      scores: [],
++      fouls: []
++    });
 +
-+    await LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup));
++    await LocalBackupService.restoreIntoEmpty(rawBackup);
++
++    const team = (await db.teams.get(1))!;
++    expect(team.createdAt instanceof Date).toBe(true);
++    expect(team.archivedAt instanceof Date).toBe(true);
 +
 +    const match = (await db.matches.get(10))!;
 +    expect(match.createdAt instanceof Date).toBe(true);
 +    expect(match.finishedAt instanceof Date).toBe(true);
-+    expect(match.timerLastStart instanceof Date).toBe(true);
 +    expect(match.gameHistory?.[0].finishedAt instanceof Date).toBe(true);
 +    expect(match.createdAt.getTime()).toBe(new Date('2026-01-15T09:00:00.000Z').getTime());
 +    expect(match.gameHistory?.[0].finishedAt?.getTime()).toBe(
@@ -1724,8 +2070,8 @@ index 0000000..ca36b47
 +    );
 +  });
 +
-+  // QA-10: Conservaci├│n de marcadores y faltas
-+  it('QA-10: Conservaci├│n exacta de marcadores y faltas desnormalizados e hist├│ricos sin rec├ílculos', async () => {
++  // QA-10: Conservación de marcadores y faltas
++  it('QA-10: Conservación exacta de marcadores y faltas desnormalizados e históricos sin recálculos', async () => {
 +    const t1 = (await db.teams.add({ name: 'T1', createdAt: new Date() })) as number;
 +    const t2 = (await db.teams.add({ name: 'T2', createdAt: new Date() })) as number;
 +
@@ -1755,7 +2101,7 @@ index 0000000..ca36b47
 +  });
 +
 +  // QA-11: Rechazo de archivo malformado
-+  it('QA-11: Rechaza archivos corruptos, JSON inv├ílido o con suma de verificaci├│n (checksum) alterada', async () => {
++  it('QA-11: Rechaza archivos corruptos, JSON inválido o con suma de verificación (checksum) alterada', async () => {
 +    // 1. JSON no parseable
 +    await expect(LocalBackupService.restoreIntoEmpty('{ not a valid json: ...'))
 +      .rejects.toThrow(BackupValidationError);
@@ -1770,107 +2116,65 @@ index 0000000..ca36b47
 +    envelope.metadata.checksum = 'tampered_or_invalid_checksum_hash';
 +
 +    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(envelope)))
-+      .rejects.toThrow(/checksum|suma de verificaci├│n/i);
++      .rejects.toThrow(/checksum|suma de verificación/i);
 +  });
 +
-+  // QA-12: Rechazo de respaldo de versi├│n incompatible sin p├®rdida de datos
++  // QA-12: Rechazo de respaldo de versión incompatible sin pérdida de datos
 +  it('QA-12: Rechaza respaldos generados por esquemas posteriores sin tocar la base local', async () => {
-+    const futureEnvelope = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 999, // Esquema futuro no compatible
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 0, players: 0, matches: 0, scores: 0, fouls: 0 } },
-+      data: { teams: [], players: [], matches: [], scores: [], fouls: [] }
-+    };
++    const futureEnvelope = await buildTestBackup({}, undefined, { sourceSchemaVersion: 999 });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(futureEnvelope)))
-+      .rejects.toThrow(/versi├│n de esquema posterior/i);
++    await expect(LocalBackupService.restoreIntoEmpty(futureEnvelope))
++      .rejects.toThrow(/versión de esquema posterior/i);
 +  });
 +
 +  // QA-13: Rechazo de IDs duplicados
-+  it('QA-13: Rechaza respaldos que contengan IDs duplicados en cualquier almac├®n', async () => {
-+    const envelopeDuplicateTeams = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 0, matches: 0, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [
-+          { id: 1, name: 'Team One', createdAt: '2026-01-01T00:00:00Z' },
-+          { id: 1, name: 'Team Duplicate', createdAt: '2026-01-01T00:00:00Z' } // ID 1 duplicado
-+        ],
-+        players: [],
-+        matches: [],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++  it('QA-13: Rechaza respaldos que contengan IDs duplicados en cualquier almacén', async () => {
++    const envelopeDuplicateTeams = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 1, name: 'Team Duplicate', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ]
++    });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(envelopeDuplicateTeams)))
++    await expect(LocalBackupService.restoreIntoEmpty(envelopeDuplicateTeams))
 +      .rejects.toThrow(/ID duplicado/i);
 +  });
 +
-+  // QA-14: Detecci├│n de relaciones inv├ílidas
-+  it('QA-14: Rechaza respaldos con relaciones for├íneas rotas o hu├®rfanas', async () => {
++  // QA-14: Detección de relaciones inválidas
++  it('QA-14: Rechaza respaldos con relaciones foráneas rotas o huérfanas', async () => {
 +    // Jugador referencia a un equipo inexistente
-+    const brokenPlayer = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 1, players: 1, matches: 0, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [{ id: 1, name: 'Valid Team', createdAt: '2026-01-01T00:00:00Z' }],
-+        players: [{ id: 10, name: 'Orphan Player', teamId: 999, createdAt: '2026-01-01T00:00:00Z' }],
-+        matches: [],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++    const brokenPlayer = await buildTestBackup({
++      teams: [{ id: 1, name: 'Valid Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 10, name: 'Orphan Player', number: 5, teamId: 999, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(brokenPlayer)))
-+      .rejects.toThrow(/Relaci├│n inv├ílida.*inexistente/i);
++    await expect(LocalBackupService.restoreIntoEmpty(brokenPlayer))
++      .rejects.toThrow(/Relación inválida.*inexistente/i);
 +
 +    // Partido con mismo equipo local y visitante
-+    const sameTeamMatch = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 1, players: 0, matches: 1, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [{ id: 1, name: 'Team One', createdAt: '2026-01-01T00:00:00Z' }],
-+        players: [],
-+        matches: [
-+          {
-+            id: 5,
-+            localTeamId: 1,
-+            visitorTeamId: 1, // Mismo equipo
-+            status: 'playing',
-+            createdAt: '2026-01-01T00:00:00Z',
-+            config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
-+            localScore: 0,
-+            visitorScore: 0,
-+            localFouls: 0,
-+            visitorFouls: 0
-+          }
-+        ],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++    const sameTeamMatch = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      matches: [
++        {
++          id: 5,
++          localTeamId: 1,
++          visitorTeamId: 1, // Mismo equipo
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(sameTeamMatch)))
++    await expect(LocalBackupService.restoreIntoEmpty(sameTeamMatch))
 +      .rejects.toThrow(/mismo equipo/i);
 +  });
 +
-+  // QA-15: Rechazo de restauraci├│n sobre una base no vac├¡a
++  // QA-15: Rechazo de restauración sobre una base no vacía
 +  it('QA-15: Rechaza terminantemente restaurar sobre una base de datos que ya contiene registros', async () => {
 +    // Insertar un equipo preexistente
 +    await db.teams.add({ name: 'Existing Team', createdAt: new Date() });
@@ -1881,52 +2185,44 @@ index 0000000..ca36b47
 +      .rejects.toThrow(DatabaseNotEmptyError);
 +  });
 +
-+  // QA-16: Rollback de una restauraci├│n que falla durante su ejecuci├│n
-+  it('QA-16: Atomicidad transaccional: una falla durante la restauraci├│n revierte todas las tablas al estado vac├¡o', async () => {
-+    const rawBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 1, matches: 1, scores: 1, fouls: 1 } },
-+      data: {
-+        teams: [
-+          { id: 1, name: 'Team A', createdAt: '2026-01-01T00:00:00Z' },
-+          { id: 2, name: 'Team B', createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        players: [
-+          { id: 10, name: 'Player A1', teamId: 1, createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        matches: [
-+          {
-+            id: 100,
-+            localTeamId: 1,
-+            visitorTeamId: 2,
-+            status: 'playing',
-+            createdAt: '2026-01-01T00:00:00Z',
-+            config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
-+            localScore: 2,
-+            visitorScore: 0,
-+            localFouls: 0,
-+            visitorFouls: 0
-+          }
-+        ],
-+        scores: [
-+          { id: 500, matchId: 100, teamId: 1, playerId: 10, points: 2, quarter: 1, createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        fouls: []
-+      }
-+    };
++  // QA-16: Rollback de una restauración que falla durante su ejecución
++  it('QA-16: Atomicidad transaccional: una falla durante la restauración revierte todas las tablas al estado vacío', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Team A', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'Team B', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 10, name: 'Player A1', number: 10, teamId: 1, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 100,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 2,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 500, matchId: 100, teamId: 1, playerId: 10, points: 2, quarter: 1, createdAt: new Date('2026-01-01T00:00:00Z') }
++      ],
++      fouls: []
++    });
 +
 +    // Forzar fallo simulado al insertar scores
 +    await expect(
-+      LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup), {
++      LocalBackupService.restoreIntoEmpty(rawBackup, {
 +        _faultInjectionAtTable: 'scores'
 +      })
 +    ).rejects.toThrow(/Simulated failure/);
 +
-+    // Verificar que NADA qued├│ grabado en la base (rollback total)
++    // Verificar que NADA quedó grabado en la base (rollback total)
 +    const teamsCount = await db.teams.count();
 +    const playersCount = await db.players.count();
 +    const matchesCount = await db.matches.count();
@@ -1938,49 +2234,41 @@ index 0000000..ca36b47
 +    expect(scoresCount).toBe(0);
 +  });
 +
-+  // QA-17: Restauraci├│n completa en una base vac├¡a
-+  it('QA-17: Restauraci├│n completa en base vac├¡a pobla las cinco tablas y retorna contadores exactos', async () => {
-+    const rawBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 2, matches: 1, scores: 2, fouls: 1 } },
-+      data: {
-+        teams: [
-+          { id: 1, name: 'Warriors', createdAt: '2026-01-01T00:00:00Z' },
-+          { id: 2, name: 'Rockets', createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        players: [
-+          { id: 30, name: 'Curry', number: 30, teamId: 1, createdAt: '2026-01-01T00:00:00Z' },
-+          { id: 13, name: 'Harden', number: 13, teamId: 2, createdAt: '2026-01-01T00:00:00Z' }
-+        ],
-+        matches: [
-+          {
-+            id: 50,
-+            localTeamId: 1,
-+            visitorTeamId: 2,
-+            status: 'playing',
-+            createdAt: '2026-01-01T00:00:00Z',
-+            config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 12 } },
-+            localScore: 5,
-+            visitorScore: 0,
-+            localFouls: 1,
-+            visitorFouls: 0
-+          }
-+        ],
-+        scores: [
-+          { id: 101, matchId: 50, teamId: 1, playerId: 30, points: 3, quarter: 1, createdAt: '2026-01-01T00:01:00Z' },
-+          { id: 102, matchId: 50, teamId: 1, playerId: 30, points: 2, quarter: 1, createdAt: '2026-01-01T00:02:00Z' }
-+        ],
-+        fouls: [
-+          { id: 201, matchId: 50, teamId: 1, playerId: 30, quarter: 1, createdAt: '2026-01-01T00:03:00Z' }
-+        ]
-+      }
-+    };
++  // QA-17: Restauración completa en una base vacía
++  it('QA-17: Restauración completa en base vacía pobla las cinco tablas y retorna contadores exactos', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Warriors', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'Rockets', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 30, name: 'Curry', number: 30, teamId: 1, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 13, name: 'Harden', number: 13, teamId: 2, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 50,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 12 } },
++          localScore: 5,
++          visitorScore: 0,
++          localFouls: 1,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 101, matchId: 50, teamId: 1, playerId: 30, points: 3, quarter: 1, createdAt: new Date('2026-01-01T00:01:00Z') },
++        { id: 102, matchId: 50, teamId: 1, playerId: 30, points: 2, quarter: 1, createdAt: new Date('2026-01-01T00:02:00Z') }
++      ],
++      fouls: [
++        { id: 201, matchId: 50, teamId: 1, playerId: 30, quarter: 1, createdAt: new Date('2026-01-01T00:03:00Z') }
++      ]
++    });
 +
-+    const counts = await LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup));
++    const counts = await LocalBackupService.restoreIntoEmpty(rawBackup);
 +
 +    expect(counts).toEqual({
 +      teams: 2,
@@ -2012,7 +2300,10 @@ index 0000000..ca36b47
 +      localScore: 3,
 +      visitorScore: 0,
 +      localFouls: 0,
-+      visitorFouls: 0
++      visitorFouls: 0,
++      timerSecondsRemaining: 600,
++      timerLeaseExpiresAt: 0,
++      timerRecoveryState: 'normal'
 +    })) as number;
 +
 +    await db.scores.add({
@@ -2049,19 +2340,13 @@ index 0000000..ca36b47
 +    expect(restoredScores).toEqual(initialScores);
 +  });
 +
-+  // QA-19: Compatibilidad con registros de distintas versiones hist├│ricas
-+  it('QA-19: Adapta registros hist├│ricos de esquemas anteriores (v2 a v6) sin config ni isArchived', async () => {
-+    const legacyBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 6, // Versi├│n anterior a v7 (sin config unificada)
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 2, players: 0, matches: 1, scores: 0, fouls: 0 } },
-+      data: {
++  // QA-19: Compatibilidad con registros de distintas versiones históricas
++  it('QA-19: Adapta registros históricos de esquemas anteriores (v2 a v6) sin config ni isArchived', async () => {
++    const legacyBackup = await buildTestBackup(
++      {
 +        teams: [
-+          { id: 1, name: 'Legacy Team 1', createdAt: '2025-01-01T00:00:00Z' }, // Sin isArchived
-+          { id: 2, name: 'Legacy Team 2', createdAt: '2025-01-01T00:00:00Z' }
++          { id: 1, name: 'Legacy Team 1', createdAt: new Date('2025-01-01T00:00:00Z') } as unknown as Team,
++          { id: 2, name: 'Legacy Team 2', createdAt: new Date('2025-01-01T00:00:00Z') } as unknown as Team
 +        ],
 +        players: [],
 +        matches: [
@@ -2070,7 +2355,7 @@ index 0000000..ca36b47
 +            localTeamId: 1,
 +            visitorTeamId: 2,
 +            status: 'playing',
-+            createdAt: '2025-01-01T00:00:00Z',
++            createdAt: new Date('2025-01-01T00:00:00Z'),
 +            totalQuarters: 4,
 +            quarterDuration: 10,
 +            localScore: 10,
@@ -2078,14 +2363,16 @@ index 0000000..ca36b47
 +            localFouls: 2,
 +            visitorFouls: 1
 +            // Sin config (esquema v6)
-+          }
++          } as unknown as Match
 +        ],
 +        scores: [],
 +        fouls: []
-+      }
-+    };
++      },
++      undefined,
++      { sourceSchemaVersion: 6 }
++    );
 +
-+    await LocalBackupService.restoreIntoEmpty(JSON.stringify(legacyBackup));
++    await LocalBackupService.restoreIntoEmpty(legacyBackup);
 +
 +    const team = (await db.teams.get(1))!;
 +    expect(team.isArchived).toBe(false);
@@ -2109,7 +2396,7 @@ index 0000000..ca36b47
 +    expect(typeof requested).toBe('boolean');
 +  });
 +
-+  // QA-21: Restauraci├│n y funcionamiento posterior de un partido
++  // QA-21: Restauración y funcionamiento posterior de un partido
 +  it('QA-21: Un partido restaurado puede ser continuado y modificado por los servicios deportivos del sistema', async () => {
 +    const tLocal = (await db.teams.add({ name: 'Active T1', createdAt: new Date() })) as number;
 +    const tVisitor = (await db.teams.add({ name: 'Active T2', createdAt: new Date() })) as number;
@@ -2147,7 +2434,7 @@ index 0000000..ca36b47
 +
 +    await LocalBackupService.restoreIntoEmpty(json);
 +
-+    // Ahora eliminamos la acci├│n del partido restaurado usando GameActionsRepository
++    // Ahora eliminamos la acción del partido restaurado usando GameActionsRepository
 +    const deleteResult = await GameActionsRepository.deleteActionSafely({
 +      matchId,
 +      actionId: scoreId,
@@ -2161,8 +2448,8 @@ index 0000000..ca36b47
 +    expect(updatedMatch.localScore).toBe(0);
 +  });
 +
-+  // QA-22: Ninguna modificaci├│n accidental a resultados deportivos
-+  it('QA-22: Los resultados hist├│ricos cerrados, empates o victorias de sets no sufren mutaci├│n', async () => {
++  // QA-22: Ninguna modificación accidental a resultados deportivos
++  it('QA-22: Los resultados históricos cerrados, empates o victorias de sets no sufren mutación', async () => {
 +    const t1 = (await db.teams.add({ name: 'T1', createdAt: new Date() })) as number;
 +    const t2 = (await db.teams.add({ name: 'T2', createdAt: new Date() })) as number;
 +
@@ -2204,28 +2491,16 @@ index 0000000..ca36b47
 +  });
 +
 +  // QA-23: Pruebas de concurrencia y bloqueo entre operaciones
-+  it('QA-23: Concurrencia: la restauraci├│n detecta inserciones concurrentes en el momento de la transacci├│n y aborta limpiamente', async () => {
-+    const rawBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [{ id: 1, name: 'Team One', createdAt: '2026-01-01T00:00:00Z' }],
-+        players: [],
-+        matches: [],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++  it('QA-23: Concurrencia: la restauración detecta inserciones concurrentes en el momento de la transacción y aborta limpiamente', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
 +
-+    // Verificamos que si se inserta un equipo concurrentemente antes de la transacci├│n,
++    // Verificamos que si se inserta un equipo concurrentemente antes de la transacción,
 +    // restoreIntoEmpty rechaza con DatabaseNotEmptyError
 +    await db.teams.add({ name: 'Concurrent Inserted Team', createdAt: new Date() });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup)))
++    await expect(LocalBackupService.restoreIntoEmpty(rawBackup))
 +      .rejects.toThrow(DatabaseNotEmptyError);
 +  });
 +
@@ -2325,7 +2600,7 @@ index 0000000..ca36b47
 +    const exportTime = performance.now() - startExport;
 +
 +    expect(json.length).toBeGreaterThan(100000); // > 100 KB
-+    expect(exportTime).toBeLessThan(5000); // Debe exportar r├ípidamente
++    expect(exportTime).toBeLessThan(5000); // Debe exportar rápidamente
 +
 +    // Vaciar y restaurar
 +    await db.matches.clear();
@@ -2352,9 +2627,9 @@ index 0000000..ca36b47
 +    expect(await db.fouls.count()).toBe(300);
 +  });
 +
-+  // QA-25: Adversarial - Integridad Criptogr├ífica SHA-256 (FIPS 180-4 y Tampering)
-+  it('QA-25: Integridad Criptogr├ífica SHA-256 cumple vectores NIST FIPS 180-4 y detecta tampering de 1 byte', async () => {
-+    // Vector 1: Cadena vac├¡a
++  // QA-25: Adversarial - Integridad Criptográfica SHA-256 (FIPS 180-4 y Tampering)
++  it('QA-25: Integridad Criptográfica SHA-256 cumple vectores NIST FIPS 180-4 y detecta tampering de 1 byte', async () => {
++    // Vector 1: Cadena vacía
 +    const emptySha = computePureSha256(new TextEncoder().encode(''));
 +    expect(emptySha).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
 +
@@ -2372,7 +2647,7 @@ index 0000000..ca36b47
 +    const computedData = await computeDataChecksum('abc');
 +    expect(computedData).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 +
-+    // Tampering test: exportar base con un equipo, alterar un solo car├ícter en el payload
++    // Tampering test: exportar base con un equipo, alterar un solo carácter en el payload
 +    await db.teams.add({ name: 'Equipo Original', createdAt: new Date() });
 +    const json = await LocalBackupService.exportJson();
 +    await db.teams.clear();
@@ -2393,12 +2668,12 @@ index 0000000..ca36b47
 +    );
 +  });
 +
-+  // QA-26: Adversarial - Recuperaci├│n Temporal de Partidos Activos en Tr├ínsito
-+  it('QA-26: Recuperaci├│n de partidos activos en tr├ínsito: detiene reloj, previene salto temporal y limpia autorizaciones obsoletas', async () => {
++  // QA-26: Adversarial - Recuperación Temporal de Partidos Activos en Tránsito
++  it('QA-26: Recuperación de partidos activos en tránsito: detiene reloj, previene salto temporal y limpia autorizaciones obsoletas', async () => {
 +    const t1 = (await db.teams.add({ name: 'Local Activo', createdAt: new Date() })) as number;
 +    const t2 = (await db.teams.add({ name: 'Visitante Activo', createdAt: new Date() })) as number;
 +
-+    // Partido en juego iniciado hace 15 minutos en otra m├íquina / pesta├▒a
++    // Partido en juego iniciado hace 15 minutos en otra máquina / pestaña
 +    const matchId = (await db.matches.add({
 +      localTeamId: t1,
 +      visitorTeamId: t2,
@@ -2410,7 +2685,7 @@ index 0000000..ca36b47
 +      },
 +      currentQuarter: 1,
 +      timerSecondsRemaining: 480, // Quedan 8:00
-+      timerLastStart: new Date(Date.now() - 900000), // Empez├│ hace 15 minutos (900 s)
++      timerLastStart: new Date(Date.now() - 900000), // Empezó hace 15 minutos (900 s)
 +      timerOwnerTabId: 'zombie-tab-999',
 +      timerLeaseExpiresAt: Date.now() - 60000, // Lease expirado
 +      timerEpoch: 4,
@@ -2424,21 +2699,21 @@ index 0000000..ca36b47
 +    await db.matches.clear();
 +    await db.teams.clear();
 +
-+    // Restauramos en una base vac├¡a
++    // Restauramos en una base vacía
 +    await LocalBackupService.restoreIntoEmpty(json);
 +
 +    const restored = (await db.matches.get(matchId))!;
 +    expect(restored).toBeDefined();
 +
-+    // 1. El temporizador debe pausarse preventivamente para evitar salto an├│malo (no descontar 900s)
++    // 1. El temporizador debe pausarse preventivamente para evitar salto anómalo (no descontar 900s)
 +    expect(restored.timerLastStart).toBeUndefined();
 +    expect(restored.timerSecondsRemaining).toBe(480); // Exactamente los 8 minutos preservados
 +
-+    // 2. La autorizaci├│n obsoleta de pesta├▒a debe limpiarse
++    // 2. La autorización obsoleta de pestaña debe limpiarse
 +    expect(restored.timerOwnerTabId).toBeUndefined();
 +    expect(restored.timerLeaseExpiresAt).toBe(0);
 +
-+    // 3. El estado de recuperaci├│n debe quedar en 'recovery_required'
++    // 3. El estado de recuperación debe quedar en 'recovery_required'
 +    expect(restored.timerRecoveryState).toBe('recovery_required');
 +    expect(restored.timerRecoveryReason).toContain('detenido preventivamente');
 +
@@ -2452,7 +2727,7 @@ index 0000000..ca36b47
 +  });
 +
 +  // QA-27: Adversarial - Continuidad del Generador de Claves Auto-incrementales tras Restaurar
-+  it('QA-27: Continuidad de claves: tras restaurar registros con IDs expl├¡citos, db.table.add() genera el siguiente ID sin colisi├│n', async () => {
++  it('QA-27: Continuidad de claves: tras restaurar registros con IDs explícitos, db.table.add() genera el siguiente ID sin colisión', async () => {
 +    // Respaldo con equipos en IDs no contiguos: 10 y 5000
 +    const rawBackup = {
 +      format: LOCAL_BACKUP_FORMAT,
@@ -2486,16 +2761,16 @@ index 0000000..ca36b47
 +    expect(await db.teams.get(10)).toBeDefined();
 +    expect(await db.teams.get(5000)).toBeDefined();
 +
-+    // Insertar un nuevo equipo mediante db.teams.add() sin ID expl├¡cito
++    // Insertar un nuevo equipo mediante db.teams.add() sin ID explícito
 +    const nextId = (await db.teams.add({
 +      name: 'Team Cinco Mil Uno',
 +      createdAt: new Date(),
 +      isArchived: false
 +    })) as number;
 +
-+    // Seg├║n la especificaci├│n W3C de IndexedDB (3.1.5 Key Generators),
++    // Según la especificación W3C de IndexedDB (3.1.5 Key Generators),
 +    // el generador avanza a max(restoredId) + 1, garantizando que nunca
-+    // colisione con registros restaurados con IDs expl├¡citos.
++    // colisione con registros restaurados con IDs explícitos.
 +    expect(nextId).toBeGreaterThan(5000);
 +    expect(nextId).toBe(5001);
 +
@@ -2504,57 +2779,49 @@ index 0000000..ca36b47
 +  });
 +
 +  // QA-28: Adversarial - Compatibilidad con Esquemas Legacy v2 a v5
-+  it('QA-28: Compatibilidad legacy: reconstruye marcadores, faltas y configuraci├│n por defecto en esquemas antiguos v2 a v5', async () => {
-+    const rawLegacyBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 3, // Legacy schema v3
-+      exportedAt: '2024-05-01T12:00:00Z',
-+      metadata: {
-+        counts: { teams: 2, players: 0, matches: 1, scores: 3, fouls: 2 }
-+      },
-+      data: {
++  it('QA-28: Compatibilidad legacy: reconstruye marcadores, faltas y configuración por defecto en esquemas antiguos v2 a v5', async () => {
++    const rawLegacyBackup = await buildTestBackup(
++      {
 +        teams: [
-+          { id: 1, name: 'Legacy Local', createdAt: '2024-05-01T10:00:00Z' },
-+          { id: 2, name: 'Legacy Visitor', createdAt: '2024-05-01T10:00:00Z' }
++          { id: 1, name: 'Legacy Local', createdAt: new Date('2024-05-01T10:00:00Z'), isArchived: false },
++          { id: 2, name: 'Legacy Visitor', createdAt: new Date('2024-05-01T10:00:00Z'), isArchived: false }
 +        ],
-+        players: [],
 +        matches: [
 +          {
 +            id: 100,
 +            localTeamId: 1,
 +            visitorTeamId: 2,
 +            status: 'playing',
-+            createdAt: '2024-05-01T10:30:00Z',
-+            // En v2-v5 no exist├¡an localScore, visitorScore, localFouls, visitorFouls ni config
++            createdAt: new Date('2024-05-01T10:30:00Z'),
 +            timerSecondsRemaining: 300
-+          }
++          } as unknown as Match
 +        ],
 +        scores: [
-+          { id: 1, matchId: 100, teamId: 1, points: 2, quarter: 1, createdAt: '2024-05-01T10:32:00Z' },
-+          { id: 2, matchId: 100, teamId: 1, points: 3, quarter: 1, createdAt: '2024-05-01T10:34:00Z' },
-+          { id: 3, matchId: 100, teamId: 2, points: 2, quarter: 1, createdAt: '2024-05-01T10:35:00Z' }
++          { id: 1, matchId: 100, teamId: 1, points: 2, quarter: 1, createdAt: new Date('2024-05-01T10:32:00Z') },
++          { id: 2, matchId: 100, teamId: 1, points: 3, quarter: 1, createdAt: new Date('2024-05-01T10:34:00Z') },
++          { id: 3, matchId: 100, teamId: 2, points: 2, quarter: 1, createdAt: new Date('2024-05-01T10:35:00Z') }
 +        ],
 +        fouls: [
-+          { id: 1, matchId: 100, teamId: 1, quarter: 1, createdAt: '2024-05-01T10:33:00Z' },
-+          { id: 2, matchId: 100, teamId: 2, quarter: 1, createdAt: '2024-05-01T10:36:00Z' }
++          { id: 1, matchId: 100, teamId: 1, quarter: 1, createdAt: new Date('2024-05-01T10:33:00Z') },
++          { id: 2, matchId: 100, teamId: 2, quarter: 1, createdAt: new Date('2024-05-01T10:36:00Z') }
 +        ]
-+      }
-+    };
++      },
++      undefined,
++      { sourceSchemaVersion: 3 }
++    );
 +
-+    await LocalBackupService.restoreIntoEmpty(JSON.stringify(rawLegacyBackup));
++    await LocalBackupService.restoreIntoEmpty(rawLegacyBackup);
 +
 +    const restoredMatch = (await db.matches.get(100))!;
 +    expect(restoredMatch).toBeDefined();
 +
-+    // Reconstrucci├│n determinista de contadores deportivos
++    // Reconstrucción determinista de contadores deportivos
 +    expect(restoredMatch.localScore).toBe(5); // 2 + 3
 +    expect(restoredMatch.visitorScore).toBe(2); // 2
 +    expect(restoredMatch.localFouls).toBe(1);
 +    expect(restoredMatch.visitorFouls).toBe(1);
 +
-+    // Configuraci├│n por defecto a tradicional
++    // Configuración por defecto a tradicional
 +    expect(restoredMatch.config).toBeDefined();
 +    expect(restoredMatch.config.mode).toBe('traditional');
 +
@@ -2562,28 +2829,15 @@ index 0000000..ca36b47
 +    expect(restoredMatch.eventsProvenance).toBeUndefined();
 +  });
 +
-+  // QA-29: Adversarial - Rollback At├│mico Multialmac├®n ante Fallo en Restauraci├│n
-+  it('QA-29: Rollback multialmac├®n: si los datos son inv├ílidos, ning├║n registro queda escrito en ninguna tabla', async () => {
-+    // Backup con una violaci├│n relacional (un jugador apunta a un equipo inexistente)
-+    const invalidRelationalBackup = {
-+      format: LOCAL_BACKUP_FORMAT,
-+      version: LOCAL_BACKUP_VERSION,
-+      app: 'ScoreBasket',
-+      sourceSchemaVersion: 8,
-+      exportedAt: new Date().toISOString(),
-+      metadata: {
-+        counts: { teams: 1, players: 1, matches: 0, scores: 0, fouls: 0 }
-+      },
-+      data: {
-+        teams: [{ id: 1, name: 'Team One', createdAt: '2026-01-01T00:00:00Z' }],
-+        players: [{ id: 1, teamId: 999, name: 'Ghost Player', number: 7, createdAt: '2026-01-01T00:00:00Z' }],
-+        matches: [],
-+        scores: [],
-+        fouls: []
-+      }
-+    };
++  // QA-29: Adversarial - Rollback Atómico Multialmacén ante Fallo en Restauración
++  it('QA-29: Rollback multialmacén: si los datos son inválidos, ningún registro queda escrito en ninguna tabla', async () => {
++    // Backup con una violación relacional (un jugador apunta a un equipo inexistente)
++    const invalidRelationalBackup = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 1, teamId: 999, name: 'Ghost Player', number: 7, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
 +
-+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(invalidRelationalBackup)))
++    await expect(LocalBackupService.restoreIntoEmpty(invalidRelationalBackup))
 +      .rejects.toThrow(BackupValidationError);
 +
 +    // Ninguna tabla debe contener datos (rollback total)
@@ -2593,19 +2847,456 @@ index 0000000..ca36b47
 +    expect(await db.scores.count()).toBe(0);
 +    expect(await db.fouls.count()).toBe(0);
 +  });
++
++  // QA-30: R2-01 - Checksum obligatorio (ausente o vacío es rechazado terminantemente)
++  it('QA-30: R2-01 - Rechaza restauraciones si metadata.checksum está ausente, vacío o nulo', async () => {
++    const validJson = await LocalBackupService.exportJson();
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Checksum eliminado
++    delete (parsed.metadata as Partial<BackupMetadata>).checksum;
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++
++    // Checksum cadena vacía
++    parsed.metadata.checksum = '';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++
++    // Checksum solo espacios
++    parsed.metadata.checksum = '   ';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++  });
++
++  // QA-31: R2-01 - Validación estricta de algoritmo y formato de hash
++  it('QA-31: R2-01 - Rechaza algoritmos no admitidos (FNV-1a) y hashes SHA-256 malformados', async () => {
++    const validJson = await LocalBackupService.exportJson();
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Algoritmo inseguro o no admitido
++    (parsed.metadata as unknown as Record<string, unknown>).checksumAlgorithm = 'FNV-1a';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Algoritmo de suma de verificación no admitido/i);
++
++    // Algoritmo restaurado a SHA-256 pero hash malformado (sin prefijo sha256:)
++    parsed.metadata.checksumAlgorithm = 'SHA-256';
++    parsed.metadata.checksum = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Formato de suma de verificación inválido/i);
++
++    // Longitud incorrecta (menor a 64 hex caracteres)
++    parsed.metadata.checksum = 'sha256:1234abcd';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Formato de suma de verificación inválido/i);
++  });
++
++  // QA-32: R2-05 - Manifiesto inconsistente (counts discordante con registros reales)
++  it('QA-32: R2-05 - Rechaza respaldos donde metadata.counts no concuerde con el contenido real', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Conteo declarado falsificado
++    parsed.metadata.counts.teams = 99; // Real es 1
++    // Re-firmamos el checksum sobre data para verificar que la falla es específicamente de manifiesto
++    const rawHash = await computeDataChecksum(JSON.stringify(parsed.data));
++    parsed.metadata.checksum = `sha256:${rawHash}`;
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Manifiesto inconsistente en la tabla "teams"/i);
++  });
++
++  // QA-33: R2-02 - Fechas obligatorias (createdAt) ausentes, nulas, malformadas o fuera de rango
++  it('QA-33: R2-02 - Rechaza registros con fecha obligatoria createdAt ausente, nula, inválida o fuera de rango (2000-2100)', async () => {
++    // 1. createdAt ausente en Team
++    const missingCreatedAt = await buildTestBackup({
++      teams: [{ id: 1, name: 'No Date Team', isArchived: false } as unknown as Team]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(missingCreatedAt))
++      .rejects.toThrow(/campo de fecha obligatorio.*createdAt/i);
++
++    // 2. createdAt null en Player
++    const nullCreatedAt = await buildTestBackup({
++      teams: [{ id: 1, name: 'Valid Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 1, name: 'P1', number: 7, teamId: 1, createdAt: null as unknown as Date, isArchived: false }]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(nullCreatedAt))
++      .rejects.toThrow(/campo de fecha obligatorio.*createdAt/i);
++
++    // 3. createdAt malformado en Match
++    const invalidDateMatch = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: 'fecha-totalmente-invalida' as unknown as Date,
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(invalidDateMatch))
++      .rejects.toThrow(/Fecha inválida/i);
++
++    // 4. Fecha fuera de rango plausible (anterior al año 2000)
++    const epochZeroMatch = await buildTestBackup({
++      teams: [{ id: 1, name: 'T1', createdAt: new Date('1990-01-01T00:00:00Z'), isArchived: false }]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(epochZeroMatch))
++      .rejects.toThrow(/rango histórico admisible/i);
++  });
++
++  // QA-34: R2-02 - Fechas opcionales y anidadas
++  it('QA-34: R2-02 - Procesa fechas opcionales válidas y rechaza fechas anidadas corruptas', async () => {
++    const backupWithValidOptionals = await buildTestBackup({
++      teams: [
++        {
++          id: 1,
++          name: 'Archived Team',
++          createdAt: new Date('2026-01-01T10:00:00Z'),
++          archivedAt: new Date('2026-01-05T12:00:00Z'),
++          isArchived: true
++        },
++        {
++          id: 2,
++          name: 'Active Team',
++          createdAt: new Date('2026-01-01T10:00:00Z'),
++          isArchived: false
++        }
++      ],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-02T10:00:00Z'),
++          finishedAt: new Date('2026-01-02T11:30:00Z'),
++          config: { mode: 'race', race: { targetScore: 21, hasRematches: false, currentGame: 1 } },
++          localScore: 21,
++          visitorScore: 19,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 21,
++              visitorScore: 19,
++              winner: 'local',
++              finishedAt: new Date('2026-01-02T11:29:00Z')
++            }
++          ]
++        }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(backupWithValidOptionals);
++
++    const restoredTeam = (await db.teams.get(1))!;
++    expect(restoredTeam.archivedAt).toBeInstanceOf(Date);
++    expect(restoredTeam.archivedAt?.toISOString()).toBe('2026-01-05T12:00:00.000Z');
++
++    const restoredMatch = (await db.matches.get(10))!;
++    expect(restoredMatch.finishedAt).toBeInstanceOf(Date);
++    expect(restoredMatch.gameHistory?.[0].finishedAt).toBeInstanceOf(Date);
++
++    await db.teams.clear();
++    await db.matches.clear();
++
++    // Fecha anidada corrupta en gameHistory
++    const corruptNestedDate = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T10:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T10:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-02T10:00:00Z'),
++          config: { mode: 'race', race: { targetScore: 21, hasRematches: false, currentGame: 1 } },
++          localScore: 21,
++          visitorScore: 19,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 21,
++              visitorScore: 19,
++              winner: 'local',
++              finishedAt: 'fecha-anidada-invalida' as unknown as Date
++            }
++          ]
++        }
++      ]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(corruptNestedDate))
++      .rejects.toThrow(/Fecha inválida/i);
++  });
++
++  // QA-35: R2-03 - Validación de configuraciones deportivas
++  it('QA-35: R2-03 - Rechaza modos desconocidos, NaN, Infinity y fraccionarios en configuración de partido', async () => {
++    // 1. Modo de juego desconocido
++    const unknownMode = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'waterpolo' } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(unknownMode))
++      .rejects.toThrow(/Modo de juego inválido/i);
++
++    // 2. Número fraccionario en totalQuarters
++    const floatQuarters = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4.5 as unknown as number, minutesPerQuarter: 10 } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(floatQuarters))
++      .rejects.toThrow(/cuartos deben ser un número entero/i);
++
++    // 3. NaN en minutesPerQuarter
++    const nanMinutes = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: NaN } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(nanMinutes))
++      .rejects.toThrow(/minutos deben ser un número entero/i);
++
++    // 4. Infinity en targetScore de Race
++    const infTarget = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'race', race: { targetScore: Infinity as unknown as number, hasRematches: false } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(infTarget))
++      .rejects.toThrow(/puntaje objetivo debe ser un número entero/i);
++
++    // 5. Número par en totalGames de Best-of-Series
++    const evenGames = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'best-of-series', bestOf: { totalGames: 4, targetScorePerGame: 21, currentGame: 1, wins: { local: 0, visitor: 0 } } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(evenGames))
++      .rejects.toThrow(/número de partidos debe ser impar/i);
++  });
++
++  // QA-36: R2-04 - Autoridad temporal en partidos pausados
++  it('QA-36: R2-04 - La restauración siempre purga timerOwnerTabId y contratos de lease en partidos pausados', async () => {
++    const pausedMatchBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'paused',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          currentQuarter: 2,
++          timerSecondsRemaining: 300,
++          // Partido pausado pero con rastro de autoridad de una pestaña ajena
++          timerLastStart: undefined,
++          timerOwnerTabId: 'zombie-tab-from-other-machine',
++          timerLeaseExpiresAt: Date.now() + 60000,
++          timerLockMode: 'web_locks',
++          timerRecoveryState: 'normal',
++          localScore: 10,
++          visitorScore: 8,
++          localFouls: 1,
++          visitorFouls: 1
++        }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(pausedMatchBackup);
++
++    const restored = (await db.matches.get(1))!;
++    expect(restored).toBeDefined();
++
++    // Las referencias efímeras de la sesión anterior deben ser anuladas
++    expect(restored.timerOwnerTabId).toBeUndefined();
++    expect(restored.timerLeaseExpiresAt).toBe(0);
++    expect(restored.timerLockMode).toBeUndefined();
++
++    // El tiempo restante debe estar preservado intacto
++    expect(restored.timerSecondsRemaining).toBe(300);
++    expect(restored.timerLastStart).toBeUndefined();
++
++    // Como estaba legítimamente pausado y con tiempo coherente, su estado es normal
++    expect(restored.timerRecoveryState).toBe('normal');
++  });
++
++  // QA-37: R2-06 - Integridad de codificación UTF-8 y prevención de mojibake
++  it('QA-37: R2-06 - Preserva íntegramente caracteres UTF-8 en respaldos y previene mojibake o secuencias corruptas', async () => {
++    // 1. Verificar preservación de caracteres en español, acentos, símbolos y emojis
++    const unicodeBackup = await buildTestBackup({
++      teams: [
++        {
++          id: 1,
++          name: 'CB Atlético Málaga — 1ª División 🏀',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        },
++        {
++          id: 2,
++          name: 'Bàsquet Peña San José & València 🏆',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        }
++      ],
++      players: [
++        {
++          id: 1,
++          name: 'José María González — Capitán',
++          number: 23,
++          teamId: 1,
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        }
++      ]
++    });
++
++    // Validar que el payload JSON generado es decodificable estrictamente como UTF-8 sin errores
++    const encoder = new TextEncoder();
++    const encodedBytes = encoder.encode(unicodeBackup);
++    const strictDecoder = new TextDecoder('utf-8', { fatal: true });
++    expect(() => strictDecoder.decode(encodedBytes)).not.toThrow();
++
++    // Restaurar y verificar que los nombres se mantienen exactos sin mojibake
++    await LocalBackupService.restoreIntoEmpty(unicodeBackup);
++
++    const team1 = await db.teams.get(1);
++    const team2 = await db.teams.get(2);
++    const player1 = await db.players.get(1);
++
++    expect(team1?.name).toBe('CB Atlético Málaga — 1ª División 🏀');
++    expect(team2?.name).toBe('Bàsquet Peña San José & València 🏆');
++    expect(player1?.name).toBe('José María González — Capitán');
++
++    // 2. Verificar que se rechazan respaldos con secuencias corruptas de mojibake (ej. U+FFFD o patrones CP850/UTF-8 doblados)
++    const corruptedBackup = unicodeBackup.replace('Málaga', 'M\uFFFDlaga');
++    await expect(LocalBackupService.restoreIntoEmpty(corruptedBackup))
++      .rejects.toThrow(); // Falla por checksum o validación
++  });
++
++  // QA-38: R2-08 - Experiencia de exportación y compatibilidad móvil
++  it('QA-38: R2-08 - exportToFile ejecuta desasociación asíncrona de URL y reporta downloadInitiated', async () => {
++    await db.teams.add({ name: 'Export Team', createdAt: new Date(), isArchived: false });
++
++    const result = await LocalBackupService.exportToFile('test-export-r2.json');
++
++    expect(result.filename).toBe('test-export-r2.json');
++    expect(result.counts.teams).toBe(1);
++    expect(typeof result.downloadInitiated).toBe('boolean');
++  });
 +});
 diff --git a/src/test/sb15-local-backup-controls.test.tsx b/src/test/sb15-local-backup-controls.test.tsx
 new file mode 100644
-index 0000000..1a46d98
+index 0000000..34d1d52
 --- /dev/null
 +++ b/src/test/sb15-local-backup-controls.test.tsx
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,143 @@
 +// @vitest-environment jsdom
 +import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 +import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 +import { db } from '../db/db';
 +import { LocalBackupControls } from '../components/matches/LocalBackupControls';
-+import { LocalBackupService } from '../db/localBackup.service';
++import { LocalBackupService, computeDataChecksum } from '../db/localBackup.service';
 +
 +describe('LocalBackupControls UI Component', () => {
 +  beforeEach(async () => {
@@ -2638,12 +3329,13 @@ index 0000000..1a46d98
 +  });
 +
 +  it('handles export action and displays success feedback', async () => {
-+    // A├▒adir un equipo de prueba
++    // Añadir un equipo de prueba
 +    await db.teams.add({ name: 'Export Team', createdAt: new Date() });
 +
 +    vi.spyOn(LocalBackupService, 'exportToFile').mockResolvedValue({
 +      filename: 'scorebasket-backup-test.json',
-+      counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 }
++      counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
++      downloadInitiated: true
 +    });
 +
 +    render(<LocalBackupControls />);
@@ -2659,12 +3351,12 @@ index 0000000..1a46d98
 +    });
 +
 +    await waitFor(() => {
-+      expect(screen.getByText(/Respaldo guardado como/i)).toBeDefined();
++      expect(screen.getByText(/Respaldo generado exitosamente|Descarga iniciada/i)).toBeDefined();
 +    });
 +  });
 +
 +  it('blocks restore when database already contains data and displays clear warning', async () => {
-+    // A├▒adir un equipo para que la base no est├® vac├¡a
++    // Añadir un equipo para que la base no esté vacía
 +    await db.teams.add({ name: 'Existing Team', createdAt: new Date() });
 +
 +    render(<LocalBackupControls />);
@@ -2674,7 +3366,7 @@ index 0000000..1a46d98
 +      fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
 +    });
 +
-+    // Simular selecci├│n de archivo
++    // Simular selección de archivo
 +    const file = new File(['{}'], 'backup.json', { type: 'application/json' });
 +    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
 +
@@ -2683,7 +3375,7 @@ index 0000000..1a46d98
 +    });
 +
 +    await waitFor(() => {
-+      expect(screen.getByText(/Restauraci├│n bloqueada: la base de datos ya contiene datos/i)).toBeDefined();
++      expect(screen.getByText(/Restauración bloqueada: la base de datos ya contiene datos/i)).toBeDefined();
 +    });
 +  });
 +
@@ -2695,20 +3387,27 @@ index 0000000..1a46d98
 +      fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
 +    });
 +
++    const rawData = {
++      teams: [{ id: 1, name: 'Restored Team', createdAt: '2026-01-01T00:00:00Z', isArchived: false }],
++      players: [],
++      matches: [],
++      scores: [],
++      fouls: []
++    };
++    const rawHash = await computeDataChecksum(JSON.stringify(rawData));
 +    const mockBackup = {
 +      format: 'scorebasket-local-backup',
 +      version: 1,
 +      app: 'ScoreBasket',
 +      sourceSchemaVersion: 8,
 +      exportedAt: new Date().toISOString(),
-+      metadata: { counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 } },
-+      data: {
-+        teams: [{ id: 1, name: 'Restored Team', createdAt: '2026-01-01T00:00:00Z', isArchived: false }],
-+        players: [],
-+        matches: [],
-+        scores: [],
-+        fouls: []
-+      }
++      metadata: {
++        counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
++        checksumAlgorithm: 'SHA-256',
++        checksum: `sha256:${rawHash}`,
++        generatedBy: 'ScoreBasket Test'
++      },
++      data: rawData
 +    };
 +
 +    const file = new File([JSON.stringify(mockBackup)], 'backup.json', { type: 'application/json' });
@@ -2719,17 +3418,17 @@ index 0000000..1a46d98
 +    });
 +
 +    await waitFor(() => {
-+      expect(screen.getByText('Confirmar Restauraci├│n')).toBeDefined();
-+      expect(screen.getByText('S├¡, Restaurar Datos')).toBeDefined();
++      expect(screen.getByText('Confirmar Restauración')).toBeDefined();
++      expect(screen.getByText('Sí, Restaurar Datos')).toBeDefined();
 +    });
 +
 +    // Confirmar
 +    await act(async () => {
-+      fireEvent.click(screen.getByText('S├¡, Restaurar Datos'));
++      fireEvent.click(screen.getByText('Sí, Restaurar Datos'));
 +    });
 +
 +    await waitFor(() => {
-+      expect(screen.getByText(/┬íRestauraci├│n exitosa!/i)).toBeDefined();
++      expect(screen.getByText(/¡Restauración exitosa!/i)).toBeDefined();
 +    });
 +
 +    expect(await db.teams.count()).toBe(1);

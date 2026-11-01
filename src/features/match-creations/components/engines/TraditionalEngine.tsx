@@ -113,8 +113,7 @@ export const TraditionalEngine: React.FC = () => {
       };
     }
 
-    const fouls = await db.fouls.where('matchId').equals(match.id).toArray();
-    const quarterFouls = fouls.filter(foul => foul.quarter === currentQuarter);
+    const quarterFouls = await db.fouls.where('[matchId+quarter]').equals([match.id, currentQuarter]).toArray();
 
     return {
       local: quarterFouls.filter(foul => foul.teamId === match.localTeamId).length,

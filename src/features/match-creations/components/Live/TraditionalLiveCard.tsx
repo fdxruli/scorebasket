@@ -21,14 +21,13 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
       };
     }
 
-    const fouls = await db.fouls.where('matchId').equals(match.id).toArray();
-    const quarterFouls = fouls.filter(foul => foul.quarter === currentQuarter);
+    const quarterFouls = await db.fouls.where('[matchId+quarter]').equals([match.id, currentQuarter]).toArray();
 
     return {
       local: quarterFouls.filter(foul => foul.teamId === match.localTeamId).length,
       visitor: quarterFouls.filter(foul => foul.teamId === match.visitorTeamId).length
     };
-  }, [match.id, match.localFouls, match.visitorFouls, currentQuarter]);
+  }, [match.id, match.localTeamId, match.visitorTeamId, match.localFouls, match.visitorFouls, currentQuarter]);
 
   const formatTime = (seconds: number) => {
     const s = Math.ceil(seconds);

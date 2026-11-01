@@ -39,6 +39,7 @@ class TimerAuthorityCoordinator {
   private matchStates = new Map<number, { isOwner: boolean; ownerTabId: string | null; epoch: number }>();
   private listeners = new Map<number, Set<AuthorityListener>>();
   private inFlightOperations = new Map<number, Set<Promise<unknown>>>();
+  private releasingMatches = new Set<number>();
   private acquiringPromises = new Map<number, Promise<{ acquired: boolean; epoch: number }>>();
   private heartbeats = new Map<number, ReturnType<typeof setInterval>>();
   private broadcastChannel: BroadcastChannel | null = null;
@@ -84,6 +85,13 @@ class TimerAuthorityCoordinator {
 
   public isWebLocksSupported(): boolean {
     return this.isLocksSupported && !this.forceFallback;
+  }
+
+  /**
+   * Indica si la autoridad para el partido se encuentra actualmente en proceso de liberación (Fase 2C R1.5 - C-32).
+   */
+  public isReleasing(matchId: number): boolean {
+    return this.releasingMatches.has(matchId);
   }
 
   /**
@@ -199,6 +207,23 @@ class TimerAuthorityCoordinator {
           }
 
           const now = Date.now();
+
+          // Si ya somos el dueño legítimo con lease vigente, renovamos sin forzar nuevo epoch
+          if (
+            match.timerOwnerTabId === this.tabId &&
+            (match.timerLeaseExpiresAt ?? 0) >= now
+          ) {
+            const currentEpoch = match.timerEpoch ?? this.matchStates.get(matchId)?.epoch ?? 1;
+            await db.matches.update(matchId, {
+              timerLeaseExpiresAt: now + 6000
+            });
+            return {
+              acquired: true,
+              epoch: currentEpoch,
+              ownerTabId: this.tabId
+            };
+          }
+
           const activeLease =
             match.timerOwnerTabId &&
             match.timerOwnerTabId !== this.tabId &&
@@ -538,61 +563,66 @@ class TimerAuthorityCoordinator {
    * En modo fallback o Web Lock, solo retira el lease/propietario si aún le pertenece (C-17).
    */
   public async releaseAuthority(matchId: number): Promise<void> {
-    const state = this.matchStates.get(matchId);
+    this.releasingMatches.add(matchId);
+    try {
+      const state = this.matchStates.get(matchId);
 
-    // 1. Aguardar a que cualquier operación en vuelo en esta pestaña termine antes de ceder el lock (C-11 / C-20)
-    const pending = this.inFlightOperations.get(matchId);
-    if (pending && pending.size > 0) {
-      await Promise.allSettled(Array.from(pending));
-    }
-
-    // 2. Marcar como no propietario tras haber concluido operaciones en vuelo
-    if (state?.isOwner) {
-      this.matchStates.set(matchId, {
-        isOwner: false,
-        ownerTabId: null,
-        epoch: state.epoch
-      });
-    }
-
-    // 3. Limpiar heartbeats y vaciar lease en BD SÓLO si seguimos siendo el dueño legítimo (C-17 / C-23)
-    this.clearHeartbeat(matchId);
-    if (db.isOpen()) {
-      try {
-        await db.transaction('rw', db.matches, async () => {
-          const match = await db.matches.get(matchId);
-          if (!match) return;
-          if (
-            match.timerOwnerTabId === this.tabId &&
-            (match.timerEpoch ?? 0) === (state?.epoch ?? 0)
-          ) {
-            await db.matches.update(matchId, {
-              timerLeaseExpiresAt: 0,
-              timerOwnerTabId: undefined
-            });
-          }
-        });
-      } catch {
-        // ignore
+      // 1. Aguardar a que cualquier operación en vuelo en esta pestaña termine antes de ceder el lock (C-11 / C-20)
+      const pending = this.inFlightOperations.get(matchId);
+      if (pending && pending.size > 0) {
+        await Promise.allSettled(Array.from(pending));
       }
-    }
 
-    // 4. Liberar Web Lock
-    const active = this.activeLocks.get(matchId);
-    if (active) {
-      await active.release();
-    }
+      // 2. Marcar como no propietario tras haber concluido operaciones en vuelo
+      if (state?.isOwner) {
+        this.matchStates.set(matchId, {
+          isOwner: false,
+          ownerTabId: null,
+          epoch: state.epoch
+        });
+      }
 
-    if (state?.isOwner) {
-      this.broadcastMessage({
-        type: 'AUTHORITY_RELEASED',
-        matchId,
-        tabId: this.tabId,
-        epoch: state.epoch,
-        timestamp: Date.now()
-      });
+      // 3. Limpiar heartbeats y vaciar lease en BD SÓLO si seguimos siendo el dueño legítimo (C-17 / C-23)
+      this.clearHeartbeat(matchId);
+      if (db.isOpen()) {
+        try {
+          await db.transaction('rw', db.matches, async () => {
+            const match = await db.matches.get(matchId);
+            if (!match) return;
+            if (
+              match.timerOwnerTabId === this.tabId &&
+              (match.timerEpoch ?? 0) === (state?.epoch ?? 0)
+            ) {
+              await db.matches.update(matchId, {
+                timerLeaseExpiresAt: 0,
+                timerOwnerTabId: undefined
+              });
+            }
+          });
+        } catch {
+          // ignore
+        }
+      }
 
-      this.notifyListeners(matchId);
+      // 4. Liberar Web Lock
+      const active = this.activeLocks.get(matchId);
+      if (active) {
+        await active.release();
+      }
+
+      if (state?.isOwner) {
+        this.broadcastMessage({
+          type: 'AUTHORITY_RELEASED',
+          matchId,
+          tabId: this.tabId,
+          epoch: state.epoch,
+          timestamp: Date.now()
+        });
+
+        this.notifyListeners(matchId);
+      }
+    } finally {
+      this.releasingMatches.delete(matchId);
     }
   }
 
@@ -752,6 +782,7 @@ class TimerAuthorityCoordinator {
     this.heartbeats.forEach((t) => clearInterval(t));
     this.heartbeats.clear();
     this.inFlightOperations.clear();
+    this.releasingMatches.clear();
 
     const promises: Promise<void>[] = [];
     this.activeLocks.forEach((lock) => {

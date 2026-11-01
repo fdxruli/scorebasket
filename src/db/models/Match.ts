@@ -44,6 +44,10 @@ export interface Match {
   timerLeaseExpiresAt?: number;
   timerLockMode?: 'web_locks' | 'fallback';
   
+  // Estado persistente de recuperación e incertidumbre del cronómetro (Fase 2C R1.5 - C-29)
+  timerRecoveryState?: 'normal' | 'recovery_required';
+  timerRecoveryReason?: string;
+  
   // Solo para modos RACE y BEST-OF (sin tiempo)
   gameHistory?: GameResult[];   // Historial de partidos completados
   

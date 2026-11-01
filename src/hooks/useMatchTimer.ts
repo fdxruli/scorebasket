@@ -22,6 +22,8 @@ export interface UseMatchTimerReturn {
   keepTimerRunningOnUnmount: () => void;
   confidence: TimeConfidence;
   isClockShiftDetected: boolean;
+  resolveRecovery: (validatedSeconds?: number) => Promise<void>;
+  timerRecoveryState: 'normal' | 'recovery_required';
 }
 
 /**
@@ -217,12 +219,12 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     }
   }, [timeLeft, match?.currentQuarter]);
 
-  // 5. Intervalo reactivo garantizado sincronizado con el reloj del sistema
+  // 5. Intervalo reactivo garantizado sincronizado con el reloj del sistema (C-31)
   useEffect(() => {
-    if (!isRunning || timeLeft <= 0 || confidence === 'uncertain') return;
+    if (!isRunning || timeLeft <= 0) return;
     const interval = setInterval(() => setCurrentNowMs(Date.now()), 500);
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft, confidence, match?.timerLastStart]);
+  }, [isRunning, timeLeft, match?.timerLastStart]);
 
   // 6. Auto-pause y chicharra única cuando llega a 00:00 legítimamente (C-12, C-26)
   useEffect(() => {
@@ -333,6 +335,20 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     shouldPauseOnUnmount.current = false;
   }, []);
 
+  const timerRecoveryState = match?.timerRecoveryState ?? (confidence === 'uncertain' ? 'recovery_required' : 'normal');
+
+  const resolveRecovery = useCallback(async (validatedSeconds?: number) => {
+    if (!match?.id) return;
+    const target = validatedSeconds ?? timeLeft;
+    const currentCoordAuth = timerAuthorityCoordinator.getAuthorityState(match.id);
+    const result = await MatchTimerService.resolveRecovery(match.id, target, {
+      epoch: currentCoordAuth.hasAuthority ? currentCoordAuth.epoch : authorityState.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: currentCoordAuth.tabId
+    });
+    setLastOperationResult(result);
+  }, [match, timeLeft, authorityState.epoch]);
+
   return {
     timeLeft,
     isRunning,
@@ -348,6 +364,8 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     adjustTime,
     keepTimerRunningOnUnmount,
     confidence,
-    isClockShiftDetected
+    isClockShiftDetected,
+    resolveRecovery,
+    timerRecoveryState
   };
 }

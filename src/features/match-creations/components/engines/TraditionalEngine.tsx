@@ -93,7 +93,9 @@ export const TraditionalEngine: React.FC = () => {
     startOvertime,
     isTied,
     confidence,
-    isClockShiftDetected
+    isClockShiftDetected,
+    resolveRecovery,
+    timerRecoveryState
   } = useTraditionalLogic({ match, isActionModalOpen: isOverlayBlocking });
 
   useEffect(() => {
@@ -302,7 +304,7 @@ export const TraditionalEngine: React.FC = () => {
         </div>
       )}
 
-      {confidence === 'uncertain' && (
+      {(confidence === 'uncertain' || timerRecoveryState === 'recovery_required') && (
         <div
           data-testid="timer-anomaly-warning"
           data-shift-detected={isClockShiftDetected ? 'true' : 'false'}
@@ -319,7 +321,30 @@ export const TraditionalEngine: React.FC = () => {
             color: '#fca5a5'
           }}
         >
-          <span>Desfase o salto anómalo detectado en el reloj del dispositivo. Cronómetro preservado de forma segura.</span>
+          <span>Desfase o salto anómalo detectado en el reloj del dispositivo. Requiere revisión.</span>
+          {hasAuthority ? (
+            <button
+              data-testid="btn-confirm-recovery"
+              onClick={() => resolveRecovery()}
+              style={{
+                marginLeft: '1rem',
+                padding: '0.25rem 0.75rem',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.8rem'
+              }}
+            >
+              Confirmar tiempo
+            </button>
+          ) : (
+            <span style={{ fontSize: '0.75rem', opacity: 0.8, marginLeft: '0.5rem' }}>
+              (Requiere confirmación por la pestaña propietaria)
+            </span>
+          )}
         </div>
       )}
 

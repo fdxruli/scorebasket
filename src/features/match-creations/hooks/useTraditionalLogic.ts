@@ -75,7 +75,9 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     resetTimer,
     adjustTime,
     confidence,
-    isClockShiftDetected
+    isClockShiftDetected,
+    resolveRecovery,
+    timerRecoveryState
   } = useMatchTimer(match ?? undefined);
 
   // Si el reloj vuelve a tener tiempo (> 0), se resetea cualquier descarte previo para permitir
@@ -92,14 +94,15 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     return `${m}:${sec}`;
   };
 
-  // 4. Derivación puramente reactiva de la presentación de modales (C-09, C-26):
-  // El aviso de expiración ocurre si el reloj llegó a 0, está detenido, no hay incertidumbre de reloj y el partido no ha finalizado
+  // 4. Derivación puramente reactiva de la presentación de modales (C-09, C-26, C-29):
+  // El aviso de expiración ocurre si el reloj llegó a 0, está detenido, no hay incertidumbre de reloj, no requiere recuperación y el partido no ha finalizado
   const isPeriodExpired = Boolean(
     match &&
     match.status !== 'finished' &&
     timeLeft <= 0 &&
     !isRunning &&
-    confidence !== 'uncertain'
+    confidence !== 'uncertain' &&
+    match.timerRecoveryState !== 'recovery_required'
   );
 
   const isDismissed = dismissedQuarter === currentQuarter;
@@ -206,6 +209,8 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     showMatchEndModal,
     setShowMatchEndModal,
     confidence,
-    isClockShiftDetected
+    isClockShiftDetected,
+    resolveRecovery,
+    timerRecoveryState
   };
 };

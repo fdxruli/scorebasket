@@ -43,6 +43,8 @@ export interface TimerSnapshot {
 export interface TimerServiceOptions {
   /** Marca de tiempo absoluta en ms para determinismo en pruebas y reconciliación */
   nowMs?: number;
+  /** Marca de tiempo explícita en ms para verificar la vigencia del lease en tiempo real (C-30) */
+  leaseNowMs?: number;
   /** Identificador de pestaña que ejecuta la operación (para control de autoridad) */
   tabId?: string;
   /** Época de autoridad con la que se emitió la operación (fencing token) */
@@ -93,6 +95,34 @@ function calculateMonotonicElapsed(
   nowMs: number,
   options?: TimerServiceOptions
 ): MonotonicElapsedResult {
+  const localSession = sessionMonotonicStarts.get(matchId);
+
+  // Verificación monotónica prioritaria: si hay sesión activa local (o simulatedPerfNowMs),
+  // la medición por hardware (performance.now) es la fuente fidedigna y no retrocede (C-31)
+  if (localSession && localSession.wallStartMs === lastStartMs) {
+    let perfElapsed: number | null = null;
+
+    if (options?.simulatedPerfNowMs !== undefined) {
+      perfElapsed = Math.max(0, (options.simulatedPerfNowMs - localSession.perfStart) / 1000);
+    } else if (options?.nowMs === undefined && typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      perfElapsed = Math.max(0, (performance.now() - localSession.perfStart) / 1000);
+    }
+
+    if (perfElapsed !== null) {
+      const wallElapsed = (nowMs - lastStartMs) / 1000;
+      const isShift = Math.abs(wallElapsed - perfElapsed) > 10 || nowMs < lastStartMs;
+      return {
+        elapsedSeconds: perfElapsed,
+        source: 'monotonic_session',
+        isClockShiftDetected: isShift,
+        clockShiftSeverity: isShift ? (nowMs < lastStartMs || wallElapsed < perfElapsed ? 'backward' : 'forward_jump') : 'none',
+        confidence: 'high'
+      };
+    }
+  }
+
+  // En ausencia de referencia monotónica fiable:
+  // Si el reloj retrocede respecto al último inicio, acotamos a 0 y marcamos incertidumbre (C-25 / C-31)
   if (nowMs < lastStartMs) {
     return {
       elapsedSeconds: 0,
@@ -104,29 +134,6 @@ function calculateMonotonicElapsed(
   }
 
   const wallElapsed = (nowMs - lastStartMs) / 1000;
-  const localSession = sessionMonotonicStarts.get(matchId);
-
-  // Verificación monotónica si se simula explícitamente o si estamos en runtime real sin nowMs artificial
-  if (localSession && localSession.wallStartMs === lastStartMs) {
-    let perfElapsed: number | null = null;
-
-    if (options?.simulatedPerfNowMs !== undefined) {
-      perfElapsed = Math.max(0, (options.simulatedPerfNowMs - localSession.perfStart) / 1000);
-    } else if (options?.nowMs === undefined && typeof performance !== 'undefined' && typeof performance.now === 'function') {
-      perfElapsed = Math.max(0, (performance.now() - localSession.perfStart) / 1000);
-    }
-
-    if (perfElapsed !== null) {
-      const isShift = Math.abs(wallElapsed - perfElapsed) > 10;
-      return {
-        elapsedSeconds: perfElapsed,
-        source: 'monotonic_session',
-        isClockShiftDetected: isShift,
-        clockShiftSeverity: isShift ? (wallElapsed > perfElapsed ? 'forward_jump' : 'backward') : 'none',
-        confidence: 'high'
-      };
-    }
-  }
 
   // Medición estándar entre sesiones o pruebas deterministas
   const isSuspiciousJump = wallElapsed > 86400; // > 24 horas
@@ -176,15 +183,16 @@ export const MatchTimerService = {
 
     const baseRemaining = Math.max(0, match.timerSecondsRemaining ?? 0);
     const isRunning = Boolean(match.timerLastStart);
+    const isRecoveryRequired = match.timerRecoveryState === 'recovery_required';
 
     if (!isRunning || !match.timerLastStart) {
       return {
         timeLeft: baseRemaining,
         isRunning: false,
         expired: match.status !== 'finished' && baseRemaining <= 0,
-        isClockShiftDetected: false,
-        clockShiftSeverity: 'none',
-        confidence: 'high',
+        isClockShiftDetected: isRecoveryRequired,
+        clockShiftSeverity: isRecoveryRequired ? 'forward_jump' : 'none',
+        confidence: isRecoveryRequired ? 'uncertain' : 'high',
         precisionSource: 'wall_clock_recovered'
       };
     }
@@ -197,14 +205,14 @@ export const MatchTimerService = {
       options ?? (isCustomNow ? { nowMs } : undefined)
     );
 
-    if (res.confidence === 'uncertain') {
+    if (res.confidence === 'uncertain' || isRecoveryRequired) {
       // Estado de recuperación conservadora: preservar tiempo sin restar salto anómalo
       return {
         timeLeft: baseRemaining,
         isRunning: true,
         expired: false,
-        isClockShiftDetected: res.isClockShiftDetected,
-        clockShiftSeverity: res.clockShiftSeverity,
+        isClockShiftDetected: true,
+        clockShiftSeverity: res.clockShiftSeverity !== 'none' ? res.clockShiftSeverity : 'forward_jump',
         confidence: 'uncertain',
         precisionSource: res.source
       };
@@ -254,6 +262,15 @@ export const MatchTimerService = {
   },
 
   /**
+   * Hook para inyección de barreras transaccionales en pruebas adversariales (Fase 2C R1.5 - C-32).
+   */
+  _testPreCommitHook: null as (((matchId: number) => void | Promise<void>) | null),
+
+  _setTestPreCommitHook(hook: ((matchId: number) => void | Promise<void>) | null) {
+    this._testPreCommitHook = hook;
+  },
+
+  /**
    * Valida la autoridad del invocador antes de procesar una operación (comprobación previa fuera de transacción).
    */
   _validateAuthority(
@@ -261,6 +278,8 @@ export const MatchTimerService = {
     options?: TimerServiceOptions
   ): { valid: boolean; status?: TimerOperationStatus; reason?: string; epoch: number; tabId: string } {
     const coord = options?.coordinator ?? timerAuthorityCoordinator;
+
+
     const authState = coord.getAuthorityState(matchId);
     const tabId = options?.tabId ?? authState.tabId;
     const epoch = options?.epoch ?? authState.epoch;
@@ -307,8 +326,9 @@ export const MatchTimerService = {
     match: Match | undefined,
     matchId: number,
     options?: TimerServiceOptions,
-    nowMs = Date.now()
+    _sportsNowMs = Date.now()
   ): TransactionalAuthorityVerification {
+    void _sportsNowMs;
     if (!match) {
       return {
         authorized: false,
@@ -417,39 +437,17 @@ export const MatchTimerService = {
       };
     }
 
-    if (match.timerLeaseExpiresAt < nowMs) {
-      // Verificar si hay una sesión monotónica activa en esta pestaña que demuestre que el desfase se debe a un salto del reloj del sistema (C-25 / R12-C-18 / R14-T-01)
-      const localSession = sessionMonotonicStarts.get(matchId);
-      const isMonotonicActive =
-        Boolean(localSession &&
-        match.timerLastStart &&
-        localSession.wallStartMs === match.timerLastStart.getTime());
-
-      let isClockShiftExempt = false;
-      if (isMonotonicActive && localSession && match.timerLastStart) {
-        let perfElapsed: number | null = null;
-        if (options?.simulatedPerfNowMs !== undefined) {
-          perfElapsed = Math.max(0, (options.simulatedPerfNowMs - localSession.perfStart) / 1000);
-        } else if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-          perfElapsed = Math.max(0, (performance.now() - localSession.perfStart) / 1000);
-        }
-        if (perfElapsed !== null) {
-          const wallElapsed = (nowMs - match.timerLastStart.getTime()) / 1000;
-          if (wallElapsed - perfElapsed > 10) {
-            isClockShiftExempt = true;
-          }
-        }
-      }
-
-      if (!isClockShiftExempt) {
-        return {
-          authorized: false,
-          status: 'not_owner',
-          reason: `El lease de autoridad ha expirado en IndexedDB (expiró en ${match.timerLeaseExpiresAt}, actual: ${nowMs}).`,
-          callerEpoch,
-          callerTabId
-        };
-      }
+    // C-30: Separación estricta entre control de autoridad (tiempo real del lease) y reloj deportivo
+    // Un lease expirado SIEMPRE se rechaza de forma cerrada sin excepciones de precisión deportiva
+    const leaseCheckTime = options?.leaseNowMs ?? Date.now();
+    if (match.timerLeaseExpiresAt < leaseCheckTime) {
+      return {
+        authorized: false,
+        status: 'not_owner',
+        reason: `El lease de autoridad ha expirado en IndexedDB (expiró en ${match.timerLeaseExpiresAt}, actual: ${leaseCheckTime}).`,
+        callerEpoch,
+        callerTabId
+      };
     }
 
     return {
@@ -463,7 +461,30 @@ export const MatchTimerService = {
   /**
    * Inicia el cronómetro del partido de forma atómica y transaccional con fencing (C-11).
    */
-  async start(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  /**
+   * Registra una operación asíncrona completa en vuelo en el coordinador correspondiente (C-11 / C-32).
+   */
+  _trackOp<T>(
+    matchId: number,
+    options: TimerServiceOptions | undefined,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const coord = options?.coordinator ?? timerAuthorityCoordinator;
+    if (coord.isReleasing(matchId)) {
+      return Promise.resolve({
+        status: 'not_owner',
+        matchId,
+        timerSecondsRemaining: 0,
+        isRunning: false,
+        reason: 'La autoridad del cronómetro está en proceso de liberación.',
+        epoch: options?.epoch ?? 0
+      } as unknown as T);
+    }
+    return coord.trackOperation(matchId, fn());
+  },
+
+  start(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -534,6 +555,23 @@ export const MatchTimerService = {
         };
       }
 
+      // C-29: Bloquear reanudación silenciosa si hay recuperación pendiente no resuelta
+      if (match!.timerRecoveryState === 'recovery_required') {
+        return {
+          status: 'rejected',
+          matchId,
+          timerSecondsRemaining: remaining,
+          isRunning: false,
+          epoch: authCheck.callerEpoch,
+          confidence: 'uncertain',
+          reason: 'El cronómetro requiere confirmación o ajuste de tiempo antes de reanudar la marcha deportiva.'
+        };
+      }
+
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
       const startDate = new Date(nowMs);
       await db.matches.update(matchId, {
         timerLastStart: startDate,
@@ -559,13 +597,15 @@ export const MatchTimerService = {
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
    * Pausa el cronómetro de forma atómica, idempotente y monotónica con fencing (C-11).
    */
-  async pause(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  pause(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -635,12 +675,23 @@ export const MatchTimerService = {
         : Math.max(0, currentRemaining - elapsedSeconds);
       sessionMonotonicStarts.delete(matchId);
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         timerLastStart: undefined,
         timerSecondsRemaining: newRemaining,
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId
-      });
+      };
+
+      if (confidence === 'uncertain') {
+        updateData.timerRecoveryState = 'recovery_required';
+        updateData.timerRecoveryReason = 'Anomalía temporal detectada durante la pausa';
+      }
+
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
+      await db.matches.update(matchId, updateData);
 
       return {
         status: 'applied',
@@ -653,7 +704,8 @@ export const MatchTimerService = {
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
@@ -691,7 +743,8 @@ export const MatchTimerService = {
   /**
    * Reinicia el cronómetro a la duración oficial del cuarto/periodo (pausado).
    */
-  async reset(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  reset(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -746,30 +799,44 @@ export const MatchTimerService = {
         10;
       const targetSeconds = durationMinutes * 60;
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         timerSecondsRemaining: targetSeconds,
         timerLastStart: undefined,
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId
-      });
+      };
+
+      if (match!.timerRecoveryState === 'recovery_required') {
+        updateData.timerRecoveryState = 'normal';
+        updateData.timerRecoveryReason = undefined;
+      }
+
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
+      await db.matches.update(matchId, updateData);
 
       return {
         status: 'applied',
         matchId,
         timerSecondsRemaining: targetSeconds,
         isRunning: false,
-        epoch: authCheck.callerEpoch
+        epoch: authCheck.callerEpoch,
+        confidence: 'high'
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
    * Ajusta manualmente el tiempo restante (en segundos delta).
    * Solo está permitido cuando el reloj está pausado (INV-T09) y con autoridad válida.
    */
-  async adjust(matchId: number, deltaSeconds: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  adjust(matchId: number, deltaSeconds: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -841,9 +908,98 @@ export const MatchTimerService = {
       const currentSecs = Math.ceil(match!.timerSecondsRemaining ?? 0);
       const nextSecs = Math.max(0, currentSecs + deltaSeconds);
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         timerSecondsRemaining: nextSecs,
         timerLastStart: undefined,
+        timerEpoch: authCheck.callerEpoch,
+        timerOwnerTabId: authCheck.callerTabId
+      };
+
+      // C-29: Si el partido requería recuperación, un ajuste explícito por el dueño la resuelve
+      if (match!.timerRecoveryState === 'recovery_required') {
+        updateData.timerRecoveryState = 'normal';
+        updateData.timerRecoveryReason = undefined;
+      }
+
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
+      await db.matches.update(matchId, updateData);
+
+      return {
+        status: 'applied',
+        matchId,
+        timerSecondsRemaining: nextSecs,
+        isRunning: false,
+        epoch: authCheck.callerEpoch,
+        confidence: 'high'
+      };
+    });
+
+    return await opPromise;
+    });
+  },
+
+  /**
+   * Resuelve explícitamente el estado de recuperación pendiente del cronómetro (Fase 2C R1.5 - C-29).
+   * Solo el propietario con lease y epoch vigentes puede validar el tiempo.
+   * Limpia transaccionalmente timerRecoveryState a 'normal' y establece los segundos validados.
+   */
+  resolveRecovery(
+    matchId: number,
+    validatedSeconds: number,
+    options?: TimerServiceOptions
+  ): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
+    const matchBefore = await db.matches.get(matchId);
+    if (!matchBefore) {
+      return {
+        status: 'rejected',
+        matchId,
+        timerSecondsRemaining: 0,
+        isRunning: false,
+        reason: 'El partido no existe.'
+      };
+    }
+
+    const authorityCheck = this._validateAuthority(matchId, options);
+    if (!authorityCheck.valid) {
+      return {
+        status: authorityCheck.status ?? 'not_owner',
+        matchId,
+        timerSecondsRemaining: Math.max(0, matchBefore.timerSecondsRemaining ?? 0),
+        isRunning: false,
+        reason: authorityCheck.reason
+      };
+    }
+
+    const opPromise = db.transaction('rw', db.matches, async (): Promise<TimerOperationResult> => {
+      const match = await db.matches.get(matchId);
+      const authCheck = this._verifyTransactionalAuthority(match, matchId, options);
+      if (!authCheck.authorized) {
+        return {
+          status: authCheck.status,
+          matchId,
+          timerSecondsRemaining: Math.max(0, match?.timerSecondsRemaining ?? 0),
+          isRunning: Boolean(match?.timerLastStart),
+          reason: authCheck.reason,
+          epoch: authCheck.callerEpoch
+        };
+      }
+
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
+      const clampedSeconds = Math.max(0, validatedSeconds);
+      sessionMonotonicStarts.delete(matchId);
+
+      await db.matches.update(matchId, {
+        timerSecondsRemaining: clampedSeconds,
+        timerLastStart: undefined,
+        timerRecoveryState: 'normal',
+        timerRecoveryReason: undefined,
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId
       });
@@ -851,13 +1007,17 @@ export const MatchTimerService = {
       return {
         status: 'applied',
         matchId,
-        timerSecondsRemaining: nextSecs,
+        timerSecondsRemaining: clampedSeconds,
         isRunning: false,
-        epoch: authCheck.callerEpoch
+        expired: clampedSeconds <= 0,
+        epoch: authCheck.callerEpoch,
+        confidence: 'high',
+        precisionSource: 'wall_clock_recovered'
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
@@ -866,7 +1026,8 @@ export const MatchTimerService = {
    * - Propietario: calcula y persiste en IndexedDB si expiró con verificación transaccional estricta (C-12 / C-21 / C-22).
    * - Observador / Lease expirado: calcula puramente en memoria sin realizar escrituras en BD (C-12 / C-21 / C-22).
    */
-  async reconcile(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  reconcile(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const nowMs = options?.nowMs ?? Date.now();
 
     const opPromise = db.transaction('rw', db.matches, async (): Promise<TimerOperationResult> => {
@@ -904,37 +1065,54 @@ export const MatchTimerService = {
       }
 
       const lastStartMs = match.timerLastStart.getTime();
-      const { elapsedSeconds, source, confidence, clockShiftSeverity } = calculateMonotonicElapsed(matchId, lastStartMs, nowMs, options);
+      const { elapsedSeconds, source, confidence } = calculateMonotonicElapsed(matchId, lastStartMs, nowMs, options);
 
-      // C-25: Si hay salto anómalo hacia adelante (forward_jump), pausar conservadoramente sin truncar a cero ni finalizar el cuarto
-      if (confidence === 'uncertain' && clockShiftSeverity === 'forward_jump') {
+      // C-25 / C-29: Si hay incertidumbre temporal, pausar o acotar conservadoramente y persistir estado de recuperación
+      if (confidence === 'uncertain') {
         const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        const isBackward = source === 'anomalous_clamp' && nowMs < lastStartMs;
+
         if (authCheck.authorized) {
           sessionMonotonicStarts.delete(matchId);
-          await db.matches.update(matchId, {
-            timerLastStart: undefined,
+          if (this._testPreCommitHook) {
+            await this._testPreCommitHook(matchId);
+          }
+
+          const updateData: Partial<Match> = {
             timerSecondsRemaining: baseRemaining,
             timerEpoch: authCheck.callerEpoch,
-            timerOwnerTabId: authCheck.callerTabId
-          });
+            timerOwnerTabId: authCheck.callerTabId,
+            timerRecoveryState: 'recovery_required',
+            timerRecoveryReason: 'Anomalía temporal detectada durante la reconciliación'
+          };
+
+          if (isBackward) {
+            updateData.timerLastStart = new Date(nowMs);
+          } else {
+            updateData.timerLastStart = undefined;
+          }
+
+          await db.matches.update(matchId, updateData);
 
           return {
             status: 'applied',
             matchId,
             timerSecondsRemaining: baseRemaining,
-            isRunning: false,
+            isRunning: isBackward,
             expired: false,
             epoch: authCheck.callerEpoch,
             precisionSource: source,
             confidence: 'uncertain',
-            reason: 'Anomalía temporal detectada. Cronómetro pausado de forma conservadora preservando el tiempo restante.'
+            reason: isBackward
+              ? 'Retroceso del reloj detectado. Cronómetro acotado a 0 preservando el tiempo restante.'
+              : 'Anomalía temporal detectada. Cronómetro pausado de forma conservadora preservando el tiempo restante.'
           };
         } else {
           return {
             status: authCheck.status === 'not_owner' ? 'already_applied' : authCheck.status,
             matchId,
             timerSecondsRemaining: baseRemaining,
-            isRunning: false,
+            isRunning: isBackward,
             expired: false,
             precisionSource: source,
             confidence: 'uncertain',
@@ -1004,13 +1182,15 @@ export const MatchTimerService = {
       }
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
    * Avanza al siguiente cuarto reglamentario con verificación transaccional de autoridad (C-13 / C-22).
    */
-  async advanceQuarter(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  advanceQuarter(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -1079,10 +1259,16 @@ export const MatchTimerService = {
 
       sessionMonotonicStarts.delete(matchId);
 
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
       await db.matches.update(matchId, {
         currentQuarter: nextQ,
         timerSecondsRemaining: targetSeconds,
         timerLastStart: undefined,
+        timerRecoveryState: 'normal',
+        timerRecoveryReason: undefined,
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId,
         ...(isNewHalf ? { localTimeouts: 0, visitorTimeouts: 0 } : {})
@@ -1097,13 +1283,15 @@ export const MatchTimerService = {
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
    * Inicia tiempo extra (OT) de forma transaccional con verificación de autoridad (C-13 / C-22).
    */
-  async startOvertime(matchId: number, overtimeMinutes = 5, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  startOvertime(matchId: number, overtimeMinutes = 5, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return { status: 'rejected', matchId, timerSecondsRemaining: 0, isRunning: false, reason: 'El partido no existe.' };
@@ -1139,10 +1327,16 @@ export const MatchTimerService = {
 
       sessionMonotonicStarts.delete(matchId);
 
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
       await db.matches.update(matchId, {
         currentQuarter: nextQ,
         timerSecondsRemaining: targetSeconds,
         timerLastStart: undefined,
+        timerRecoveryState: 'normal',
+        timerRecoveryReason: undefined,
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId,
         localTimeouts: 0,
@@ -1158,13 +1352,15 @@ export const MatchTimerService = {
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   },
 
   /**
    * Finaliza el partido de forma atómica y transaccional con verificación de autoridad y fencing (C-19 / C-22).
    */
-  async endMatch(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+  endMatch(matchId: number, options?: TimerServiceOptions): Promise<TimerOperationResult> {
+    return this._trackOp(matchId, options, async () => {
     const matchBefore = await db.matches.get(matchId);
     if (!matchBefore) {
       return {
@@ -1241,11 +1437,17 @@ export const MatchTimerService = {
 
       const nextEpoch = authCheck.callerEpoch + 1;
 
+      if (this._testPreCommitHook) {
+        await this._testPreCommitHook(matchId);
+      }
+
       await db.matches.update(matchId, {
         status: 'finished',
         finishedAt: new Date(nowMs),
         timerSecondsRemaining: effectiveRemaining,
         timerLastStart: undefined,
+        timerRecoveryState: 'normal',
+        timerRecoveryReason: undefined,
         timerEpoch: nextEpoch,
         timerOwnerTabId: authCheck.callerTabId,
         timerLeaseExpiresAt: 0
@@ -1260,6 +1462,7 @@ export const MatchTimerService = {
       };
     });
 
-    return await (options?.coordinator ?? timerAuthorityCoordinator).trackOperation(matchId, opPromise);
+    return await opPromise;
+    });
   }
 };

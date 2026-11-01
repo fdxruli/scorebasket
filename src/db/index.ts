@@ -3,6 +3,7 @@ export * from './db';
 export * from './models';
 export * from './teams.repository';
 export * from './players.repository';
+export * from './matches.repository';
 export * from './gameActions.repository';
 export * from './timeout.service';
 export * from './series.service';

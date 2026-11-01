@@ -1,4 +1,4 @@
-import { db } from '../db/db';
+import { MatchesRepository } from '../db/matches.repository';
 import { TeamsRepository } from '../db/teams.repository';
 import type { Match } from '../db/models/Match';
 import type { MatchConfig } from '../db/models/MatchConfig';
@@ -67,86 +67,17 @@ export async function renameTeamSafely(
 }
 
 /**
- * Crea e inicia en 1 clic una "Reta Rápida" (modo race, con revanchas):
- * a) Busca equipos activos "Local" y "Visitante"; si no existen, o ya fueron usados
- *    (tienen jugadores o partidos), archiva los anteriores y crea nuevos sin jugadores.
- * b) Crea el partido en db.matches en modo 'race' con status 'playing'.
- * c) Retorna el matchId recién creado.
+ * Crea e inicia en 1 clic una "Reta Rápida" (modo race, con revanchas).
+ * Delega de forma centralizada en MatchesRepository.createQuickPickup.
  */
 export async function startQuickPickupMatch(targetScore = 21): Promise<number> {
-  return db.transaction('rw', db.teams, db.matches, db.players, async () => {
-    const ensurePickupTeam = async (teamName: string): Promise<number> => {
-      const existing = await db.teams
-        .where('name')
-        .equalsIgnoreCase(teamName)
-        .and(t => !t.isArchived)
-        .first();
-
-      if (existing?.id !== undefined) {
-        const teamId = existing.id;
-        // Consultas optimizadas con los índices v8 (localTeamId y visitorTeamId)
-        const [playersCount, localMatchesCount, visitorMatchesCount] = await Promise.all([
-          db.players.where({ teamId }).count(),
-          db.matches.where('localTeamId').equals(teamId).count(),
-          db.matches.where('visitorTeamId').equals(teamId).count()
-        ]);
-        const matchesCount = localMatchesCount + visitorMatchesCount;
-
-        // Equipo genérico limpio (sin jugadores ni partidos): se reutiliza.
-        if (playersCount === 0 && matchesCount === 0) {
-          return teamId;
-        }
-
-        // Ya fue usado: se archiva para conservar intactos su historial y jugadores.
-        await db.teams.update(teamId, { isArchived: true });
-      }
-
-      const newId = await db.teams.add({
-        name: teamName,
-        createdAt: new Date(),
-        isArchived: false
-      });
-
-      return Number(newId);
-    };
-
-    const localTeamId = await ensurePickupTeam('Local');
-    const visitorTeamId = await ensurePickupTeam('Visitante');
-
-    const matchId = await db.matches.add({
-      localTeamId,
-      visitorTeamId,
-      status: 'playing',
-      createdAt: new Date(),
-      eventsProvenance: 'live_session',
-      config: {
-        mode: 'race',
-        race: {
-          targetScore,
-          hasRematches: true,
-          currentGame: 1,
-          winByTwo: false,
-          scoringSystem: 'standard'
-        }
-      },
-      localScore: 0,
-      visitorScore: 0,
-      localFouls: 0,
-      visitorFouls: 0,
-      gameHistory: []
-    });
-
-    return Number(matchId);
-  });
+  return MatchesRepository.createQuickPickup(targetScore);
 }
 
 /**
  * Elimina en cascada un partido y todas sus acciones (scores y fouls) asociadas.
+ * Delega de forma centralizada en MatchesRepository.deleteCascade.
  */
 export async function deleteMatchCascade(matchId: number): Promise<void> {
-  await db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
-    await db.scores.where('matchId').equals(matchId).delete();
-    await db.fouls.where('matchId').equals(matchId).delete();
-    await db.matches.delete(matchId);
-  });
+  return MatchesRepository.deleteCascade(matchId);
 }

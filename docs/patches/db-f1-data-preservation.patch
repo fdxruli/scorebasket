@@ -1,0 +1,3728 @@
+diff --git a/src/components/matches/LocalBackupControls.tsx b/src/components/matches/LocalBackupControls.tsx
+new file mode 100644
+index 0000000..bbc3c60
+--- /dev/null
++++ b/src/components/matches/LocalBackupControls.tsx
+@@ -0,0 +1,362 @@
++// src/components/matches/LocalBackupControls.tsx
++import { useState, useEffect, useRef } from 'react';
++import {
++  Download,
++  Upload,
++  Shield,
++  ShieldCheck,
++  AlertTriangle,
++  CheckCircle,
++  Database,
++  ChevronDown,
++  ChevronUp,
++  HardDrive
++} from 'lucide-react';
++import {
++  LocalBackupService,
++  type StorageStatus,
++  type BackupCounts
++} from '../../db/localBackup.service';
++
++export function LocalBackupControls() {
++  const [isOpen, setIsOpen] = useState(false);
++  const [isExporting, setIsExporting] = useState(false);
++  const [isRestoring, setIsRestoring] = useState(false);
++  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
++  const [successMessage, setSuccessMessage] = useState<string | null>(null);
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
++  const [showConfirmRestore, setShowConfirmRestore] = useState<{
++    fileContent: string;
++    fileName: string;
++  } | null>(null);
++
++  const fileInputRef = useRef<HTMLInputElement>(null);
++
++  const loadStorageStatus = async () => {
++    try {
++      const status = await LocalBackupService.storageStatus();
++      setStorageStatus(status);
++    } catch {
++      // Ignorar fallos de sondeo
++    }
++  };
++
++  useEffect(() => {
++    loadStorageStatus();
++  }, []);
++
++  const handleExport = async () => {
++    setIsExporting(true);
++    setErrorMessage(null);
++    setSuccessMessage(null);
++    try {
++      const { filename, counts, downloadInitiated } = await LocalBackupService.exportToFile();
++      if (downloadInitiated) {
++        setSuccessMessage(
++          `Respaldo generado exitosamente. Descarga iniciada como "${filename}" (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas). Revisa tu bandeja de descargas.`
++        );
++      } else {
++        setSuccessMessage(
++          `Respaldo generado exitosamente (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas).`
++        );
++      }
++    } catch (err: unknown) {
++      const msg = err instanceof Error ? err.message : 'Error desconocido al generar el respaldo.';
++      setErrorMessage(`No se pudo generar el respaldo: ${msg}`);
++    } finally {
++      setIsExporting(false);
++    }
++  };
++
++  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
++    const file = e.target.files?.[0];
++    if (!file) return;
++
++    // Resetear valor para permitir seleccionar el mismo archivo si fuese necesario
++    e.target.value = '';
++    setErrorMessage(null);
++    setSuccessMessage(null);
++
++    try {
++      const isEmpty = await LocalBackupService.isDatabaseEmpty();
++      if (!isEmpty) {
++        const counts = await LocalBackupService.getDatabaseCounts();
++        setErrorMessage(
++          `Restauración bloqueada: la base de datos ya contiene datos (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos). ` +
++          'Para proteger la integridad de tus registros y evitar sobreescritura accidental, la restauración requiere una base de datos completamente vacía.'
++        );
++        return;
++      }
++
++      let text: string;
++      if (typeof file.text === 'function') {
++        text = await file.text();
++      } else {
++        text = await new Promise<string>((resolve, reject) => {
++          const reader = new FileReader();
++          reader.onload = () => resolve(reader.result as string);
++          reader.onerror = () => reject(reader.error || new Error('Error al leer el archivo.'));
++          reader.readAsText(file);
++        });
++      }
++
++      setShowConfirmRestore({ fileContent: text, fileName: file.name });
++    } catch (err: unknown) {
++      const msg = err instanceof Error ? err.message : 'Error al leer el archivo.';
++      setErrorMessage(`Error de lectura: ${msg}`);
++    }
++  };
++
++  const executeRestore = async () => {
++    if (!showConfirmRestore) return;
++    setIsRestoring(true);
++    setErrorMessage(null);
++    setSuccessMessage(null);
++
++    try {
++      const counts: BackupCounts = await LocalBackupService.restoreIntoEmpty(showConfirmRestore.fileContent);
++      setShowConfirmRestore(null);
++      setSuccessMessage(
++        `¡Restauración exitosa! Se cargaron ${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones y ${counts.fouls} faltas.`
++      );
++      loadStorageStatus();
++    } catch (err: unknown) {
++      const msg = err instanceof Error ? err.message : 'Error durante la restauración.';
++      setErrorMessage(`Fallo en la restauración: ${msg}`);
++      setShowConfirmRestore(null);
++    } finally {
++      setIsRestoring(false);
++    }
++  };
++
++  const handleRequestPersistence = async () => {
++    setErrorMessage(null);
++    try {
++      const granted = await LocalBackupService.requestPersistentStorage();
++      await loadStorageStatus();
++      if (granted) {
++        setSuccessMessage('El navegador ha concedido almacenamiento persistente protegido.');
++      } else {
++        setErrorMessage('El navegador no concedió almacenamiento persistente en este momento.');
++      }
++    } catch {
++      setErrorMessage('No se pudo solicitar la persistencia de almacenamiento.');
++    }
++  };
++
++  return (
++    <section className="card" style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}>
++      <div
++        style={{
++          display: 'flex',
++          justifyContent: 'space-between',
++          alignItems: 'center',
++          cursor: 'pointer',
++          userSelect: 'none'
++        }}
++        onClick={() => setIsOpen(prev => !prev)}
++      >
++        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
++          <Database size={20} color="var(--primary)" />
++          <div>
++            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
++              Respaldo y Seguridad de Datos Locales
++            </h2>
++            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
++              Exporta copias de seguridad verificables o comprueba la persistencia de almacenamiento
++            </p>
++          </div>
++        </div>
++
++        <button
++          type="button"
++          className="btn btn-sm btn-secondary"
++          style={{ padding: '0.4rem 0.6rem' }}
++          aria-expanded={isOpen}
++          aria-label={isOpen ? 'Ocultar panel' : 'Mostrar panel'}
++        >
++          {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
++        </button>
++      </div>
++
++      {isOpen && (
++        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
++          {/* Mensajes de éxito y error */}
++          {successMessage && (
++            <div
++              style={{
++                display: 'flex',
++                alignItems: 'center',
++                gap: '0.5rem',
++                padding: '0.75rem',
++                backgroundColor: 'rgba(34, 197, 94, 0.1)',
++                border: '1px solid rgba(34, 197, 94, 0.3)',
++                borderRadius: '8px',
++                color: 'var(--success)',
++                marginBottom: '1rem',
++                fontSize: '0.85rem'
++              }}
++            >
++              <CheckCircle size={18} style={{ flexShrink: 0 }} />
++              <div style={{ flex: 1 }}>{successMessage}</div>
++              <button
++                type="button"
++                onClick={() => setSuccessMessage(null)}
++                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
++              >
++                ✕
++              </button>
++            </div>
++          )}
++
++          {errorMessage && (
++            <div
++              style={{
++                display: 'flex',
++                alignItems: 'center',
++                gap: '0.5rem',
++                padding: '0.75rem',
++                backgroundColor: 'rgba(239, 68, 68, 0.1)',
++                border: '1px solid rgba(239, 68, 68, 0.3)',
++                borderRadius: '8px',
++                color: 'var(--danger, #ef4444)',
++                marginBottom: '1rem',
++                fontSize: '0.85rem'
++              }}
++            >
++              <AlertTriangle size={18} style={{ flexShrink: 0 }} />
++              <div style={{ flex: 1 }}>{errorMessage}</div>
++              <button
++                type="button"
++                onClick={() => setErrorMessage(null)}
++                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
++              >
++                ✕
++              </button>
++            </div>
++          )}
++
++          {/* Diálogo de confirmación para restauración */}
++          {showConfirmRestore && (
++            <div
++              style={{
++                padding: '1rem',
++                backgroundColor: 'rgba(245, 158, 11, 0.1)',
++                border: '1px solid rgba(245, 158, 11, 0.3)',
++                borderRadius: '8px',
++                marginBottom: '1rem'
++              }}
++            >
++              <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--warning, #f59e0b)', fontSize: '0.95rem' }}>
++                Confirmar Restauración
++              </h4>
++              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>
++                Se restaurarán todos los datos del archivo <strong>{showConfirmRestore.fileName}</strong> en la base de datos local vacía.
++                Esta operación es atómica e importará los equipos, jugadores, partidos y estadísticas con sus identificadores intactos.
++              </p>
++              <div style={{ display: 'flex', gap: '0.5rem' }}>
++                <button
++                  type="button"
++                  onClick={executeRestore}
++                  disabled={isRestoring}
++                  className="btn btn-sm btn-primary"
++                >
++                  {isRestoring ? 'Restaurando...' : 'Sí, Restaurar Datos'}
++                </button>
++                <button
++                  type="button"
++                  onClick={() => setShowConfirmRestore(null)}
++                  disabled={isRestoring}
++                  className="btn btn-sm btn-secondary"
++                >
++                  Cancelar
++                </button>
++              </div>
++            </div>
++          )}
++
++          {/* Acciones principales: Exportar y Restaurar */}
++          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
++            <button
++              type="button"
++              onClick={handleExport}
++              disabled={isExporting}
++              className="btn btn-sm btn-primary"
++              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
++            >
++              <Download size={15} />
++              {isExporting ? 'Generando...' : 'Descargar Respaldo (JSON)'}
++            </button>
++
++            <button
++              type="button"
++              onClick={() => fileInputRef.current?.click()}
++              disabled={isRestoring}
++              className="btn btn-sm btn-secondary"
++              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
++            >
++              <Upload size={15} />
++              {isRestoring ? 'Procesando...' : 'Restaurar Respaldo'}
++            </button>
++
++            <input
++              type="file"
++              ref={fileInputRef}
++              accept=".json,application/json"
++              style={{ display: 'none' }}
++              onChange={handleFileChange}
++            />
++          </div>
++
++          {/* Estado de Persistencia del Navegador */}
++          {storageStatus?.supported && (
++            <div
++              style={{
++                display: 'flex',
++                alignItems: 'center',
++                justifyContent: 'space-between',
++                flexWrap: 'wrap',
++                gap: '0.5rem',
++                padding: '0.6rem 0.8rem',
++                backgroundColor: 'var(--bg-surface, #1e293b)',
++                borderRadius: '6px',
++                fontSize: '0.8rem'
++              }}
++            >
++              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
++                {storageStatus.persisted ? (
++                  <ShieldCheck size={16} color="var(--success)" />
++                ) : (
++                  <Shield size={16} color="var(--warning, #f59e0b)" />
++                )}
++                <span>
++                  {storageStatus.persisted
++                    ? 'Almacenamiento persistente activo (protegido contra desalojo).'
++                    : 'Almacenamiento estándar (el navegador podría limpiar datos si se queda sin espacio).'}
++                </span>
++                {storageStatus.usageFormatted && (
++                  <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
++                    <HardDrive size={13} />
++                    {storageStatus.usageFormatted}
++                    {storageStatus.quotaFormatted ? ` / ${storageStatus.quotaFormatted}` : ''}
++                  </span>
++                )}
++              </div>
++
++              {!storageStatus.persisted && (
++                <button
++                  type="button"
++                  onClick={handleRequestPersistence}
++                  className="btn btn-xs btn-secondary"
++                  style={{ padding: '0.2rem 0.5rem' }}
++                >
++                  Solicitar Persistencia
++                </button>
++              )}
++            </div>
++          )}
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/src/config/validations.ts b/src/config/validations.ts
+index 41420cc..d812ee5 100644
+--- a/src/config/validations.ts
++++ b/src/config/validations.ts
+@@ -26,77 +26,119 @@ export const VALIDATION_RULES = {
+ } as const;
+ 
+ /**
+- * Valida una configuración de partido
++ * Valida una configuración de partido.
++ * Inspecciona rigurosamente tipos, límites numéricos enteros, ausencia de NaN/Infinity,
++ * presencia de subconfiguraciones requeridas y coherencia deportiva.
+  */
+-export function validateMatchConfig(config: MatchConfig): {
++export function validateMatchConfig(config: unknown): {
+   isValid: boolean;
+   errors: string[];
+ } {
+   const errors: string[] = [];
+-  
+-  switch (config.mode) {
++
++  if (!config || typeof config !== 'object' || Array.isArray(config)) {
++    return {
++      isValid: false,
++      errors: ['Configuración de partido inválida o ausente (debe ser un objeto)']
++    };
++  }
++
++  const cfg = config as Partial<MatchConfig>;
++
++  if (!cfg.mode || !['traditional', 'race', 'best-of-series'].includes(cfg.mode)) {
++    return {
++      isValid: false,
++      errors: [`Modo de juego inválido o no reconocido: "${String(cfg.mode)}". Los modos válidos son traditional, race y best-of-series.`]
++    };
++  }
++
++  const isStrictInteger = (val: unknown, min: number, max: number): boolean => {
++    return (
++      typeof val === 'number' &&
++      Number.isInteger(val) &&
++      !Number.isNaN(val) &&
++      Number.isFinite(val) &&
++      val >= min &&
++      val <= max
++    );
++  };
++
++  switch (cfg.mode) {
+     case 'traditional': {
+-      if (!config.traditional) {
+-        errors.push('Configuración tradicional requerida');
++      if (!cfg.traditional || typeof cfg.traditional !== 'object' || Array.isArray(cfg.traditional)) {
++        errors.push('Configuración tradicional requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = config.traditional;
++
++      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = cfg.traditional;
+       const rules = VALIDATION_RULES.traditional;
+-      
+-      if (totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
+-        errors.push(`Los cuartos deben estar entre ${rules.minQuarters} y ${rules.maxQuarters}`);
++
++      if (!isStrictInteger(totalQuarters, rules.minQuarters, rules.maxQuarters)) {
++        errors.push(
++          `Los cuartos deben ser un número entero entre ${rules.minQuarters} y ${rules.maxQuarters}`
++        );
+       }
+-      
+-      if (minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
+-        errors.push(`Los minutos deben estar entre ${rules.minMinutes} y ${rules.maxMinutes}`);
++
++      if (!isStrictInteger(minutesPerQuarter, rules.minMinutes, rules.maxMinutes)) {
++        errors.push(
++          `Los minutos deben ser un número entero entre ${rules.minMinutes} y ${rules.maxMinutes}`
++        );
+       }
+ 
+-      if (timeoutsPerTeam !== undefined && (timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
+-        errors.push(`Los tiempos fuera deben estar entre ${rules.minTimeouts} y ${rules.maxTimeouts}`);
++      if (
++        timeoutsPerTeam !== undefined &&
++        !isStrictInteger(timeoutsPerTeam, rules.minTimeouts, rules.maxTimeouts)
++      ) {
++        errors.push(
++          `Los tiempos fuera deben ser un número entero entre ${rules.minTimeouts} y ${rules.maxTimeouts}`
++        );
+       }
+       break;
+     }
+-    
++
+     case 'race': {
+-      if (!config.race) {
+-        errors.push('Configuración Race requerida');
++      if (!cfg.race || typeof cfg.race !== 'object' || Array.isArray(cfg.race)) {
++        errors.push('Configuración Race requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { targetScore } = config.race;
++
++      const { targetScore } = cfg.race;
+       const rules = VALIDATION_RULES.race;
+-      
+-      if (targetScore < rules.minScore || targetScore > rules.maxScore) {
+-        errors.push(`El puntaje objetivo debe estar entre ${rules.minScore} y ${rules.maxScore}`);
++
++      if (!isStrictInteger(targetScore, rules.minScore, rules.maxScore)) {
++        errors.push(
++          `El puntaje objetivo debe ser un número entero entre ${rules.minScore} y ${rules.maxScore}`
++        );
+       }
+       break;
+     }
+-    
++
+     case 'best-of-series': {
+-      if (!config.bestOf) {
+-        errors.push('Configuración Best-of requerida');
++      if (!cfg.bestOf || typeof cfg.bestOf !== 'object' || Array.isArray(cfg.bestOf)) {
++        errors.push('Configuración Best-of requerida y debe ser un objeto');
+         break;
+       }
+-      
+-      const { totalGames, targetScorePerGame } = config.bestOf;
++
++      const { totalGames, targetScorePerGame } = cfg.bestOf;
+       const rules = VALIDATION_RULES.bestOf;
+-      
+-      if (totalGames < rules.minGames || totalGames > rules.maxGames) {
+-        errors.push(`El número de partidos debe estar entre ${rules.minGames} y ${rules.maxGames}`);
+-      }
+-      
+-      if (totalGames % 2 === 0) {
++
++      if (!isStrictInteger(totalGames, rules.minGames, rules.maxGames)) {
++        errors.push(
++          `El número de partidos debe ser un número entero entre ${rules.minGames} y ${rules.maxGames}`
++        );
++      } else if (totalGames % 2 === 0) {
+         errors.push('El número de partidos debe ser impar (ej: 3, 5, 7)');
+       }
+-      
+-      if (targetScorePerGame < rules.minScorePerGame || targetScorePerGame > rules.maxScorePerGame) {
+-        errors.push(`El puntaje por partido debe estar entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`);
++
++      if (!isStrictInteger(targetScorePerGame, rules.minScorePerGame, rules.maxScorePerGame)) {
++        errors.push(
++          `El puntaje por partido debe ser un número entero entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`
++        );
+       }
+       break;
+     }
+   }
+-  
++
+   return {
+     isValid: errors.length === 0,
+     errors
+diff --git a/src/db/index.ts b/src/db/index.ts
+index c9997f9..333a1ec 100644
+--- a/src/db/index.ts
++++ b/src/db/index.ts
+@@ -7,3 +7,4 @@ export * from './gameActions.repository';
+ export * from './timeout.service';
+ export * from './series.service';
+ export * from './scoreIntegrity.service';
++export * from './localBackup.service';
+diff --git a/src/db/localBackup.service.ts b/src/db/localBackup.service.ts
+new file mode 100644
+index 0000000..de692eb
+--- /dev/null
++++ b/src/db/localBackup.service.ts
+@@ -0,0 +1,1122 @@
++// src/db/localBackup.service.ts
++import { db } from './db';
++import type { Team } from './models/Team';
++import type { Player } from './models/Player';
++import type { Match } from './models/Match';
++import type { Score } from './models/Score';
++import type { Foul } from './models/Foul';
++import type { GameResult } from './models/MatchConfig';
++import { validateMatchConfig } from '../config/validations';
++
++export const LOCAL_BACKUP_FORMAT = 'scorebasket-local-backup';
++export const LOCAL_BACKUP_VERSION = 2;
++
++export const MIN_PLAUSIBLE_TIMESTAMP = 946684800000; // 2000-01-01T00:00:00.000Z
++export const MAX_PLAUSIBLE_TIMESTAMP = 4102444800000; // 2100-01-01T00:00:00.000Z
++
++export class BackupValidationError extends Error {
++  constructor(message: string) {
++    super(message);
++    this.name = 'BackupValidationError';
++  }
++}
++
++export class DatabaseNotEmptyError extends Error {
++  constructor(message: string) {
++    super(message);
++    this.name = 'DatabaseNotEmptyError';
++  }
++}
++
++export interface BackupData {
++  teams: Team[];
++  players: Player[];
++  matches: Match[];
++  scores: Score[];
++  fouls: Foul[];
++}
++
++export type BackupCounts = Record<keyof BackupData, number>;
++
++export interface BackupMetadata {
++  counts: BackupCounts;
++  checksum: string;
++  checksumAlgorithm: 'SHA-256';
++  generatedBy: string;
++}
++
++export interface BackupEnvelope {
++  format: typeof LOCAL_BACKUP_FORMAT;
++  version: typeof LOCAL_BACKUP_VERSION;
++  app: 'ScoreBasket';
++  sourceSchemaVersion: number;
++  exportedAt: string;
++  metadata: BackupMetadata;
++  data: BackupData;
++}
++
++export interface StorageStatus {
++  supported: boolean;
++  persisted: boolean;
++  usage?: number;
++  quota?: number;
++  usageFormatted?: string;
++  quotaFormatted?: string;
++  percentUsed?: number;
++}
++
++const REQUIRED_TABLE_KEYS: readonly (keyof BackupData)[] = [
++  'teams',
++  'players',
++  'matches',
++  'scores',
++  'fouls'
++] as const;
++
++/**
++ * Constantes K de la especificación FIPS 180-4 (SHA-256).
++ */
++const SHA256_K = [
++  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
++  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
++  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
++  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
++  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
++  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
++  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
++  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
++];
++
++/**
++ * Implementación determinista pura de SHA-256 (FIPS 180-4) en TypeScript.
++ * Garantiza que el cálculo del checksum produzca exactamente los mismos
++ * 256 bits (64 caracteres hexadecimales) en cualquier navegador, entorno
++ * sin `crypto.subtle`, Web Worker o runtime de pruebas.
++ */
++export function computePureSha256(bytes: Uint8Array): string {
++  let H0 = 0x6a09e667, H1 = 0xbb67ae85, H2 = 0x3c6ef372, H3 = 0xa54ff53a;
++  let H4 = 0x510e527f, H5 = 0x9b05688c, H6 = 0x1f83d9ab, H7 = 0x5be0cd19;
++
++  const l = bytes.length;
++  const bitLen = l * 8;
++  const padLen = (l % 64 < 56) ? (56 - (l % 64)) : (120 - (l % 64));
++  const totalLen = l + padLen + 8;
++  const padded = new Uint8Array(totalLen);
++  padded.set(bytes);
++  padded[l] = 0x80;
++
++  const view = new DataView(padded.buffer);
++  view.setUint32(totalLen - 4, bitLen >>> 0);
++  view.setUint32(totalLen - 8, Math.floor(bitLen / 0x100000000));
++
++  const W = new Uint32Array(64);
++  const rotr = (n: number, b: number) => (n >>> b) | (n << (32 - b));
++
++  for (let i = 0; i < totalLen; i += 64) {
++    for (let t = 0; t < 16; t++) {
++      W[t] = view.getUint32(i + t * 4);
++    }
++    for (let t = 16; t < 64; t++) {
++      const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
++      const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
++      W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
++    }
++
++    let a = H0, b = H1, c = H2, d = H3, e = H4, f = H5, g = H6, h = H7;
++
++    for (let t = 0; t < 64; t++) {
++      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
++      const ch = (e & f) ^ ((~e) & g);
++      const temp1 = (h + S1 + ch + SHA256_K[t] + W[t]) >>> 0;
++      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
++      const maj = (a & b) ^ (a & c) ^ (b & c);
++      const temp2 = (S0 + maj) >>> 0;
++
++      h = g;
++      g = f;
++      f = e;
++      e = (d + temp1) >>> 0;
++      d = c;
++      c = b;
++      b = a;
++      a = (temp1 + temp2) >>> 0;
++    }
++
++    H0 = (H0 + a) >>> 0;
++    H1 = (H1 + b) >>> 0;
++    H2 = (H2 + c) >>> 0;
++    H3 = (H3 + d) >>> 0;
++    H4 = (H4 + e) >>> 0;
++    H5 = (H5 + f) >>> 0;
++    H6 = (H6 + g) >>> 0;
++    H7 = (H7 + h) >>> 0;
++  }
++
++  const out = [H0, H1, H2, H3, H4, H5, H6, H7];
++  return out.map(n => n.toString(16).padStart(8, '0')).join('');
++}
++
++/**
++ * Calcula un checksum SHA-256 determinista para el contenido serializado.
++ * Utiliza Web Crypto cuando está disponible por aceleración por hardware;
++ * si no existe o falla, recurre a `computePureSha256`, garantizando
++ * EXACTAMENTE el mismo valor hexadecimal en cualquier entorno.
++ */
++export async function computeDataChecksum(text: string): Promise<string> {
++  const encoder = new TextEncoder();
++  const data = encoder.encode(text);
++
++  if (typeof crypto !== 'undefined' && crypto?.subtle?.digest) {
++    try {
++      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
++      const hashArray = Array.from(new Uint8Array(hashBuffer));
++      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
++    } catch {
++      // Si crypto.subtle lanza error imprevisto, se ejecuta el cálculo puro FIPS
++    }
++  }
++
++  return computePureSha256(data);
++}
++
++/**
++ * Función compatible para cómputo de checksum SHA-256.
++ */
++export async function computeSha256(text: string): Promise<string> {
++  return computeDataChecksum(text);
++}
++
++/**
++ * Serializador canónico determinista compatible con RFC 8785 (JSON Canonicalization Scheme - JCS).
++ * Garantiza que la representación en cadena de cualquier estructura JSON sea unívoca e idéntica,
++ * ordenando recursivamente las claves de los objetos lexicográficamente y preservando
++ * el orden estricto de los arreglos. Omite propiedades undefined, funciones y símbolos.
++ */
++export function canonicalizeJson(value: unknown): string {
++  if (value === null || typeof value !== 'object') {
++    return JSON.stringify(value);
++  }
++
++  if (value instanceof Date) {
++    return JSON.stringify(value.toISOString());
++  }
++
++  if (Array.isArray(value)) {
++    const items = value.map(item => canonicalizeJson(item));
++    return `[${items.join(',')}]`;
++  }
++
++  const obj = value as Record<string, unknown>;
++  const sortedKeys = Object.keys(obj).sort();
++  const entries: string[] = [];
++
++  for (const key of sortedKeys) {
++    const val = obj[key];
++    if (val === undefined || typeof val === 'symbol' || typeof val === 'function') {
++      continue;
++    }
++    entries.push(`${JSON.stringify(key)}:${canonicalizeJson(val)}`);
++  }
++
++  return `{${entries.join(',')}}`;
++}
++
++export interface CanonicalBackupEnvelope {
++  app: string;
++  counts: BackupCounts;
++  data: BackupData;
++  exportedAt: string;
++  format: string;
++  sourceSchemaVersion: number;
++  version: number;
++}
++
++export function computeCanonicalEnvelopeString(payload: CanonicalBackupEnvelope): string {
++  return canonicalizeJson({
++    app: payload.app,
++    counts: payload.counts,
++    data: payload.data,
++    exportedAt: payload.exportedAt,
++    format: payload.format,
++    sourceSchemaVersion: payload.sourceSchemaVersion,
++    version: payload.version
++  });
++}
++
++export async function computeEnvelopeChecksum(payload: CanonicalBackupEnvelope): Promise<string> {
++  const canonicalStr = computeCanonicalEnvelopeString(payload);
++  const rawHash = await computeDataChecksum(canonicalStr);
++  return `sha256:${rawHash}`;
++}
++
++function parseRecord(value: unknown, fieldName: string): Record<string, unknown> {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) {
++    throw new BackupValidationError(`El registro "${fieldName}" debe ser un objeto.`);
++  }
++  return value as Record<string, unknown>;
++}
++
++function parseValidId(value: unknown, fieldName: string): number {
++  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
++    throw new BackupValidationError(`ID inválido en "${fieldName}". Se esperaba un entero positivo.`);
++  }
++  return value;
++}
++
++/**
++ * Valida y normaliza un campo de fecha. Distingue entre campos obligatorios y opcionales,
++ * rechazando nulos o ausencias cuando isRequired es verdadero, y validando rango admisible (2000-2100).
++ */
++export function parseValidDate(raw: unknown, fieldName: string, isRequired: boolean): Date | undefined {
++  if (raw === undefined || raw === null || raw === '') {
++    if (isRequired) {
++      throw new BackupValidationError(`El campo de fecha obligatorio "${fieldName}" está ausente o es nulo.`);
++    }
++    return undefined;
++  }
++
++  let date: Date;
++  if (raw instanceof Date) {
++    date = raw;
++  } else if (typeof raw === 'string' || typeof raw === 'number') {
++    date = new Date(raw);
++  } else {
++    throw new BackupValidationError(`Fecha en "${fieldName}" no tiene formato serializable válido.`);
++  }
++
++  const time = date.getTime();
++  if (!Number.isFinite(time)) {
++    throw new BackupValidationError(`Fecha inválida en "${fieldName}": ${String(raw)}.`);
++  }
++
++  if (time < MIN_PLAUSIBLE_TIMESTAMP || time > MAX_PLAUSIBLE_TIMESTAMP) {
++    throw new BackupValidationError(
++      `Fecha fuera del rango histórico admisible (2000-2100) en "${fieldName}": ${date.toISOString()}.`
++    );
++  }
++
++  return date;
++}
++
++function assertUniqueIds(rows: { id?: number }[], tableLabel: string): Set<number> {
++  const ids = new Set<number>();
++  for (const row of rows) {
++    const id = parseValidId(row.id, `${tableLabel}.id`);
++    if (ids.has(id)) {
++      throw new BackupValidationError(`ID duplicado detectado en la tabla "${tableLabel}": #${id}.`);
++    }
++    ids.add(id);
++  }
++  return ids;
++}
++
++/**
++ * Valida la estructura, tipos, relaciones, fechas y reglas de negocio del respaldo.
++ * Aplica compatibilidad histórica no destructiva para esquemas v2 - v7 y
++ * resuelve la seguridad temporal ante la restauración de partidos.
++ */
++export function validateAndNormalizeBackup(
++  envelope: unknown,
++  currentSchemaVersion: number = db.verno
++): BackupData {
++  const root = parseRecord(envelope, 'archivo');
++
++  if (root.format !== LOCAL_BACKUP_FORMAT) {
++    throw new BackupValidationError(
++      `Formato de respaldo no reconocido: "${String(root.format)}". Se esperaba "${LOCAL_BACKUP_FORMAT}".`
++    );
++  }
++
++  if (root.version !== LOCAL_BACKUP_VERSION) {
++    throw new BackupValidationError(
++      `Versión de formato de respaldo no soportada: ${String(root.version)}. Se esperaba versión ${LOCAL_BACKUP_VERSION}.`
++    );
++  }
++
++  if (root.app !== 'ScoreBasket') {
++    throw new BackupValidationError(
++      `Aplicación no compatible: "${String(root.app)}". Se esperaba "ScoreBasket".`
++    );
++  }
++
++  parseValidDate(root.exportedAt, 'archivo.exportedAt', true);
++
++  if (
++    typeof root.sourceSchemaVersion !== 'number' ||
++    !Number.isInteger(root.sourceSchemaVersion) ||
++    root.sourceSchemaVersion < 1
++  ) {
++    throw new BackupValidationError(
++      `Versión de esquema origen inválida: "${String(root.sourceSchemaVersion)}".`
++    );
++  }
++
++  if (root.sourceSchemaVersion > currentSchemaVersion) {
++    throw new BackupValidationError(
++      `El respaldo proviene de una versión de esquema posterior (${root.sourceSchemaVersion} > ${currentSchemaVersion}). Actualiza ScoreBasket antes de restaurar.`
++    );
++  }
++
++  const rawData = parseRecord(root.data, 'data');
++  for (const key of REQUIRED_TABLE_KEYS) {
++    if (!Array.isArray(rawData[key])) {
++      throw new BackupValidationError(`Respaldo incompleto: falta la tabla requerida "${key}".`);
++    }
++  }
++
++  // 1. Deserializar fechas y normalizar modelos sin alterar campos originales
++  const teams: Team[] = (rawData.teams as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `teams[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `teams[${idx}].createdAt`, true)!;
++    const archivedAt = parseValidDate(row.archivedAt, `teams[${idx}].archivedAt`, false);
++
++    if (typeof row.name !== 'string' || row.name.trim() === '') {
++      throw new BackupValidationError(`Nombre de equipo inválido en teams[${idx}].`);
++    }
++
++    return {
++      ...(row as unknown as Team),
++      createdAt,
++      ...(archivedAt ? { archivedAt } : {}),
++      isArchived: Boolean(row.isArchived ?? false)
++    };
++  });
++
++  const players: Player[] = (rawData.players as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `players[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `players[${idx}].createdAt`, true)!;
++    const archivedAt = parseValidDate(row.archivedAt, `players[${idx}].archivedAt`, false);
++
++    if (typeof row.name !== 'string' || row.name.trim() === '') {
++      throw new BackupValidationError(`Nombre de jugador inválido en players[${idx}].`);
++    }
++
++    if (
++      row.number !== undefined &&
++      row.number !== null &&
++      (typeof row.number !== 'number' || !Number.isInteger(row.number) || row.number < 0)
++    ) {
++      throw new BackupValidationError(`Número de dorsal inválido en players[${idx}]: debe ser un entero >= 0.`);
++    }
++
++    return {
++      ...(row as unknown as Player),
++      createdAt,
++      ...(archivedAt ? { archivedAt } : {}),
++      isArchived: Boolean(row.isArchived ?? false)
++    };
++  });
++
++  const rawScores = rawData.scores as unknown[];
++  const rawFouls = rawData.fouls as unknown[];
++
++  const matches: Match[] = (rawData.matches as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `matches[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `matches[${idx}].createdAt`, true)!;
++    const finishedAt = parseValidDate(row.finishedAt, `matches[${idx}].finishedAt`, false);
++    const timerLastStart = parseValidDate(row.timerLastStart, `matches[${idx}].timerLastStart`, false);
++
++    // Deserializar fechas anidadas en gameHistory
++    let gameHistory: GameResult[] | undefined = undefined;
++    if (row.gameHistory !== undefined) {
++      if (!Array.isArray(row.gameHistory)) {
++        throw new BackupValidationError(`matches[${idx}].gameHistory debe ser un arreglo de juegos.`);
++      }
++      gameHistory = row.gameHistory.map((rawGame, gIdx) => {
++        const game = parseRecord(rawGame, `matches[${idx}].gameHistory[${gIdx}]`);
++        const gameFinishedAt = parseValidDate(
++          game.finishedAt,
++          `matches[${idx}].gameHistory[${gIdx}].finishedAt`,
++          false
++        );
++        return {
++          ...(game as unknown as GameResult),
++          ...(gameFinishedAt ? { finishedAt: gameFinishedAt } : {})
++        };
++      });
++    }
++
++    // Compatibilidad histórica para registros anteriores a v7
++    let config = row.config as Match['config'] | undefined;
++    if (!config) {
++      config = {
++        mode: 'traditional',
++        traditional: {
++          totalQuarters: (row.totalQuarters as number) || 4,
++          minutesPerQuarter: (row.quarterDuration as number) || 10
++        }
++      };
++    }
++
++    // Compatibilidad histórica para marcadores desnormalizados anteriores a v6:
++    let localScore = row.localScore as number | undefined;
++    let visitorScore = row.visitorScore as number | undefined;
++    let localFouls = row.localFouls as number | undefined;
++    let visitorFouls = row.visitorFouls as number | undefined;
++
++    const rowId = row.id as number | undefined;
++    const localTeamId = row.localTeamId as number | undefined;
++    const visitorTeamId = row.visitorTeamId as number | undefined;
++
++    if (localScore === undefined && rowId !== undefined) {
++      localScore = (rawScores as Record<string, unknown>[])
++        .filter(s => s.matchId === rowId && s.teamId === localTeamId)
++        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
++    }
++    if (visitorScore === undefined && rowId !== undefined) {
++      visitorScore = (rawScores as Record<string, unknown>[])
++        .filter(s => s.matchId === rowId && s.teamId === visitorTeamId)
++        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
++    }
++    if (localFouls === undefined && rowId !== undefined) {
++      localFouls = (rawFouls as Record<string, unknown>[])
++        .filter(f => f.matchId === rowId && f.teamId === localTeamId).length;
++    }
++    if (visitorFouls === undefined && rowId !== undefined) {
++      visitorFouls = (rawFouls as Record<string, unknown>[])
++        .filter(f => f.matchId === rowId && f.teamId === visitorTeamId).length;
++    }
++
++    const match: Match = {
++      ...(row as unknown as Match),
++      createdAt,
++      ...(finishedAt ? { finishedAt } : {}),
++      ...(timerLastStart ? { timerLastStart } : {}),
++      config,
++      ...(gameHistory !== undefined ? { gameHistory } : {}),
++      localScore: localScore ?? 0,
++      visitorScore: visitorScore ?? 0,
++      localFouls: localFouls ?? 0,
++      visitorFouls: visitorFouls ?? 0
++    };
++
++    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS RESTAURADOS (R2-04):
++    // La sesión o pestaña que generó el respaldo es externa a la instancia receptora.
++    // 1. SIEMPRE invalidar autoridades efímeras de la sesión previa:
++    match.timerOwnerTabId = undefined;
++    match.timerLeaseExpiresAt = 0;
++    match.timerLockMode = undefined;
++
++    // 2. Estado de reloj según el estado deportivo del partido:
++    if (match.status === 'finished') {
++      // Inmutabilidad estricta: nunca pausar ni alterar un partido finalizado.
++      match.timerLastStart = undefined;
++      if (typeof match.timerSecondsRemaining === 'number' && Number.isFinite(match.timerSecondsRemaining)) {
++        match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining));
++      } else {
++        match.timerSecondsRemaining = 0;
++      }
++      match.timerRecoveryState = 'normal';
++      match.timerRecoveryReason = undefined;
++    } else {
++      // Partido activo ('playing', 'paused', 'created')
++      if (timerLastStart !== undefined) {
++        // Estaba corriendo: pausar preventivamente al tiempo exacto del respaldo
++        match.status = 'paused';
++        match.timerLastStart = undefined;
++        match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
++        match.timerRecoveryState = 'recovery_required';
++        match.timerRecoveryReason =
++          'Partido restaurado desde respaldo con cronómetro en marcha. Tiempo detenido preventivamente para evitar salto anómalo.';
++      } else {
++        // Estaba pausado: preservar tiempo y estado de recuperación previo
++        const remaining = match.timerSecondsRemaining ?? 0;
++        if (!Number.isFinite(remaining) || remaining < 0) {
++          match.timerSecondsRemaining = Math.max(0, Math.floor(remaining || 0));
++          match.timerRecoveryState = 'recovery_required';
++          match.timerRecoveryReason =
++            'Tiempo restante anómalo detectado en el respaldo. Ajuste y confirmación requeridos.';
++        } else {
++          match.timerSecondsRemaining = Math.floor(remaining);
++          if (row.timerRecoveryState === 'recovery_required') {
++            match.timerRecoveryState = 'recovery_required';
++            match.timerRecoveryReason =
++              (row.timerRecoveryReason as string) || 'Recuperación pendiente conservada desde el respaldo.';
++          } else {
++            match.timerRecoveryState = 'normal';
++          }
++        }
++      }
++    }
++
++    return match;
++  });
++
++  const scores: Score[] = (rawScores as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `scores[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `scores[${idx}].createdAt`, true)!;
++    return {
++      ...(row as unknown as Score),
++      createdAt
++    };
++  });
++
++  const fouls: Foul[] = (rawFouls as unknown[]).map((rawRow, idx) => {
++    const row = parseRecord(rawRow, `fouls[${idx}]`);
++    const createdAt = parseValidDate(row.createdAt, `fouls[${idx}].createdAt`, true)!;
++    return {
++      ...(row as unknown as Foul),
++      createdAt
++    };
++  });
++
++  // 2. Unicidad e integridad de IDs primarios
++  const teamIds = assertUniqueIds(teams, 'teams');
++  const playerIds = assertUniqueIds(players, 'players');
++  const matchIds = assertUniqueIds(matches, 'matches');
++  assertUniqueIds(scores, 'scores');
++  assertUniqueIds(fouls, 'fouls');
++
++  const playerMap = new Map(players.map(p => [p.id!, p]));
++  const matchMap = new Map(matches.map(m => [m.id!, m]));
++
++  // 3. Validación relacional de jugadores -> equipos
++  for (const player of players) {
++    const teamId = parseValidId(player.teamId, `player[#${player.id}].teamId`);
++    if (!teamIds.has(teamId)) {
++      throw new BackupValidationError(
++        `Relación inválida: el jugador "${player.name}" (#${player.id}) referencia al equipo inexistente #${teamId}.`
++      );
++    }
++  }
++
++  // 4. Validación de partidos
++  const validStatuses = new Set(['created', 'playing', 'paused', 'finished']);
++  for (const match of matches) {
++    const localId = parseValidId(match.localTeamId, `match[#${match.id}].localTeamId`);
++    const visitorId = parseValidId(match.visitorTeamId, `match[#${match.id}].visitorTeamId`);
++
++    if (!teamIds.has(localId)) {
++      throw new BackupValidationError(
++        `Relación inválida: el partido #${match.id} referencia a un equipo local inexistente (#${localId}).`
++      );
++    }
++    if (!teamIds.has(visitorId)) {
++      throw new BackupValidationError(
++        `Relación inválida: el partido #${match.id} referencia a un equipo visitante inexistente (#${visitorId}).`
++      );
++    }
++    if (localId === visitorId) {
++      throw new BackupValidationError(
++        `Relación inválida: el partido #${match.id} tiene al mismo equipo como local y visitante (#${localId}).`
++      );
++    }
++
++    if (!validStatuses.has(match.status)) {
++      throw new BackupValidationError(
++        `Estado deportivo inválido en el partido #${match.id}: "${match.status}".`
++      );
++    }
++
++    const configValidation = validateMatchConfig(match.config);
++    if (!configValidation.isValid) {
++      throw new BackupValidationError(
++        `Configuración deportiva inválida en el partido #${match.id}: ${configValidation.errors.join(', ')}.`
++      );
++    }
++
++    for (const [fieldName, val] of [
++      ['localScore', match.localScore],
++      ['visitorScore', match.visitorScore],
++      ['localFouls', match.localFouls],
++      ['visitorFouls', match.visitorFouls]
++    ] as const) {
++      if (typeof val !== 'number' || !Number.isSafeInteger(val) || val < 0) {
++        throw new BackupValidationError(
++          `Contador deportivo inválido en partido #${match.id}: ${fieldName} debe ser un entero >= 0.`
++        );
++      }
++    }
++
++    if (match.gameHistory) {
++      for (let gIdx = 0; gIdx < match.gameHistory.length; gIdx++) {
++        const gh = match.gameHistory[gIdx];
++        if (typeof gh.gameNumber !== 'number' || !Number.isInteger(gh.gameNumber) || gh.gameNumber < 1) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: gameNumber debe ser un entero >= 1.`);
++        }
++        if (!['local', 'visitor', 'tie'].includes(gh.winner)) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: ganador no reconocido.`);
++        }
++        if (typeof gh.localScore !== 'number' || !Number.isInteger(gh.localScore) || gh.localScore < 0) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: localScore debe ser un entero >= 0.`);
++        }
++        if (typeof gh.visitorScore !== 'number' || !Number.isInteger(gh.visitorScore) || gh.visitorScore < 0) {
++          throw new BackupValidationError(`Historial inválido en partido #${match.id}: visitorScore debe ser un entero >= 0.`);
++        }
++      }
++    }
++  }
++
++  // 5. Validación relacional de acciones (scores y fouls)
++  for (const score of scores) {
++    const matchId = parseValidId(score.matchId, `score[#${score.id}].matchId`);
++    if (!matchIds.has(matchId)) {
++      throw new BackupValidationError(
++        `Relación inválida: la anotación #${score.id} referencia a un partido inexistente (#${matchId}).`
++      );
++    }
++    const match = matchMap.get(matchId)!;
++
++    if (score.teamId !== match.localTeamId && score.teamId !== match.visitorTeamId) {
++      throw new BackupValidationError(
++        `Relación inválida: la anotación #${score.id} pertenece al equipo #${score.teamId}, que no participa en el partido #${matchId}.`
++      );
++    }
++
++    if (!Number.isSafeInteger(score.quarter) || score.quarter < 1) {
++      throw new BackupValidationError(`Periodo inválido en la anotación #${score.id}: debe ser un entero >= 1.`);
++    }
++
++    if (![1, 2, 3].includes(score.points)) {
++      throw new BackupValidationError(`Puntuación inválida en la anotación #${score.id}: ${score.points} (debe ser 1, 2 o 3).`);
++    }
++
++    if (score.playerId !== undefined && score.playerId !== null) {
++      const playerId = parseValidId(score.playerId, `score[#${score.id}].playerId`);
++      if (!playerIds.has(playerId)) {
++        throw new BackupValidationError(
++          `Relación inválida: la anotación #${score.id} referencia al jugador inexistente #${playerId}.`
++        );
++      }
++      const player = playerMap.get(playerId)!;
++      if (player.teamId !== score.teamId) {
++        throw new BackupValidationError(
++          `Relación inválida: la anotación #${score.id} asigna puntos al jugador #${playerId} que pertenece al equipo #${player.teamId}, pero la anotación es para el equipo #${score.teamId}.`
++        );
++      }
++    }
++  }
++
++  for (const foul of fouls) {
++    const matchId = parseValidId(foul.matchId, `foul[#${foul.id}].matchId`);
++    if (!matchIds.has(matchId)) {
++      throw new BackupValidationError(
++        `Relación inválida: la falta #${foul.id} referencia a un partido inexistente (#${matchId}).`
++      );
++    }
++    const match = matchMap.get(matchId)!;
++
++    if (foul.teamId !== match.localTeamId && foul.teamId !== match.visitorTeamId) {
++      throw new BackupValidationError(
++        `Relación inválida: la falta #${foul.id} pertenece al equipo #${foul.teamId}, que no participa en el partido #${matchId}.`
++      );
++    }
++
++    if (!Number.isSafeInteger(foul.quarter) || foul.quarter < 1) {
++      throw new BackupValidationError(`Periodo inválido en la falta #${foul.id}: debe ser un entero >= 1.`);
++    }
++
++    if (foul.playerId !== undefined && foul.playerId !== null) {
++      const playerId = parseValidId(foul.playerId, `foul[#${foul.id}].playerId`);
++      if (!playerIds.has(playerId)) {
++        throw new BackupValidationError(
++          `Relación inválida: la falta #${foul.id} referencia al jugador inexistente #${playerId}.`
++        );
++      }
++      const player = playerMap.get(playerId)!;
++      if (player.teamId !== foul.teamId) {
++        throw new BackupValidationError(
++          `Relación inválida: la falta #${foul.id} se registra para el jugador #${playerId} del equipo #${player.teamId}, pero la falta corresponde al equipo #${foul.teamId}.`
++        );
++      }
++    }
++  }
++
++  return { teams, players, matches, scores, fouls };
++}
++
++function countRecords(data: BackupData): BackupCounts {
++  return {
++    teams: data.teams.length,
++    players: data.players.length,
++    matches: data.matches.length,
++    scores: data.scores.length,
++    fouls: data.fouls.length
++  };
++}
++
++export const StoragePersistenceService = {
++  async getStatus(): Promise<StorageStatus> {
++    if (typeof navigator === 'undefined' || !navigator.storage) {
++      return { supported: false, persisted: false };
++    }
++
++    try {
++      const persisted = navigator.storage.persisted
++        ? await navigator.storage.persisted()
++        : false;
++
++      let usage: number | undefined;
++      let quota: number | undefined;
++
++      if (navigator.storage.estimate) {
++        const estimate = await navigator.storage.estimate();
++        usage = estimate.usage;
++        quota = estimate.quota;
++      }
++
++      const formatBytes = (bytes?: number) => {
++        if (bytes === undefined || !Number.isFinite(bytes)) return undefined;
++        if (bytes < 1024) return `${bytes} B`;
++        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
++        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
++        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
++      };
++
++      const percentUsed =
++        usage !== undefined && quota !== undefined && quota > 0
++          ? Math.round((usage / quota) * 10000) / 100
++          : undefined;
++
++      return {
++        supported: true,
++        persisted: Boolean(persisted),
++        usage,
++        quota,
++        usageFormatted: formatBytes(usage),
++        quotaFormatted: formatBytes(quota),
++        percentUsed
++      };
++    } catch {
++      return { supported: false, persisted: false };
++    }
++  },
++
++  async requestPersistence(): Promise<boolean> {
++    if (typeof navigator === 'undefined' || !navigator.storage?.persist) {
++      return false;
++    }
++    try {
++      return await navigator.storage.persist();
++    } catch {
++      return false;
++    }
++  }
++};
++
++export const LocalBackupService = {
++  /**
++   * Exporta todos los registros de los 5 almacenes locales en una única
++   * transacción de lectura consistente, calculando un checksum SHA-256 estándar.
++   */
++  async exportJson(): Promise<string> {
++    const data = await db.transaction(
++      'r',
++      [db.teams, db.players, db.matches, db.scores, db.fouls],
++      async (): Promise<BackupData> => {
++        const [teams, players, matches, scores, fouls] = await Promise.all([
++          db.teams.toArray(),
++          db.players.toArray(),
++          db.matches.toArray(),
++          db.scores.toArray(),
++          db.fouls.toArray()
++        ]);
++        return { teams, players, matches, scores, fouls };
++      }
++    );
++
++    const counts = countRecords(data);
++    const exportedAt = new Date().toISOString();
++    const sourceSchemaVersion = db.verno;
++
++    // Construcción y sellado criptográfico del sobre canónico completo (R2.1)
++    const canonicalPayload: CanonicalBackupEnvelope = {
++      app: 'ScoreBasket',
++      counts,
++      data,
++      exportedAt,
++      format: LOCAL_BACKUP_FORMAT,
++      sourceSchemaVersion,
++      version: LOCAL_BACKUP_VERSION
++    };
++
++    const checksum = await computeEnvelopeChecksum(canonicalPayload);
++
++    const envelope: BackupEnvelope = {
++      format: LOCAL_BACKUP_FORMAT,
++      version: LOCAL_BACKUP_VERSION,
++      app: 'ScoreBasket',
++      sourceSchemaVersion,
++      exportedAt,
++      metadata: {
++        counts,
++        checksum,
++        checksumAlgorithm: 'SHA-256',
++        generatedBy: 'ScoreBasket LocalBackupService v2'
++      },
++      data
++    };
++
++    return JSON.stringify(envelope, null, 2);
++  },
++
++  /**
++   * Dispara la descarga del archivo de respaldo en el navegador.
++   * Emplea desasociación asíncrona de URL para compatibilidad móvil
++   * e informa fehacientemente si la descarga fue iniciada.
++   */
++  async exportToFile(customFilename?: string): Promise<{
++    filename: string;
++    counts: BackupCounts;
++    downloadInitiated: boolean;
++  }> {
++    const json = await this.exportJson();
++    const parsed = JSON.parse(json) as BackupEnvelope;
++    const now = new Date();
++    const pad = (n: number) => String(n).padStart(2, '0');
++    const defaultFilename = `scorebasket-backup-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`;
++    const filename = customFilename || defaultFilename;
++
++    let downloadInitiated = false;
++    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
++      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
++      const url = URL.createObjectURL(blob);
++      const a = document.createElement('a');
++      a.href = url;
++      a.download = filename;
++      document.body.appendChild(a);
++      a.click();
++      document.body.removeChild(a);
++
++      // Desasociar URL de forma asíncrona para compatibilidad con navegadores móviles
++      setTimeout(() => {
++        try {
++          URL.revokeObjectURL(url);
++        } catch {
++          // Ignorar si ya fue revocado
++        }
++      }, 1500);
++      downloadInitiated = true;
++    }
++
++    return {
++      filename,
++      counts: parsed.metadata.counts,
++      downloadInitiated
++    };
++  },
++
++  /**
++   * Comprueba si la base de datos local está completamente vacía.
++   */
++  async isDatabaseEmpty(): Promise<boolean> {
++    const counts = await Promise.all([
++      db.teams.count(),
++      db.players.count(),
++      db.matches.count(),
++      db.scores.count(),
++      db.fouls.count()
++    ]);
++    return counts.every(c => c === 0);
++  },
++
++  /**
++   * Obtiene el resumen de registros actuales en los 5 almacenes locales.
++   */
++  async getDatabaseCounts(): Promise<BackupCounts> {
++    const [teams, players, matches, scores, fouls] = await Promise.all([
++      db.teams.count(),
++      db.players.count(),
++      db.matches.count(),
++      db.scores.count(),
++      db.fouls.count()
++    ]);
++    return { teams, players, matches, scores, fouls };
++  },
++
++  /**
++   * Restaura un respaldo JSON estrictamente sobre una base de datos vacía.
++   * Valida obligatoriedad y formato estricto del checksum SHA-256, coherencia
++   * del manifiesto, relaciones, fechas obligatorias y modalidades ANTES de escribir.
++   * La escritura es 100% transaccional y atómica; cualquier falla provoca rollback total.
++   */
++  async restoreIntoEmpty(
++    rawJson: string,
++    options?: { _faultInjectionAtTable?: keyof BackupData }
++  ): Promise<BackupCounts> {
++    // 1. Deserializar JSON
++    let envelope: unknown;
++    try {
++      envelope = JSON.parse(rawJson);
++    } catch {
++      throw new BackupValidationError('El contenido provisto no es un JSON válido.');
++    }
++
++    const root = parseRecord(envelope, 'archivo');
++
++    // 2. Validación obligatoria de metadatos y Checksum SHA-256 (R2-01, R2-05)
++    if (!root.metadata || typeof root.metadata !== 'object' || Array.isArray(root.metadata)) {
++      throw new BackupValidationError(
++        'El archivo de respaldo no incluye la sección obligatoria "metadata".'
++      );
++    }
++    const meta = root.metadata as Record<string, unknown>;
++
++    if (typeof meta.checksum !== 'string' || meta.checksum.trim() === '') {
++      throw new BackupValidationError(
++        'La suma de verificación (checksum) obligatoria está ausente o vacía en los metadatos del respaldo. No se permite restaurar respaldos sin verificar.'
++      );
++    }
++
++    if (meta.checksumAlgorithm !== 'SHA-256') {
++      throw new BackupValidationError(
++        `Algoritmo de suma de verificación no admitido: "${String(meta.checksumAlgorithm)}". Solo se admite "SHA-256".`
++      );
++    }
++
++    const CHECKSUM_PATTERN = /^sha256:[a-f0-9]{64}$/i;
++    if (!CHECKSUM_PATTERN.test(meta.checksum)) {
++      throw new BackupValidationError(
++        `Formato de suma de verificación inválido o malformado: "${meta.checksum}". Debe cumplir el formato "sha256:<64_hex>".`
++      );
++    }
++
++    // Validación obligatoria de versión del formato y prevención de degradación (R2.1)
++    if (root.version !== LOCAL_BACKUP_VERSION) {
++      if (root.version === 1) {
++        throw new BackupValidationError(
++          'Versión de formato de respaldo obsoleta (versión 1). Por política estricta de seguridad e integridad criptográfica del sobre, ScoreBasket requiere versión 2.'
++        );
++      }
++      throw new BackupValidationError(
++        `Versión de formato de respaldo no soportada: ${String(root.version)}. Se esperaba versión ${LOCAL_BACKUP_VERSION}.`
++      );
++    }
++
++    if (root.format !== LOCAL_BACKUP_FORMAT) {
++      throw new BackupValidationError(
++        `Formato de respaldo no reconocido: "${String(root.format)}". Se esperaba "${LOCAL_BACKUP_FORMAT}".`
++      );
++    }
++
++    if (root.app !== 'ScoreBasket') {
++      throw new BackupValidationError(
++        `Aplicación no compatible: "${String(root.app)}". Se esperaba "ScoreBasket".`
++      );
++    }
++
++    if (
++      typeof root.sourceSchemaVersion !== 'number' ||
++      !Number.isInteger(root.sourceSchemaVersion) ||
++      root.sourceSchemaVersion < 1
++    ) {
++      throw new BackupValidationError(
++        `Versión de esquema origen inválida: "${String(root.sourceSchemaVersion)}".`
++      );
++    }
++
++    parseValidDate(root.exportedAt, 'archivo.exportedAt', true);
++
++    // Validación de coherencia del manifiesto (R2-05)
++    if (!meta.counts || typeof meta.counts !== 'object' || Array.isArray(meta.counts)) {
++      throw new BackupValidationError(
++        'Los metadatos del manifiesto no contienen la sección "counts" con el conteo de tablas.'
++      );
++    }
++    const declaredCounts = meta.counts as Record<string, unknown>;
++    const rawDataObj = parseRecord(root.data, 'data');
++    for (const key of REQUIRED_TABLE_KEYS) {
++      const tableArr = rawDataObj[key];
++      if (!Array.isArray(tableArr)) {
++        throw new BackupValidationError(`Falta la tabla requerida "${key}" en los datos del respaldo.`);
++      }
++      const declared = declaredCounts[key];
++      if (typeof declared !== 'number' || !Number.isInteger(declared) || declared !== tableArr.length) {
++        throw new BackupValidationError(
++          `Manifiesto inconsistente en la tabla "${key}": el conteo declarado (${String(declared)}) no coincide con la cantidad real de registros (${tableArr.length}).`
++        );
++      }
++    }
++
++    // Verificación criptográfica SHA-256 del sobre canónico completo (R2.1)
++    const expectedHash = meta.checksum.slice('sha256:'.length).toLowerCase();
++    const canonicalPayload: CanonicalBackupEnvelope = {
++      app: String(root.app),
++      counts: meta.counts as BackupCounts,
++      data: root.data as BackupData,
++      exportedAt: String(root.exportedAt),
++      format: String(root.format),
++      sourceSchemaVersion: Number(root.sourceSchemaVersion),
++      version: Number(root.version)
++    };
++    const canonicalStr = computeCanonicalEnvelopeString(canonicalPayload);
++    const computedHash = (await computeDataChecksum(canonicalStr)).toLowerCase();
++
++    if (computedHash !== expectedHash) {
++      throw new BackupValidationError(
++        'La suma de verificación SHA-256 no coincide con el contenido y metadatos del sobre de respaldo. El archivo está corrupto, truncado o fue alterado externamente.'
++      );
++    }
++
++    // 3. Validar y normalizar los datos
++    const normalizedData = validateAndNormalizeBackup(envelope, db.verno);
++
++    // 4. Verificación previa fuera de la transacción
++    const preCheckEmpty = await this.isDatabaseEmpty();
++    if (!preCheckEmpty) {
++      throw new DatabaseNotEmptyError(
++        'Restauración bloqueada: la base de datos local contiene datos existentes. ' +
++        'Para evitar pérdida accidental de información o sobreescritura, la restauración requiere una base de datos completamente vacía.'
++      );
++    }
++
++    // 5. Escritura atómica en transacción multi-tabla
++    await db.transaction('rw', [db.teams, db.players, db.matches, db.scores, db.fouls], async () => {
++      // Re-verificar vaciado dentro del bloqueo transaccional (protección contra carreras concurrentes)
++      const existing = await Promise.all([
++        db.teams.count(),
++        db.players.count(),
++        db.matches.count(),
++        db.scores.count(),
++        db.fouls.count()
++      ]);
++      if (existing.some(c => c > 0)) {
++        throw new DatabaseNotEmptyError(
++          'Restauración bloqueada: se detectaron registros concurrentes en la base de datos local.'
++        );
++      }
++
++      // Inserción preservando identificadores originales
++      if (options?._faultInjectionAtTable === 'teams') {
++        throw new Error('Simulated failure during teams bulkAdd');
++      }
++      await db.teams.bulkAdd(normalizedData.teams);
++
++      if (options?._faultInjectionAtTable === 'players') {
++        throw new Error('Simulated failure during players bulkAdd');
++      }
++      await db.players.bulkAdd(normalizedData.players);
++
++      if (options?._faultInjectionAtTable === 'matches') {
++        throw new Error('Simulated failure during matches bulkAdd');
++      }
++      await db.matches.bulkAdd(normalizedData.matches);
++
++      if (options?._faultInjectionAtTable === 'scores') {
++        throw new Error('Simulated failure during scores bulkAdd');
++      }
++      await db.scores.bulkAdd(normalizedData.scores);
++
++      if (options?._faultInjectionAtTable === 'fouls') {
++        throw new Error('Simulated failure during fouls bulkAdd');
++      }
++      await db.fouls.bulkAdd(normalizedData.fouls);
++    });
++
++    return countRecords(normalizedData);
++  },
++
++  /**
++   * Consulta el estado de persistencia y cuota del navegador.
++   */
++  async storageStatus(): Promise<StorageStatus> {
++    return StoragePersistenceService.getStatus();
++  },
++
++  /**
++   * Solicita almacenamiento persistente al navegador.
++   */
++  async requestPersistentStorage(): Promise<boolean> {
++    return StoragePersistenceService.requestPersistence();
++  }
++};
+diff --git a/src/pages/Matches.tsx b/src/pages/Matches.tsx
+index 9c05b68..fc46a10 100644
+--- a/src/pages/Matches.tsx
++++ b/src/pages/Matches.tsx
+@@ -9,6 +9,7 @@ import { startQuickPickupMatch } from '../utils/matchHelpers';
+ 
+ import { ActiveMatchCard } from '../features/match-creations/components/ActiveMatchCard';
+ import { HistoryMatchTicket } from '../features/match-creations/components/HistoryMatchTicket';
++import { LocalBackupControls } from '../components/matches/LocalBackupControls';
+ 
+ type FilterMode = 'all' | 'traditional' | 'race' | 'best-of-series';
+ 
+@@ -92,6 +93,9 @@ export function Matches() {
+         </div>
+       </header>
+ 
++      {/* --- CONTROLES DE RESPALDO Y PERSISTENCIA LOCAL --- */}
++      <LocalBackupControls />
++
+       {/* --- MODAL DE REPORTE / BOX SCORE --- */}
+       {selectedMatchId && (
+         <MatchHistoryModal
+diff --git a/src/test/sb14-local-backup-preservation.test.ts b/src/test/sb14-local-backup-preservation.test.ts
+new file mode 100644
+index 0000000..cff16d5
+--- /dev/null
++++ b/src/test/sb14-local-backup-preservation.test.ts
+@@ -0,0 +1,1867 @@
++// src/test/sb14-local-backup-preservation.test.ts
++import { describe, it, expect, beforeEach } from 'vitest';
++import { db } from '../db/db';
++import {
++  LocalBackupService,
++  StoragePersistenceService,
++  BackupValidationError,
++  DatabaseNotEmptyError,
++  LOCAL_BACKUP_FORMAT,
++  LOCAL_BACKUP_VERSION,
++  computePureSha256,
++  computeDataChecksum,
++  computeEnvelopeChecksum,
++  type CanonicalBackupEnvelope,
++  type BackupEnvelope,
++  type BackupData,
++  type BackupMetadata,
++  type BackupCounts
++} from '../db/localBackup.service';
++import { GameActionsRepository } from '../db/gameActions.repository';
++import { MatchTimerService } from '../db/matchTimer.service';
++import type { Match, Team, Player, Score, Foul } from '../db/models';
++
++/**
++ * Función auxiliar para generar respaldos de prueba íntegros y válidos,
++ * calculando automáticamente los conteos del manifiesto y la suma SHA-256 canónica del sobre completo.
++ */
++async function buildTestBackup(
++  data: Partial<BackupData>,
++  metaOverrides?: Partial<BackupMetadata>,
++  rootOverrides?: Record<string, unknown>
++): Promise<string> {
++  const fullData: BackupData = {
++    teams: data.teams ?? [],
++    players: data.players ?? [],
++    matches: data.matches ?? [],
++    scores: data.scores ?? [],
++    fouls: data.fouls ?? []
++  };
++
++  const counts: BackupCounts = {
++    teams: fullData.teams.length,
++    players: fullData.players.length,
++    matches: fullData.matches.length,
++    scores: fullData.scores.length,
++    fouls: fullData.fouls.length
++  };
++
++  const format = (rootOverrides?.format as string) ?? LOCAL_BACKUP_FORMAT;
++  const version = (rootOverrides?.version as number) ?? LOCAL_BACKUP_VERSION;
++  const app = (rootOverrides?.app as string) ?? 'ScoreBasket';
++  const sourceSchemaVersion = (rootOverrides?.sourceSchemaVersion as number) ?? 8;
++  const exportedAt = (rootOverrides?.exportedAt as string) ?? new Date().toISOString();
++
++  const canonicalPayload: CanonicalBackupEnvelope = {
++    app,
++    counts: metaOverrides?.counts ?? counts,
++    data: fullData,
++    exportedAt,
++    format,
++    sourceSchemaVersion,
++    version
++  };
++
++  const defaultChecksum = await computeEnvelopeChecksum(canonicalPayload);
++
++  const envelope = {
++    format,
++    version,
++    app,
++    sourceSchemaVersion,
++    exportedAt,
++    metadata: {
++      counts,
++      checksumAlgorithm: 'SHA-256',
++      checksum: defaultChecksum,
++      generatedBy: 'ScoreBasket Test Helper',
++      ...metaOverrides
++    },
++    data: fullData,
++    ...rootOverrides
++  };
++
++  return JSON.stringify(envelope);
++}
++
++describe('DB-F1: Conservación, Respaldo y Recuperación Local (QA-01 a QA-38)', () => {
++  beforeEach(async () => {
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++    await db.fouls.clear();
++  });
++
++  // QA-01: Respaldo de base vacía
++  it('QA-01: Respaldo de base vacía genera un envelope válido y estructurado con contadores en cero', async () => {
++    const json = await LocalBackupService.exportJson();
++    expect(typeof json).toBe('string');
++
++    const envelope = JSON.parse(json) as BackupEnvelope;
++    expect(envelope.format).toBe(LOCAL_BACKUP_FORMAT);
++    expect(envelope.version).toBe(LOCAL_BACKUP_VERSION);
++    expect(envelope.app).toBe('ScoreBasket');
++    expect(envelope.sourceSchemaVersion).toBe(db.verno);
++    expect(envelope.metadata.counts).toEqual({
++      teams: 0,
++      players: 0,
++      matches: 0,
++      scores: 0,
++      fouls: 0
++    });
++    expect(envelope.data.teams).toEqual([]);
++    expect(envelope.data.matches).toEqual([]);
++  });
++
++  // QA-02: Respaldo con múltiples equipos y jugadores
++  it('QA-02: Respaldo con múltiples equipos y jugadores conserva todos los campos', async () => {
++    const team1Id = (await db.teams.add({
++      name: 'Lakers',
++      createdAt: new Date('2026-01-01T10:00:00Z'),
++      isArchived: false
++    })) as number;
++
++    const team2Id = (await db.teams.add({
++      name: 'Celtics',
++      createdAt: new Date('2026-01-01T11:00:00Z'),
++      isArchived: false
++    })) as number;
++
++    const p1Id = (await db.players.add({
++      name: 'LeBron James',
++      number: 23,
++      teamId: team1Id,
++      createdAt: new Date('2026-01-01T10:05:00Z'),
++      isArchived: false
++    })) as number;
++
++    const p2Id = (await db.players.add({
++      name: 'Jayson Tatum',
++      number: 0, // Dorsal cero (válido en baloncesto)
++      teamId: team2Id,
++      createdAt: new Date('2026-01-01T11:05:00Z'),
++      isArchived: false
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    const envelope = JSON.parse(json) as BackupEnvelope;
++
++    expect(envelope.metadata.counts.teams).toBe(2);
++    expect(envelope.metadata.counts.players).toBe(2);
++
++    const exportedP2 = envelope.data.players.find(p => p.id === p2Id);
++    expect(exportedP2?.number).toBe(0);
++    expect(exportedP2?.teamId).toBe(team2Id);
++    expect(envelope.data.teams.some(t => t.id === team1Id)).toBe(true);
++    expect(envelope.data.players.some(p => p.id === p1Id)).toBe(true);
++  });
++
++  // QA-03: Respaldo de partidos Traditional
++  it('QA-03: Respaldo de partidos Traditional preserva temporizador, autoridad y configuraciones deportivas', async () => {
++    const team1Id = (await db.teams.add({ name: 'T1', createdAt: new Date() })) as number;
++    const team2Id = (await db.teams.add({ name: 'T2', createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: team1Id,
++      visitorTeamId: team2Id,
++      status: 'playing',
++      createdAt: new Date('2026-02-01T18:00:00Z'),
++      config: {
++        mode: 'traditional',
++        traditional: {
++          totalQuarters: 4,
++          minutesPerQuarter: 12,
++          timeoutsPerTeam: 3
++        }
++      },
++      currentQuarter: 2,
++      timerSecondsRemaining: 450,
++      timerLastStart: new Date('2026-02-01T18:15:00Z'),
++      possession: 'local',
++      localTimeouts: 1,
++      visitorTimeouts: 0,
++      timerEpoch: 7,
++      timerOwnerTabId: 'tab-alpha-99',
++      timerLeaseExpiresAt: Date.now() + 10000,
++      timerRecoveryState: 'normal',
++      eventsProvenance: 'live_session',
++      localScore: 28,
++      visitorScore: 24,
++      localFouls: 3,
++      visitorFouls: 4
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    const envelope = JSON.parse(json) as BackupEnvelope;
++    const exportedMatch = envelope.data.matches.find(m => m.id === matchId);
++
++    expect(exportedMatch).toBeDefined();
++    expect(exportedMatch?.config.mode).toBe('traditional');
++    expect(exportedMatch?.config.traditional?.totalQuarters).toBe(4);
++    expect(exportedMatch?.config.traditional?.minutesPerQuarter).toBe(12);
++    expect(exportedMatch?.timerSecondsRemaining).toBe(450);
++    expect(exportedMatch?.possession).toBe('local');
++    expect(exportedMatch?.timerEpoch).toBe(7);
++    expect(exportedMatch?.timerOwnerTabId).toBe('tab-alpha-99');
++    expect(exportedMatch?.eventsProvenance).toBe('live_session');
++    expect(exportedMatch?.localScore).toBe(28);
++    expect(exportedMatch?.visitorScore).toBe(24);
++  });
++
++  // QA-04: Respaldo de partidas Race con revanchas
++  it('QA-04: Respaldo de partidas Race con revanchas preserva targetScore, hasRematches e historial', async () => {
++    const team1Id = (await db.teams.add({ name: 'Street A', createdAt: new Date() })) as number;
++    const team2Id = (await db.teams.add({ name: 'Street B', createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: team1Id,
++      visitorTeamId: team2Id,
++      status: 'playing',
++      createdAt: new Date('2026-03-01T16:00:00Z'),
++      config: {
++        mode: 'race',
++        race: {
++          targetScore: 21,
++          hasRematches: true,
++          currentGame: 2,
++          winByTwo: true,
++          scoringSystem: 'street'
++        }
++      },
++      localScore: 5,
++      visitorScore: 2,
++      localFouls: 1,
++      visitorFouls: 0,
++      gameHistory: [
++        {
++          gameNumber: 1,
++          localScore: 22,
++          visitorScore: 20,
++          winner: 'local',
++          finishedAt: new Date('2026-03-01T16:20:00Z'),
++          duration: 1200
++        }
++      ]
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    const envelope = JSON.parse(json) as BackupEnvelope;
++    const exportedMatch = envelope.data.matches.find(m => m.id === matchId);
++
++    expect(exportedMatch?.config.mode).toBe('race');
++    expect(exportedMatch?.config.race?.targetScore).toBe(21);
++    expect(exportedMatch?.config.race?.hasRematches).toBe(true);
++    expect(exportedMatch?.config.race?.currentGame).toBe(2);
++    expect(exportedMatch?.config.race?.scoringSystem).toBe('street');
++    expect(exportedMatch?.gameHistory?.length).toBe(1);
++    expect(exportedMatch?.gameHistory?.[0].winner).toBe('local');
++    expect(exportedMatch?.gameHistory?.[0].localScore).toBe(22);
++  });
++
++  // QA-05: Respaldo de Best-of-Series con varios sets
++  it('QA-05: Respaldo de Best-of-Series con varios sets conserva estadísticas de serie completas', async () => {
++    const team1Id = (await db.teams.add({ name: 'Series A', createdAt: new Date() })) as number;
++    const team2Id = (await db.teams.add({ name: 'Series B', createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: team1Id,
++      visitorTeamId: team2Id,
++      status: 'finished',
++      createdAt: new Date('2026-04-01T10:00:00Z'),
++      finishedAt: new Date('2026-04-01T12:00:00Z'),
++      config: {
++        mode: 'best-of-series',
++        bestOf: {
++          totalGames: 3,
++          targetScorePerGame: 15,
++          currentGame: 3,
++          wins: { local: 2, visitor: 1 }
++        }
++      },
++      localScore: 15,
++      visitorScore: 11,
++      localFouls: 2,
++      visitorFouls: 3,
++      gameHistory: [
++        {
++          gameNumber: 1,
++          localScore: 15,
++          visitorScore: 12,
++          winner: 'local',
++          finishedAt: new Date('2026-04-01T10:30:00Z')
++        },
++        {
++          gameNumber: 2,
++          localScore: 10,
++          visitorScore: 15,
++          winner: 'visitor',
++          finishedAt: new Date('2026-04-01T11:15:00Z')
++        },
++        {
++          gameNumber: 3,
++          localScore: 15,
++          visitorScore: 11,
++          winner: 'local',
++          finishedAt: new Date('2026-04-01T11:55:00Z')
++        }
++      ]
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    const envelope = JSON.parse(json) as BackupEnvelope;
++    const exportedMatch = envelope.data.matches.find(m => m.id === matchId);
++
++    expect(exportedMatch?.config.mode).toBe('best-of-series');
++    expect(exportedMatch?.config.bestOf?.wins).toEqual({ local: 2, visitor: 1 });
++    expect(exportedMatch?.gameHistory?.length).toBe(3);
++    expect(exportedMatch?.status).toBe('finished');
++  });
++
++  // QA-06: Conservación de IDs originales
++  it('QA-06: La restauración sobre base vacía preserva exactamente los IDs primarios originales', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 42, name: 'Team 42', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 99, name: 'Team 99', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 105, name: 'Player 105', number: 7, teamId: 42, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 777,
++          localTeamId: 42,
++          visitorTeamId: 99,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 3,
++          visitorScore: 0,
++          localFouls: 1,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 9001, matchId: 777, teamId: 42, playerId: 105, points: 3, quarter: 1, createdAt: new Date('2026-01-01T00:01:00Z') }
++      ],
++      fouls: [
++        { id: 8001, matchId: 777, teamId: 42, playerId: 105, quarter: 1, createdAt: new Date('2026-01-01T00:02:00Z') }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(rawBackup);
++
++    const restoredTeam42 = await db.teams.get(42);
++    expect(restoredTeam42?.name).toBe('Team 42');
++
++    const restoredPlayer105 = await db.players.get(105);
++    expect(restoredPlayer105?.id).toBe(105);
++    expect(restoredPlayer105?.teamId).toBe(42);
++
++    const restoredMatch777 = await db.matches.get(777);
++    expect(restoredMatch777?.id).toBe(777);
++
++    const restoredScore = await db.scores.get(9001);
++    expect(restoredScore?.id).toBe(9001);
++    expect(restoredScore?.matchId).toBe(777);
++
++    const restoredFoul = await db.fouls.get(8001);
++    expect(restoredFoul?.id).toBe(8001);
++    expect(restoredFoul?.matchId).toBe(777);
++  });
++
++  // QA-07: Conservación de relaciones
++  it('QA-07: Conservación de relaciones foráneas entre equipos, jugadores, partidos y eventos', async () => {
++    const tLocal = (await db.teams.add({ name: 'Alpha', createdAt: new Date() })) as number;
++    const tVisitor = (await db.teams.add({ name: 'Beta', createdAt: new Date() })) as number;
++    const player = (await db.players.add({ name: 'Shooter', teamId: tLocal, createdAt: new Date() })) as number;
++
++    const match = (await db.matches.add({
++      localTeamId: tLocal,
++      visitorTeamId: tVisitor,
++      status: 'playing',
++      createdAt: new Date(),
++      config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++      localScore: 2,
++      visitorScore: 0,
++      localFouls: 1,
++      visitorFouls: 0
++    })) as number;
++
++    const score = (await db.scores.add({
++      matchId: match,
++      teamId: tLocal,
++      playerId: player,
++      points: 2,
++      quarter: 1,
++      createdAt: new Date()
++    })) as number;
++
++    const foul = (await db.fouls.add({
++      matchId: match,
++      teamId: tLocal,
++      playerId: player,
++      quarter: 1,
++      createdAt: new Date()
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++
++    // Vaciar y restaurar
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++    await db.fouls.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const rScore = await db.scores.get(score);
++    const rFoul = await db.fouls.get(foul);
++    const rMatch = await db.matches.get(match);
++    const rPlayer = await db.players.get(player);
++
++    expect(rScore?.matchId).toBe(rMatch?.id);
++    expect(rScore?.teamId).toBe(rMatch?.localTeamId);
++    expect(rScore?.playerId).toBe(rPlayer?.id);
++
++    expect(rFoul?.matchId).toBe(rMatch?.id);
++    expect(rFoul?.teamId).toBe(rMatch?.localTeamId);
++    expect(rFoul?.playerId).toBe(rPlayer?.id);
++  });
++
++  // QA-08: Conservación de jugadores archivados
++  it('QA-08: Conservación de jugadores y equipos archivados con fecha archivedAt intacta', async () => {
++    const archiveDate = new Date('2026-05-10T12:00:00Z');
++    const teamId = (await db.teams.add({
++      name: 'Archived Team',
++      createdAt: new Date('2026-01-01T00:00:00Z'),
++      isArchived: true,
++      archivedAt: archiveDate
++    })) as number;
++
++    const playerId = (await db.players.add({
++      name: 'Retired Veteran',
++      teamId,
++      createdAt: new Date('2026-01-01T00:00:00Z'),
++      isArchived: true,
++      archivedAt: archiveDate
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++
++    await db.teams.clear();
++    await db.players.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const restoredTeam = await db.teams.get(teamId);
++    expect(restoredTeam?.isArchived).toBe(true);
++    expect(restoredTeam?.archivedAt?.toISOString()).toBe(archiveDate.toISOString());
++    expect(restoredTeam?.archivedAt instanceof Date).toBe(true);
++
++    const restoredPlayer = await db.players.get(playerId);
++    expect(restoredPlayer?.isArchived).toBe(true);
++    expect(restoredPlayer?.archivedAt?.toISOString()).toBe(archiveDate.toISOString());
++    expect(restoredPlayer?.archivedAt instanceof Date).toBe(true);
++  });
++
++  // QA-09: Conservación de fechas
++  it('QA-09: Las fechas se deserializan estrictamente como instancias nativas de Date (incluyendo fechas anidadas)', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-15T08:30:00.000Z'), archivedAt: new Date('2026-01-15T09:00:00.000Z'), isArchived: true },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-15T08:35:00.000Z'), isArchived: false }
++      ],
++      players: [],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-15T09:00:00.000Z'),
++          finishedAt: new Date('2026-01-15T10:15:00.000Z'),
++          config: { mode: 'race', race: { targetScore: 10, hasRematches: false, currentGame: 1 } },
++          localScore: 10,
++          visitorScore: 8,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 10,
++              visitorScore: 8,
++              winner: 'local',
++              finishedAt: new Date('2026-01-15T10:14:55.000Z')
++            }
++          ]
++        }
++      ],
++      scores: [],
++      fouls: []
++    });
++
++    await LocalBackupService.restoreIntoEmpty(rawBackup);
++
++    const team = (await db.teams.get(1))!;
++    expect(team.createdAt instanceof Date).toBe(true);
++    expect(team.archivedAt instanceof Date).toBe(true);
++
++    const match = (await db.matches.get(10))!;
++    expect(match.createdAt instanceof Date).toBe(true);
++    expect(match.finishedAt instanceof Date).toBe(true);
++    expect(match.gameHistory?.[0].finishedAt instanceof Date).toBe(true);
++    expect(match.createdAt.getTime()).toBe(new Date('2026-01-15T09:00:00.000Z').getTime());
++    expect(match.gameHistory?.[0].finishedAt?.getTime()).toBe(
++      new Date('2026-01-15T10:14:55.000Z').getTime()
++    );
++  });
++
++  // QA-10: Conservación de marcadores y faltas
++  it('QA-10: Conservación exacta de marcadores y faltas desnormalizados e históricos sin recálculos', async () => {
++    const t1 = (await db.teams.add({ name: 'T1', createdAt: new Date() })) as number;
++    const t2 = (await db.teams.add({ name: 'T2', createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: t1,
++      visitorTeamId: t2,
++      status: 'playing',
++      createdAt: new Date(),
++      config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++      localScore: 55,
++      visitorScore: 48,
++      localFouls: 6,
++      visitorFouls: 4
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    await db.matches.clear();
++    await db.teams.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const restoredMatch = (await db.matches.get(matchId))!;
++    expect(restoredMatch.localScore).toBe(55);
++    expect(restoredMatch.visitorScore).toBe(48);
++    expect(restoredMatch.localFouls).toBe(6);
++    expect(restoredMatch.visitorFouls).toBe(4);
++  });
++
++  // QA-11: Rechazo de archivo malformado
++  it('QA-11: Rechaza archivos corruptos, JSON inválido o con suma de verificación (checksum) alterada', async () => {
++    // 1. JSON no parseable
++    await expect(LocalBackupService.restoreIntoEmpty('{ not a valid json: ...'))
++      .rejects.toThrow(BackupValidationError);
++
++    // 2. Falta de envoltorio o campos requeridos
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify({ someKey: 'invalid' })))
++      .rejects.toThrow(BackupValidationError);
++
++    // 3. Envelope con checksum alterado
++    const validJson = await LocalBackupService.exportJson();
++    const envelope = JSON.parse(validJson) as BackupEnvelope;
++    envelope.metadata.checksum = 'tampered_or_invalid_checksum_hash';
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(envelope)))
++      .rejects.toThrow(/checksum|suma de verificación/i);
++  });
++
++  // QA-12: Rechazo de respaldo de versión incompatible sin pérdida de datos
++  it('QA-12: Rechaza respaldos generados por esquemas posteriores sin tocar la base local', async () => {
++    const futureEnvelope = await buildTestBackup({}, undefined, { sourceSchemaVersion: 999 });
++
++    await expect(LocalBackupService.restoreIntoEmpty(futureEnvelope))
++      .rejects.toThrow(/versión de esquema posterior/i);
++  });
++
++  // QA-13: Rechazo de IDs duplicados
++  it('QA-13: Rechaza respaldos que contengan IDs duplicados en cualquier almacén', async () => {
++    const envelopeDuplicateTeams = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 1, name: 'Team Duplicate', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(envelopeDuplicateTeams))
++      .rejects.toThrow(/ID duplicado/i);
++  });
++
++  // QA-14: Detección de relaciones inválidas
++  it('QA-14: Rechaza respaldos con relaciones foráneas rotas o huérfanas', async () => {
++    // Jugador referencia a un equipo inexistente
++    const brokenPlayer = await buildTestBackup({
++      teams: [{ id: 1, name: 'Valid Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 10, name: 'Orphan Player', number: 5, teamId: 999, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(brokenPlayer))
++      .rejects.toThrow(/Relación inválida.*inexistente/i);
++
++    // Partido con mismo equipo local y visitante
++    const sameTeamMatch = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      matches: [
++        {
++          id: 5,
++          localTeamId: 1,
++          visitorTeamId: 1, // Mismo equipo
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(sameTeamMatch))
++      .rejects.toThrow(/mismo equipo/i);
++  });
++
++  // QA-15: Rechazo de restauración sobre una base no vacía
++  it('QA-15: Rechaza terminantemente restaurar sobre una base de datos que ya contiene registros', async () => {
++    // Insertar un equipo preexistente
++    await db.teams.add({ name: 'Existing Team', createdAt: new Date() });
++
++    const validJson = await LocalBackupService.exportJson();
++
++    await expect(LocalBackupService.restoreIntoEmpty(validJson))
++      .rejects.toThrow(DatabaseNotEmptyError);
++  });
++
++  // QA-16: Rollback de una restauración que falla durante su ejecución
++  it('QA-16: Atomicidad transaccional: una falla durante la restauración revierte todas las tablas al estado vacío', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Team A', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'Team B', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 10, name: 'Player A1', number: 10, teamId: 1, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 100,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 2,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 500, matchId: 100, teamId: 1, playerId: 10, points: 2, quarter: 1, createdAt: new Date('2026-01-01T00:00:00Z') }
++      ],
++      fouls: []
++    });
++
++    // Forzar fallo simulado al insertar scores
++    await expect(
++      LocalBackupService.restoreIntoEmpty(rawBackup, {
++        _faultInjectionAtTable: 'scores'
++      })
++    ).rejects.toThrow(/Simulated failure/);
++
++    // Verificar que NADA quedó grabado en la base (rollback total)
++    const teamsCount = await db.teams.count();
++    const playersCount = await db.players.count();
++    const matchesCount = await db.matches.count();
++    const scoresCount = await db.scores.count();
++
++    expect(teamsCount).toBe(0);
++    expect(playersCount).toBe(0);
++    expect(matchesCount).toBe(0);
++    expect(scoresCount).toBe(0);
++  });
++
++  // QA-17: Restauración completa en una base vacía
++  it('QA-17: Restauración completa en base vacía pobla las cinco tablas y retorna contadores exactos', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Warriors', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'Rockets', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      players: [
++        { id: 30, name: 'Curry', number: 30, teamId: 1, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 13, name: 'Harden', number: 13, teamId: 2, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 50,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 12 } },
++          localScore: 5,
++          visitorScore: 0,
++          localFouls: 1,
++          visitorFouls: 0
++        }
++      ],
++      scores: [
++        { id: 101, matchId: 50, teamId: 1, playerId: 30, points: 3, quarter: 1, createdAt: new Date('2026-01-01T00:01:00Z') },
++        { id: 102, matchId: 50, teamId: 1, playerId: 30, points: 2, quarter: 1, createdAt: new Date('2026-01-01T00:02:00Z') }
++      ],
++      fouls: [
++        { id: 201, matchId: 50, teamId: 1, playerId: 30, quarter: 1, createdAt: new Date('2026-01-01T00:03:00Z') }
++      ]
++    });
++
++    const counts = await LocalBackupService.restoreIntoEmpty(rawBackup);
++
++    expect(counts).toEqual({
++      teams: 2,
++      players: 2,
++      matches: 1,
++      scores: 2,
++      fouls: 1
++    });
++
++    expect(await db.teams.count()).toBe(2);
++    expect(await db.players.count()).toBe(2);
++    expect(await db.matches.count()).toBe(1);
++    expect(await db.scores.count()).toBe(2);
++    expect(await db.fouls.count()).toBe(1);
++  });
++
++  // QA-18: Equivalencia entre datos originales y restaurados
++  it('QA-18: Prueba de equivalencia estricta antes de exportar y tras restaurar', async () => {
++    const tLocal = (await db.teams.add({ name: 'Equiv Local', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false })) as number;
++    const tVisitor = (await db.teams.add({ name: 'Equiv Visitor', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false })) as number;
++    const p1 = (await db.players.add({ name: 'Player E1', number: 10, teamId: tLocal, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false })) as number;
++
++    const mId = (await db.matches.add({
++      localTeamId: tLocal,
++      visitorTeamId: tVisitor,
++      status: 'playing',
++      createdAt: new Date('2026-01-01T10:00:00Z'),
++      config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++      localScore: 3,
++      visitorScore: 0,
++      localFouls: 0,
++      visitorFouls: 0,
++      timerSecondsRemaining: 600,
++      timerLeaseExpiresAt: 0,
++      timerRecoveryState: 'normal'
++    })) as number;
++
++    await db.scores.add({
++      matchId: mId,
++      teamId: tLocal,
++      playerId: p1,
++      points: 3,
++      quarter: 1,
++      createdAt: new Date('2026-01-01T10:02:00Z')
++    });
++
++    const initialTeams = await db.teams.toArray();
++    const initialPlayers = await db.players.toArray();
++    const initialMatches = await db.matches.toArray();
++    const initialScores = await db.scores.toArray();
++
++    const json = await LocalBackupService.exportJson();
++
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const restoredTeams = await db.teams.toArray();
++    const restoredPlayers = await db.players.toArray();
++    const restoredMatches = await db.matches.toArray();
++    const restoredScores = await db.scores.toArray();
++
++    expect(restoredTeams).toEqual(initialTeams);
++    expect(restoredPlayers).toEqual(initialPlayers);
++    expect(restoredMatches).toEqual(initialMatches);
++    expect(restoredScores).toEqual(initialScores);
++  });
++
++  // QA-19: Compatibilidad con registros de distintas versiones históricas
++  it('QA-19: Adapta registros históricos de esquemas anteriores (v2 a v6) sin config ni isArchived', async () => {
++    const legacyBackup = await buildTestBackup(
++      {
++        teams: [
++          { id: 1, name: 'Legacy Team 1', createdAt: new Date('2025-01-01T00:00:00Z') } as unknown as Team,
++          { id: 2, name: 'Legacy Team 2', createdAt: new Date('2025-01-01T00:00:00Z') } as unknown as Team
++        ],
++        players: [],
++        matches: [
++          {
++            id: 88,
++            localTeamId: 1,
++            visitorTeamId: 2,
++            status: 'playing',
++            createdAt: new Date('2025-01-01T00:00:00Z'),
++            totalQuarters: 4,
++            quarterDuration: 10,
++            localScore: 10,
++            visitorScore: 8,
++            localFouls: 2,
++            visitorFouls: 1
++            // Sin config (esquema v6)
++          } as unknown as Match
++        ],
++        scores: [],
++        fouls: []
++      },
++      undefined,
++      { sourceSchemaVersion: 6 }
++    );
++
++    await LocalBackupService.restoreIntoEmpty(legacyBackup);
++
++    const team = (await db.teams.get(1))!;
++    expect(team.isArchived).toBe(false);
++
++    const match = (await db.matches.get(88))!;
++    expect(match.config).toBeDefined();
++    expect(match.config.mode).toBe('traditional');
++    expect(match.config.traditional?.totalQuarters).toBe(4);
++    expect(match.config.traditional?.minutesPerQuarter).toBe(10);
++    expect(match.localScore).toBe(10);
++    expect(match.visitorScore).toBe(8);
++  });
++
++  // QA-20: Correcto manejo de errores de almacenamiento
++  it('QA-20: Manejo seguro y tolerante de StoragePersistenceService en cualquier entorno', async () => {
++    const status = await StoragePersistenceService.getStatus();
++    expect(typeof status.supported).toBe('boolean');
++    expect(typeof status.persisted).toBe('boolean');
++
++    const requested = await StoragePersistenceService.requestPersistence();
++    expect(typeof requested).toBe('boolean');
++  });
++
++  // QA-21: Restauración y funcionamiento posterior de un partido
++  it('QA-21: Un partido restaurado puede ser continuado y modificado por los servicios deportivos del sistema', async () => {
++    const tLocal = (await db.teams.add({ name: 'Active T1', createdAt: new Date() })) as number;
++    const tVisitor = (await db.teams.add({ name: 'Active T2', createdAt: new Date() })) as number;
++    const player = (await db.players.add({ name: 'Point Guard', teamId: tLocal, createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: tLocal,
++      visitorTeamId: tVisitor,
++      status: 'playing',
++      createdAt: new Date(),
++      eventsProvenance: 'live_session',
++      config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++      currentQuarter: 1,
++      localScore: 2,
++      visitorScore: 0,
++      localFouls: 0,
++      visitorFouls: 0
++    })) as number;
++
++    const scoreId = (await db.scores.add({
++      matchId,
++      teamId: tLocal,
++      playerId: player,
++      points: 2,
++      quarter: 1,
++      createdAt: new Date()
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    // Ahora eliminamos la acción del partido restaurado usando GameActionsRepository
++    const deleteResult = await GameActionsRepository.deleteActionSafely({
++      matchId,
++      actionId: scoreId,
++      type: 'score'
++    });
++
++    expect(deleteResult.success).toBe(true);
++    expect(deleteResult.deleted).toBe(true);
++
++    const updatedMatch = (await db.matches.get(matchId))!;
++    expect(updatedMatch.localScore).toBe(0);
++  });
++
++  // QA-22: Ninguna modificación accidental a resultados deportivos
++  it('QA-22: Los resultados históricos cerrados, empates o victorias de sets no sufren mutación', async () => {
++    const t1 = (await db.teams.add({ name: 'T1', createdAt: new Date() })) as number;
++    const t2 = (await db.teams.add({ name: 'T2', createdAt: new Date() })) as number;
++
++    const matchId = (await db.matches.add({
++      localTeamId: t1,
++      visitorTeamId: t2,
++      status: 'finished',
++      createdAt: new Date('2026-01-01T00:00:00Z'),
++      config: {
++        mode: 'race',
++        race: { targetScore: 21, hasRematches: true, currentGame: 2 }
++      },
++      localScore: 21,
++      visitorScore: 19,
++      localFouls: 5,
++      visitorFouls: 7,
++      gameHistory: [
++        {
++          gameNumber: 1,
++          localScore: 21,
++          visitorScore: 19,
++          winner: 'local',
++          finishedAt: new Date('2026-01-01T00:30:00Z')
++        }
++      ]
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    await db.matches.clear();
++    await db.teams.clear();
++
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const restored = (await db.matches.get(matchId))!;
++    expect(restored.status).toBe('finished');
++    expect(restored.gameHistory?.[0].winner).toBe('local');
++    expect(restored.gameHistory?.[0].localScore).toBe(21);
++    expect(restored.gameHistory?.[0].visitorScore).toBe(19);
++  });
++
++  // QA-23: Pruebas de concurrencia y bloqueo entre operaciones
++  it('QA-23: Concurrencia: la restauración detecta inserciones concurrentes en el momento de la transacción y aborta limpiamente', async () => {
++    const rawBackup = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++
++    // Verificamos que si se inserta un equipo concurrentemente antes de la transacción,
++    // restoreIntoEmpty rechaza con DatabaseNotEmptyError
++    await db.teams.add({ name: 'Concurrent Inserted Team', createdAt: new Date() });
++
++    await expect(LocalBackupService.restoreIntoEmpty(rawBackup))
++      .rejects.toThrow(DatabaseNotEmptyError);
++  });
++
++  // QA-24: Prueba de volumen con conjunto de datos grande
++  it('QA-24: Prueba de volumen con 50 equipos, 250 jugadores, 100 partidos y 1300 eventos', async () => {
++    const teamCount = 50;
++    const playersPerTeam = 5;
++    const matchCount = 100;
++
++    const teams: Team[] = [];
++    for (let i = 1; i <= teamCount; i++) {
++      teams.push({
++        id: i,
++        name: `Team ${i}`,
++        createdAt: new Date('2026-01-01T00:00:00Z'),
++        isArchived: false
++      });
++    }
++
++    const players: Player[] = [];
++    let pId = 1;
++    for (let t = 1; t <= teamCount; t++) {
++      for (let p = 1; p <= playersPerTeam; p++) {
++        players.push({
++          id: pId++,
++          teamId: t,
++          name: `Player ${t}-${p}`,
++          number: p,
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        });
++      }
++    }
++
++    const matches: Match[] = [];
++    const scores: Score[] = [];
++    const fouls: Foul[] = [];
++    let sId = 1;
++    let fId = 1;
++
++    for (let m = 1; m <= matchCount; m++) {
++      const localTeamId = ((m * 2 - 1) % teamCount) + 1;
++      let visitorTeamId = ((m * 2) % teamCount) + 1;
++      if (localTeamId === visitorTeamId) {
++        visitorTeamId = (localTeamId % teamCount) + 1;
++      }
++
++      matches.push({
++        id: m,
++        localTeamId,
++        visitorTeamId,
++        status: m % 2 === 0 ? 'finished' : 'playing',
++        createdAt: new Date('2026-01-02T10:00:00Z'),
++        config: {
++          mode: 'traditional',
++          traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
++        },
++        localScore: 20,
++        visitorScore: 18,
++        localFouls: 2,
++        visitorFouls: 2
++      });
++
++      // 10 scores por partido = 1000 scores
++      for (let s = 1; s <= 10; s++) {
++        scores.push({
++          id: sId++,
++          matchId: m,
++          teamId: s % 2 === 0 ? localTeamId : visitorTeamId,
++          points: (s % 3 + 1) as 1 | 2 | 3,
++          quarter: 1,
++          createdAt: new Date('2026-01-02T10:01:00Z')
++        });
++      }
++
++      // 3 fouls por partido = 300 fouls
++      for (let f = 1; f <= 3; f++) {
++        fouls.push({
++          id: fId++,
++          matchId: m,
++          teamId: f % 2 === 0 ? localTeamId : visitorTeamId,
++          quarter: 1,
++          createdAt: new Date('2026-01-02T10:02:00Z')
++        });
++      }
++    }
++
++    // Cargar en la base de datos
++    await db.teams.bulkAdd(teams);
++    await db.players.bulkAdd(players);
++    await db.matches.bulkAdd(matches);
++    await db.scores.bulkAdd(scores);
++    await db.fouls.bulkAdd(fouls);
++
++    const startExport = performance.now();
++    const json = await LocalBackupService.exportJson();
++    const exportTime = performance.now() - startExport;
++
++    expect(json.length).toBeGreaterThan(100000); // > 100 KB
++    expect(exportTime).toBeLessThan(5000); // Debe exportar rápidamente
++
++    // Vaciar y restaurar
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++    await db.fouls.clear();
++
++    const startRestore = performance.now();
++    const counts = await LocalBackupService.restoreIntoEmpty(json);
++    const restoreTime = performance.now() - startRestore;
++
++    expect(counts.teams).toBe(50);
++    expect(counts.players).toBe(250);
++    expect(counts.matches).toBe(100);
++    expect(counts.scores).toBe(1000);
++    expect(counts.fouls).toBe(300);
++    expect(restoreTime).toBeLessThan(10000);
++
++    expect(await db.teams.count()).toBe(50);
++    expect(await db.players.count()).toBe(250);
++    expect(await db.matches.count()).toBe(100);
++    expect(await db.scores.count()).toBe(1000);
++    expect(await db.fouls.count()).toBe(300);
++  });
++
++  // QA-25: Adversarial - Integridad Criptográfica SHA-256 (FIPS 180-4 y Tampering)
++  it('QA-25: Integridad Criptográfica SHA-256 cumple vectores NIST FIPS 180-4 y detecta tampering de 1 byte', async () => {
++    // Vector 1: Cadena vacía
++    const emptySha = computePureSha256(new TextEncoder().encode(''));
++    expect(emptySha).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
++
++    // Vector 2: "abc"
++    const abcSha = computePureSha256(new TextEncoder().encode('abc'));
++    expect(abcSha).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
++
++    // Vector 3: 448 bits block test
++    const longSha = computePureSha256(
++      new TextEncoder().encode('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq')
++    );
++    expect(longSha).toBe('248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1');
++
++    // Equivalencia con computeDataChecksum
++    const computedData = await computeDataChecksum('abc');
++    expect(computedData).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
++
++    // Tampering test: exportar base con un equipo, alterar un solo carácter en el payload
++    await db.teams.add({ name: 'Equipo Original', createdAt: new Date() });
++    const json = await LocalBackupService.exportJson();
++    await db.teams.clear();
++
++    const parsed = JSON.parse(json);
++    expect(parsed.metadata.checksumAlgorithm).toBe('SHA-256');
++    expect(parsed.metadata.checksum.startsWith('sha256:')).toBe(true);
++
++    // Alteramos el nombre de un equipo sin actualizar el checksum
++    parsed.data.teams[0].name = 'Equipo Alterado';
++    const tamperedJson = JSON.stringify(parsed);
++
++    await expect(LocalBackupService.restoreIntoEmpty(tamperedJson)).rejects.toThrow(
++      BackupValidationError
++    );
++    await expect(LocalBackupService.restoreIntoEmpty(tamperedJson)).rejects.toThrow(
++      /checksum|SHA-256|alterado/i
++    );
++  });
++
++  // QA-26: Adversarial - Recuperación Temporal de Partidos Activos en Tránsito
++  it('QA-26: Recuperación de partidos activos en tránsito: detiene reloj, previene salto temporal y limpia autorizaciones obsoletas', async () => {
++    const t1 = (await db.teams.add({ name: 'Local Activo', createdAt: new Date() })) as number;
++    const t2 = (await db.teams.add({ name: 'Visitante Activo', createdAt: new Date() })) as number;
++
++    // Partido en juego iniciado hace 15 minutos en otra máquina / pestaña
++    const matchId = (await db.matches.add({
++      localTeamId: t1,
++      visitorTeamId: t2,
++      status: 'playing',
++      createdAt: new Date('2026-02-01T10:00:00Z'),
++      config: {
++        mode: 'traditional',
++        traditional: { totalQuarters: 4, minutesPerQuarter: 10 }
++      },
++      currentQuarter: 1,
++      timerSecondsRemaining: 480, // Quedan 8:00
++      timerLastStart: new Date(Date.now() - 900000), // Empezó hace 15 minutos (900 s)
++      timerOwnerTabId: 'zombie-tab-999',
++      timerLeaseExpiresAt: Date.now() - 60000, // Lease expirado
++      timerEpoch: 4,
++      localScore: 10,
++      visitorScore: 8,
++      localFouls: 1,
++      visitorFouls: 2
++    })) as number;
++
++    const json = await LocalBackupService.exportJson();
++    await db.matches.clear();
++    await db.teams.clear();
++
++    // Restauramos en una base vacía
++    await LocalBackupService.restoreIntoEmpty(json);
++
++    const restored = (await db.matches.get(matchId))!;
++    expect(restored).toBeDefined();
++
++    // 1. El temporizador debe pausarse preventivamente para evitar salto anómalo (no descontar 900s)
++    expect(restored.timerLastStart).toBeUndefined();
++    expect(restored.timerSecondsRemaining).toBe(480); // Exactamente los 8 minutos preservados
++
++    // 2. La autorización obsoleta de pestaña debe limpiarse
++    expect(restored.timerOwnerTabId).toBeUndefined();
++    expect(restored.timerLeaseExpiresAt).toBe(0);
++
++    // 3. El estado de recuperación debe quedar en 'recovery_required'
++    expect(restored.timerRecoveryState).toBe('recovery_required');
++    expect(restored.timerRecoveryReason).toContain('detenido preventivamente');
++
++    // 4. Al proyectar tiempo mediante MatchTimerService, no debe marcar 00:00 ni expirar
++    const projection = MatchTimerService.projectTime(restored);
++    expect(projection.timeLeft).toBe(480);
++    expect(projection.isRunning).toBe(false);
++    expect(projection.expired).toBe(false);
++    expect(projection.isClockShiftDetected).toBe(true);
++    expect(projection.confidence).toBe('uncertain');
++  });
++
++  // QA-27: Adversarial - Continuidad del Generador de Claves Auto-incrementales tras Restaurar
++  it('QA-27: Continuidad de claves: tras restaurar registros con IDs explícitos, db.table.add() genera el siguiente ID sin colisión', async () => {
++    // Respaldo con equipos en IDs no contiguos: 10 y 5000
++    const rawBackup = await buildTestBackup({
++      teams: [
++        { id: 10, name: 'Team Diez', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 5000, name: 'Team Cinco Mil', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(rawBackup);
++
++    // Verificar que los equipos 10 y 5000 existen intactos
++    expect(await db.teams.get(10)).toBeDefined();
++    expect(await db.teams.get(5000)).toBeDefined();
++
++    // Insertar un nuevo equipo mediante db.teams.add() sin ID explícito
++    const nextId = (await db.teams.add({
++      name: 'Team Cinco Mil Uno',
++      createdAt: new Date(),
++      isArchived: false
++    })) as number;
++
++    // Según la especificación W3C de IndexedDB (3.1.5 Key Generators),
++    // el generador avanza a max(restoredId) + 1, garantizando que nunca
++    // colisione con registros restaurados con IDs explícitos.
++    expect(nextId).toBeGreaterThan(5000);
++    expect(nextId).toBe(5001);
++
++    const retrieved = await db.teams.get(nextId);
++    expect(retrieved?.name).toBe('Team Cinco Mil Uno');
++  });
++
++  // QA-28: Adversarial - Compatibilidad con Esquemas Legacy v2 a v5
++  it('QA-28: Compatibilidad legacy: reconstruye marcadores, faltas y configuración por defecto en esquemas antiguos v2 a v5', async () => {
++    const rawLegacyBackup = await buildTestBackup(
++      {
++        teams: [
++          { id: 1, name: 'Legacy Local', createdAt: new Date('2024-05-01T10:00:00Z'), isArchived: false },
++          { id: 2, name: 'Legacy Visitor', createdAt: new Date('2024-05-01T10:00:00Z'), isArchived: false }
++        ],
++        matches: [
++          {
++            id: 100,
++            localTeamId: 1,
++            visitorTeamId: 2,
++            status: 'playing',
++            createdAt: new Date('2024-05-01T10:30:00Z'),
++            timerSecondsRemaining: 300
++          } as unknown as Match
++        ],
++        scores: [
++          { id: 1, matchId: 100, teamId: 1, points: 2, quarter: 1, createdAt: new Date('2024-05-01T10:32:00Z') },
++          { id: 2, matchId: 100, teamId: 1, points: 3, quarter: 1, createdAt: new Date('2024-05-01T10:34:00Z') },
++          { id: 3, matchId: 100, teamId: 2, points: 2, quarter: 1, createdAt: new Date('2024-05-01T10:35:00Z') }
++        ],
++        fouls: [
++          { id: 1, matchId: 100, teamId: 1, quarter: 1, createdAt: new Date('2024-05-01T10:33:00Z') },
++          { id: 2, matchId: 100, teamId: 2, quarter: 1, createdAt: new Date('2024-05-01T10:36:00Z') }
++        ]
++      },
++      undefined,
++      { sourceSchemaVersion: 3 }
++    );
++
++    await LocalBackupService.restoreIntoEmpty(rawLegacyBackup);
++
++    const restoredMatch = (await db.matches.get(100))!;
++    expect(restoredMatch).toBeDefined();
++
++    // Reconstrucción determinista de contadores deportivos
++    expect(restoredMatch.localScore).toBe(5); // 2 + 3
++    expect(restoredMatch.visitorScore).toBe(2); // 2
++    expect(restoredMatch.localFouls).toBe(1);
++    expect(restoredMatch.visitorFouls).toBe(1);
++
++    // Configuración por defecto a tradicional
++    expect(restoredMatch.config).toBeDefined();
++    expect(restoredMatch.config.mode).toBe('traditional');
++
++    // eventsProvenance NO debe ser falsificado como 'live_session'
++    expect(restoredMatch.eventsProvenance).toBeUndefined();
++  });
++
++  // QA-29: Adversarial - Rollback Atómico Multialmacén ante Fallo en Restauración
++  it('QA-29: Rollback multialmacén: si los datos son inválidos, ningún registro queda escrito en ninguna tabla', async () => {
++    // Backup con una violación relacional (un jugador apunta a un equipo inexistente)
++    const invalidRelationalBackup = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 1, teamId: 999, name: 'Ghost Player', number: 7, createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(invalidRelationalBackup))
++      .rejects.toThrow(BackupValidationError);
++
++    // Ninguna tabla debe contener datos (rollback total)
++    expect(await db.teams.count()).toBe(0);
++    expect(await db.players.count()).toBe(0);
++    expect(await db.matches.count()).toBe(0);
++    expect(await db.scores.count()).toBe(0);
++    expect(await db.fouls.count()).toBe(0);
++  });
++
++  // QA-30: R2-01 - Checksum obligatorio (ausente o vacío es rechazado terminantemente)
++  it('QA-30: R2-01 - Rechaza restauraciones si metadata.checksum está ausente, vacío o nulo', async () => {
++    const validJson = await LocalBackupService.exportJson();
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Checksum eliminado
++    delete (parsed.metadata as Partial<BackupMetadata>).checksum;
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++
++    // Checksum cadena vacía
++    parsed.metadata.checksum = '';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++
++    // Checksum solo espacios
++    parsed.metadata.checksum = '   ';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/checksum.*obligatoria/i);
++  });
++
++  // QA-31: R2-01 - Validación estricta de algoritmo y formato de hash
++  it('QA-31: R2-01 - Rechaza algoritmos no admitidos (FNV-1a) y hashes SHA-256 malformados', async () => {
++    const validJson = await LocalBackupService.exportJson();
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Algoritmo inseguro o no admitido
++    (parsed.metadata as unknown as Record<string, unknown>).checksumAlgorithm = 'FNV-1a';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Algoritmo de suma de verificación no admitido/i);
++
++    // Algoritmo restaurado a SHA-256 pero hash malformado (sin prefijo sha256:)
++    parsed.metadata.checksumAlgorithm = 'SHA-256';
++    parsed.metadata.checksum = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Formato de suma de verificación inválido/i);
++
++    // Longitud incorrecta (menor a 64 hex caracteres)
++    parsed.metadata.checksum = 'sha256:1234abcd';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Formato de suma de verificación inválido/i);
++  });
++
++  // QA-32: R2-05 - Manifiesto inconsistente (counts discordante con registros reales)
++  it('QA-32: R2-05 - Rechaza respaldos donde metadata.counts no concuerde con el contenido real', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team One', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson) as BackupEnvelope;
++
++    // Conteo declarado falsificado (Real es 1, declaramos 99)
++    parsed.metadata.counts.teams = 99;
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Manifiesto inconsistente en la tabla "teams"/i);
++  });
++
++  // QA-33: R2-02 - Fechas obligatorias (createdAt) ausentes, nulas, malformadas o fuera de rango
++  it('QA-33: R2-02 - Rechaza registros con fecha obligatoria createdAt ausente, nula, inválida o fuera de rango (2000-2100)', async () => {
++    // 1. createdAt ausente en Team
++    const missingCreatedAt = await buildTestBackup({
++      teams: [{ id: 1, name: 'No Date Team', isArchived: false } as unknown as Team]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(missingCreatedAt))
++      .rejects.toThrow(/campo de fecha obligatorio.*createdAt/i);
++
++    // 2. createdAt null en Player
++    const nullCreatedAt = await buildTestBackup({
++      teams: [{ id: 1, name: 'Valid Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }],
++      players: [{ id: 1, name: 'P1', number: 7, teamId: 1, createdAt: null as unknown as Date, isArchived: false }]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(nullCreatedAt))
++      .rejects.toThrow(/campo de fecha obligatorio.*createdAt/i);
++
++    // 3. createdAt malformado en Match
++    const invalidDateMatch = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: 'fecha-totalmente-invalida' as unknown as Date,
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(invalidDateMatch))
++      .rejects.toThrow(/Fecha inválida/i);
++
++    // 4. Fecha fuera de rango plausible (anterior al año 2000)
++    const epochZeroMatch = await buildTestBackup({
++      teams: [{ id: 1, name: 'T1', createdAt: new Date('1990-01-01T00:00:00Z'), isArchived: false }]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(epochZeroMatch))
++      .rejects.toThrow(/rango histórico admisible/i);
++  });
++
++  // QA-34: R2-02 - Fechas opcionales y anidadas
++  it('QA-34: R2-02 - Procesa fechas opcionales válidas y rechaza fechas anidadas corruptas', async () => {
++    const backupWithValidOptionals = await buildTestBackup({
++      teams: [
++        {
++          id: 1,
++          name: 'Archived Team',
++          createdAt: new Date('2026-01-01T10:00:00Z'),
++          archivedAt: new Date('2026-01-05T12:00:00Z'),
++          isArchived: true
++        },
++        {
++          id: 2,
++          name: 'Active Team',
++          createdAt: new Date('2026-01-01T10:00:00Z'),
++          isArchived: false
++        }
++      ],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-02T10:00:00Z'),
++          finishedAt: new Date('2026-01-02T11:30:00Z'),
++          config: { mode: 'race', race: { targetScore: 21, hasRematches: false, currentGame: 1 } },
++          localScore: 21,
++          visitorScore: 19,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 21,
++              visitorScore: 19,
++              winner: 'local',
++              finishedAt: new Date('2026-01-02T11:29:00Z')
++            }
++          ]
++        }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(backupWithValidOptionals);
++
++    const restoredTeam = (await db.teams.get(1))!;
++    expect(restoredTeam.archivedAt).toBeInstanceOf(Date);
++    expect(restoredTeam.archivedAt?.toISOString()).toBe('2026-01-05T12:00:00.000Z');
++
++    const restoredMatch = (await db.matches.get(10))!;
++    expect(restoredMatch.finishedAt).toBeInstanceOf(Date);
++    expect(restoredMatch.gameHistory?.[0].finishedAt).toBeInstanceOf(Date);
++
++    await db.teams.clear();
++    await db.matches.clear();
++
++    // Fecha anidada corrupta en gameHistory
++    const corruptNestedDate = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T10:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T10:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 10,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-02T10:00:00Z'),
++          config: { mode: 'race', race: { targetScore: 21, hasRematches: false, currentGame: 1 } },
++          localScore: 21,
++          visitorScore: 19,
++          localFouls: 0,
++          visitorFouls: 0,
++          gameHistory: [
++            {
++              gameNumber: 1,
++              localScore: 21,
++              visitorScore: 19,
++              winner: 'local',
++              finishedAt: 'fecha-anidada-invalida' as unknown as Date
++            }
++          ]
++        }
++      ]
++    });
++
++    await expect(LocalBackupService.restoreIntoEmpty(corruptNestedDate))
++      .rejects.toThrow(/Fecha inválida/i);
++  });
++
++  // QA-35: R2-03 - Validación de configuraciones deportivas
++  it('QA-35: R2-03 - Rechaza modos desconocidos, NaN, Infinity y fraccionarios en configuración de partido', async () => {
++    // 1. Modo de juego desconocido
++    const unknownMode = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'waterpolo' } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(unknownMode))
++      .rejects.toThrow(/Modo de juego inválido/i);
++
++    // 2. Número fraccionario en totalQuarters
++    const floatQuarters = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4.5 as unknown as number, minutesPerQuarter: 10 } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(floatQuarters))
++      .rejects.toThrow(/cuartos deben ser un número entero/i);
++
++    // 3. NaN en minutesPerQuarter
++    const nanMinutes = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: NaN } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(nanMinutes))
++      .rejects.toThrow(/minutos deben ser un número entero/i);
++
++    // 4. Infinity en targetScore de Race
++    const infTarget = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'race', race: { targetScore: Infinity as unknown as number, hasRematches: false } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(infTarget))
++      .rejects.toThrow(/puntaje objetivo debe ser un número entero/i);
++
++    // 5. Número par en totalGames de Best-of-Series
++    const evenGames = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'playing',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'best-of-series', bestOf: { totalGames: 4, targetScorePerGame: 21, currentGame: 1, wins: { local: 0, visitor: 0 } } } as unknown as Match['config'],
++          localScore: 0,
++          visitorScore: 0,
++          localFouls: 0,
++          visitorFouls: 0
++        }
++      ]
++    });
++    await expect(LocalBackupService.restoreIntoEmpty(evenGames))
++      .rejects.toThrow(/número de partidos debe ser impar/i);
++  });
++
++  // QA-36: R2-04 - Autoridad temporal en partidos pausados
++  it('QA-36: R2-04 - La restauración siempre purga timerOwnerTabId y contratos de lease en partidos pausados', async () => {
++    const pausedMatchBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'T1', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'T2', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 1,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'paused',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          currentQuarter: 2,
++          timerSecondsRemaining: 300,
++          // Partido pausado pero con rastro de autoridad de una pestaña ajena
++          timerLastStart: undefined,
++          timerOwnerTabId: 'zombie-tab-from-other-machine',
++          timerLeaseExpiresAt: Date.now() + 60000,
++          timerLockMode: 'web_locks',
++          timerRecoveryState: 'normal',
++          localScore: 10,
++          visitorScore: 8,
++          localFouls: 1,
++          visitorFouls: 1
++        }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(pausedMatchBackup);
++
++    const restored = (await db.matches.get(1))!;
++    expect(restored).toBeDefined();
++
++    // Las referencias efímeras de la sesión anterior deben ser anuladas
++    expect(restored.timerOwnerTabId).toBeUndefined();
++    expect(restored.timerLeaseExpiresAt).toBe(0);
++    expect(restored.timerLockMode).toBeUndefined();
++
++    // El tiempo restante debe estar preservado intacto
++    expect(restored.timerSecondsRemaining).toBe(300);
++    expect(restored.timerLastStart).toBeUndefined();
++
++    // Como estaba legítimamente pausado y con tiempo coherente, su estado es normal
++    expect(restored.timerRecoveryState).toBe('normal');
++  });
++
++  // QA-37: R2-06 - Integridad de codificación UTF-8 y prevención de mojibake
++  it('QA-37: R2-06 - Preserva íntegramente caracteres UTF-8 en respaldos y previene mojibake o secuencias corruptas', async () => {
++    // 1. Verificar preservación de caracteres en español, acentos, símbolos y emojis
++    const unicodeBackup = await buildTestBackup({
++      teams: [
++        {
++          id: 1,
++          name: 'CB Atlético Málaga — 1ª División 🏀',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        },
++        {
++          id: 2,
++          name: 'Bàsquet Peña San José & València 🏆',
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        }
++      ],
++      players: [
++        {
++          id: 1,
++          name: 'José María González — Capitán',
++          number: 23,
++          teamId: 1,
++          createdAt: new Date('2026-01-01T00:00:00Z'),
++          isArchived: false
++        }
++      ]
++    });
++
++    // Validar que el payload JSON generado es decodificable estrictamente como UTF-8 sin errores
++    const encoder = new TextEncoder();
++    const encodedBytes = encoder.encode(unicodeBackup);
++    const strictDecoder = new TextDecoder('utf-8', { fatal: true });
++    expect(() => strictDecoder.decode(encodedBytes)).not.toThrow();
++
++    // Restaurar y verificar que los nombres se mantienen exactos sin mojibake
++    await LocalBackupService.restoreIntoEmpty(unicodeBackup);
++
++    const team1 = await db.teams.get(1);
++    const team2 = await db.teams.get(2);
++    const player1 = await db.players.get(1);
++
++    expect(team1?.name).toBe('CB Atlético Málaga — 1ª División 🏀');
++    expect(team2?.name).toBe('Bàsquet Peña San José & València 🏆');
++    expect(player1?.name).toBe('José María González — Capitán');
++
++    // 2. Verificar que se rechazan respaldos con secuencias corruptas de mojibake (ej. U+FFFD o patrones CP850/UTF-8 doblados)
++    const corruptedBackup = unicodeBackup.replace('Málaga', 'M\uFFFDlaga');
++    await expect(LocalBackupService.restoreIntoEmpty(corruptedBackup))
++      .rejects.toThrow(); // Falla por checksum o validación
++  });
++
++  // QA-38: R2-08 - Experiencia de exportación y compatibilidad móvil
++  it('QA-38: R2-08 - exportToFile ejecuta desasociación asíncrona de URL y reporta downloadInitiated', async () => {
++    await db.teams.add({ name: 'Export Team', createdAt: new Date(), isArchived: false });
++
++    const result = await LocalBackupService.exportToFile('test-export-r2.json');
++
++    expect(result.filename).toBe('test-export-r2.json');
++    expect(result.counts.teams).toBe(1);
++    expect(typeof result.downloadInitiated).toBe('boolean');
++  });
++
++  // QA-39: R2.1 - Integridad del envelope: alteración de sourceSchemaVersion
++  it('QA-39: R2.1 - Rechaza respaldos donde sourceSchemaVersion haya sido alterado respecto a la firma original', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team Schema Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson);
++
++    // Alterar sourceSchemaVersion (ej. de 8 a 2 para intentar forzar reglas de migración obsoletas)
++    parsed.sourceSchemaVersion = 2;
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
++  });
++
++  // QA-40: R2.1 - Integridad del envelope: alteración de version y política anti-downgrade
++  it('QA-40: R2.1 - Rechaza alteración de version del sobre y bloquea intentos de degradación a versión 1', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team Version Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson);
++
++    // 1. Intento de degradación a versión 1
++    parsed.version = 1;
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Versión de formato de respaldo obsoleta \(versión 1\)/i);
++
++    // 2. Versión desconocida / futura
++    parsed.version = 99;
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/Versión de formato de respaldo no soportada: 99/i);
++  });
++
++  // QA-41: R2.1 - Integridad del envelope: alteración de format o app
++  it('QA-41: R2.1 - Rechaza respaldos con alteración en format o app', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team Format Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++
++    const parsedFormat = JSON.parse(validJson);
++    parsedFormat.format = 'compromised-format';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsedFormat)))
++      .rejects.toThrow(/Formato de respaldo no reconocido/i);
++
++    const parsedApp = JSON.parse(validJson);
++    parsedApp.app = 'OtherApp';
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsedApp)))
++      .rejects.toThrow(/Aplicación no compatible/i);
++  });
++
++  // QA-42: R2.1 - Integridad del envelope: alteración de exportedAt
++  it('QA-42: R2.1 - Detecta y rechaza la alteración de la marca temporal exportedAt', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team Date Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson);
++
++    // Modificar la fecha de exportación
++    parsed.exportedAt = '2026-12-31T23:59:59.000Z';
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
++  });
++
++  // QA-43: R2.1 - Integridad del envelope: alteración de registros en data
++  it('QA-43: R2.1 - Detecta y rechaza cualquier modificación interna de los registros en data', async () => {
++    const validJson = await buildTestBackup({
++      teams: [{ id: 1, name: 'Team Original', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
++    });
++    const parsed = JSON.parse(validJson);
++
++    // Modificar el nombre del equipo en data
++    parsed.data.teams[0].name = 'Team Tampered';
++
++    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
++      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
++  });
++
++  // QA-44: R2.1 - Inmutabilidad estricta y preservación temporal de partidos finalizados
++  it('QA-44: R2.1 - La restauración preserva estrictamente el estado finished y el tiempo restante de partidos terminados', async () => {
++    const finishedMatchBackup = await buildTestBackup({
++      teams: [
++        { id: 1, name: 'Team Final A', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
++        { id: 2, name: 'Team Final B', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
++      ],
++      matches: [
++        {
++          id: 50,
++          localTeamId: 1,
++          visitorTeamId: 2,
++          status: 'finished',
++          createdAt: new Date('2026-01-01T10:00:00Z'),
++          finishedAt: new Date('2026-01-01T11:45:00Z'),
++          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
++          currentQuarter: 4,
++          timerSecondsRemaining: 0,
++          timerLastStart: undefined,
++          timerOwnerTabId: 'old-tab-finished',
++          timerLeaseExpiresAt: Date.now() + 10000,
++          timerLockMode: 'web_locks',
++          timerRecoveryState: 'normal',
++          localScore: 88,
++          visitorScore: 82,
++          localFouls: 4,
++          visitorFouls: 3
++        }
++      ]
++    });
++
++    await LocalBackupService.restoreIntoEmpty(finishedMatchBackup);
++
++    const restored = (await db.matches.get(50))!;
++    expect(restored).toBeDefined();
++
++    // 1. El estado finished es ESTRICTAMENTE inmutable (nunca pasa a paused)
++    expect(restored.status).toBe('finished');
++
++    // 2. Limpieza de autoridades efímeras de la sesión previa
++    expect(restored.timerOwnerTabId).toBeUndefined();
++    expect(restored.timerLeaseExpiresAt).toBe(0);
++    expect(restored.timerLockMode).toBeUndefined();
++
++    // 3. Reloj inerte y sin necesidad de recuperación
++    expect(restored.timerLastStart).toBeUndefined();
++    expect(restored.timerSecondsRemaining).toBe(0);
++    expect(restored.timerRecoveryState).toBe('normal');
++
++    // 4. Marcadores deportivos íntegros
++    expect(restored.localScore).toBe(88);
++    expect(restored.visitorScore).toBe(82);
++  });
++
++  // QA-45: R2.1 - Exportación y restauración canónica determinista
++  it('QA-45: R2.1 - Exporta y restaura bajo la especificación canónica JCS v2 con total coherencia', async () => {
++    await db.teams.add({ name: 'Canonical Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false });
++
++    const exportedJson = await LocalBackupService.exportJson();
++    const parsed = JSON.parse(exportedJson);
++
++    expect(parsed.format).toBe('scorebasket-local-backup');
++    expect(parsed.version).toBe(2);
++    expect(parsed.metadata.checksumAlgorithm).toBe('SHA-256');
++    expect(parsed.metadata.checksum).toMatch(/^sha256:[a-f0-9]{64}$/i);
++
++    // Vaciar y restaurar
++    await db.teams.clear();
++    const counts = await LocalBackupService.restoreIntoEmpty(exportedJson);
++    expect(counts.teams).toBe(1);
++
++    const reExportedJson = await LocalBackupService.exportJson();
++    const reParsed = JSON.parse(reExportedJson);
++    expect(reParsed.data.teams[0].name).toBe('Canonical Team');
++  });
++});
+diff --git a/src/test/sb15-local-backup-controls.test.tsx b/src/test/sb15-local-backup-controls.test.tsx
+new file mode 100644
+index 0000000..9f652e0
+--- /dev/null
++++ b/src/test/sb15-local-backup-controls.test.tsx
+@@ -0,0 +1,159 @@
++// @vitest-environment jsdom
++import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
++import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
++import { db } from '../db/db';
++import { LocalBackupControls } from '../components/matches/LocalBackupControls';
++import {
++  LocalBackupService,
++  computeEnvelopeChecksum,
++  LOCAL_BACKUP_FORMAT,
++  LOCAL_BACKUP_VERSION,
++  type BackupData
++} from '../db/localBackup.service';
++
++describe('LocalBackupControls UI Component', () => {
++  beforeEach(async () => {
++    await db.matches.clear();
++    await db.teams.clear();
++    await db.players.clear();
++    await db.scores.clear();
++    await db.fouls.clear();
++  });
++
++  afterEach(() => {
++    cleanup();
++    vi.restoreAllMocks();
++  });
++
++  it('renders collapsed by default and expands on click', async () => {
++    render(<LocalBackupControls />);
++
++    expect(screen.getByText('Respaldo y Seguridad de Datos Locales')).toBeDefined();
++    expect(screen.queryByText('Descargar Respaldo (JSON)')).toBeNull();
++
++    // Clic para expandir
++    const headerTitle = screen.getByText('Respaldo y Seguridad de Datos Locales');
++    await act(async () => {
++      fireEvent.click(headerTitle);
++    });
++
++    expect(screen.getByText('Descargar Respaldo (JSON)')).toBeDefined();
++    expect(screen.getByText('Restaurar Respaldo')).toBeDefined();
++  });
++
++  it('handles export action and displays success feedback', async () => {
++    // Añadir un equipo de prueba
++    await db.teams.add({ name: 'Export Team', createdAt: new Date() });
++
++    vi.spyOn(LocalBackupService, 'exportToFile').mockResolvedValue({
++      filename: 'scorebasket-backup-test.json',
++      counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
++      downloadInitiated: true
++    });
++
++    render(<LocalBackupControls />);
++
++    // Expandir
++    await act(async () => {
++      fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
++    });
++
++    const exportBtn = screen.getByText('Descargar Respaldo (JSON)');
++    await act(async () => {
++      fireEvent.click(exportBtn);
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/Respaldo generado exitosamente|Descarga iniciada/i)).toBeDefined();
++    });
++  });
++
++  it('blocks restore when database already contains data and displays clear warning', async () => {
++    // Añadir un equipo para que la base no esté vacía
++    await db.teams.add({ name: 'Existing Team', createdAt: new Date() });
++
++    render(<LocalBackupControls />);
++
++    // Expandir
++    await act(async () => {
++      fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
++    });
++
++    // Simular selección de archivo
++    const file = new File(['{}'], 'backup.json', { type: 'application/json' });
++    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
++
++    await act(async () => {
++      fireEvent.change(fileInput, { target: { files: [file] } });
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/Restauración bloqueada: la base de datos ya contiene datos/i)).toBeDefined();
++    });
++  });
++
++  it('prompts confirmation when database is empty and restores successfully', async () => {
++    render(<LocalBackupControls />);
++
++    // Expandir
++    await act(async () => {
++      fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
++    });
++
++    const rawData = {
++      teams: [{ id: 1, name: 'Restored Team', createdAt: '2026-01-01T00:00:00Z', isArchived: false }],
++      players: [],
++      matches: [],
++      scores: [],
++      fouls: []
++    };
++    const counts = { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 };
++    const exportedAt = new Date().toISOString();
++    const checksum = await computeEnvelopeChecksum({
++      app: 'ScoreBasket',
++      counts,
++      data: rawData as unknown as BackupData,
++      exportedAt,
++      format: LOCAL_BACKUP_FORMAT,
++      sourceSchemaVersion: 8,
++      version: LOCAL_BACKUP_VERSION
++    });
++    const mockBackup = {
++      format: LOCAL_BACKUP_FORMAT,
++      version: LOCAL_BACKUP_VERSION,
++      app: 'ScoreBasket',
++      sourceSchemaVersion: 8,
++      exportedAt,
++      metadata: {
++        counts,
++        checksumAlgorithm: 'SHA-256',
++        checksum,
++        generatedBy: 'ScoreBasket Test'
++      },
++      data: rawData
++    };
++
++    const file = new File([JSON.stringify(mockBackup)], 'backup.json', { type: 'application/json' });
++    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
++
++    await act(async () => {
++      fireEvent.change(fileInput, { target: { files: [file] } });
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText('Confirmar Restauración')).toBeDefined();
++      expect(screen.getByText('Sí, Restaurar Datos')).toBeDefined();
++    });
++
++    // Confirmar
++    await act(async () => {
++      fireEvent.click(screen.getByText('Sí, Restaurar Datos'));
++    });
++
++    await waitFor(() => {
++      expect(screen.getByText(/¡Restauración exitosa!/i)).toBeDefined();
++    });
++
++    expect(await db.teams.count()).toBe(1);
++  });
++});

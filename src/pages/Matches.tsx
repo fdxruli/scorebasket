@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import type { Match } from '../db/models/Match';
 import { Activity, Clock, Trophy, Zap, PlusCircle, CheckCircle2, Flame } from 'lucide-react';
 import { MatchHistoryModal } from '../components/matches/MatchHistoryModal';
 import { startQuickPickupMatch } from '../utils/matchHelpers';
@@ -13,11 +14,19 @@ import { LocalBackupControls } from '../components/matches/LocalBackupControls';
 
 type FilterMode = 'all' | 'traditional' | 'race' | 'best-of-series';
 
+export interface EnrichedMatch extends Match {
+  localName: string;
+  visitorName: string;
+}
+
+const PAGE_SIZE = 20;
+
 export function Matches() {
   const navigate = useNavigate();
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
   const [isStartingQuick, setIsStartingQuick] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<FilterMode>('all');
+  const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
 
   const handleQuickMatch = async () => {
     if (isStartingQuick) return;
@@ -31,19 +40,87 @@ export function Matches() {
     }
   };
 
-  const matchesWithData = useLiveQuery(async () => {
-    const matches = await db.matches.orderBy('createdAt').reverse().toArray();
-    const teams = await db.teams.toArray();
+  const handleFilterChange = (mode: FilterMode) => {
+    setHistoryFilter(mode);
+    setVisibleLimit(PAGE_SIZE);
+  };
+
+  // 1. Partidos activos (rango acotado vía índice status)
+  const activeMatches = useLiveQuery(async (): Promise<EnrichedMatch[]> => {
+    const rawActive = await db.matches
+      .where('status')
+      .anyOf(['created', 'playing', 'paused'])
+      .reverse()
+      .sortBy('createdAt');
+
+    if (rawActive.length === 0) return [];
+
+    const teamIds = Array.from(new Set(rawActive.flatMap(m => [m.localTeamId, m.visitorTeamId])));
+    const teams = teamIds.length > 0 ? await db.teams.where('id').anyOf(teamIds).toArray() : [];
     const teamMap = new Map(teams.map(t => [t.id, t.name]));
 
-    return matches.map(m => ({
+    return rawActive.map(m => ({
       ...m,
       localName: teamMap.get(m.localTeamId) || '???',
       visitorName: teamMap.get(m.visitorTeamId) || '???',
     }));
   }, []);
 
-  if (!matchesWithData) {
+  // 2. Partidos finalizados con conteo indexado y carga incremental en orden cronológico inverso
+  const finishedData = useLiveQuery(async () => {
+    const totalFinished = await db.matches.where('status').equals('finished').count();
+    if (totalFinished === 0) {
+      return { matches: [] as EnrichedMatch[], totalFiltered: 0, totalFinished: 0 };
+    }
+
+    const matched: Match[] = [];
+    let totalFiltered = 0;
+
+    if (historyFilter === 'all') {
+      totalFiltered = totalFinished;
+      await db.matches
+        .orderBy('createdAt')
+        .reverse()
+        .until(() => matched.length >= visibleLimit)
+        .each(m => {
+          if (m.status === 'finished') {
+            matched.push(m);
+          }
+        });
+    } else {
+      await db.matches
+        .orderBy('createdAt')
+        .reverse()
+        .each(m => {
+          if (m.status !== 'finished') return;
+          const mode = m.config?.mode || 'traditional';
+          if (mode !== historyFilter) return;
+
+          totalFiltered++;
+          if (matched.length < visibleLimit) {
+            matched.push(m);
+          }
+        });
+    }
+
+    const teamIds = Array.from(new Set(matched.flatMap(m => [m.localTeamId, m.visitorTeamId])));
+    const teams = teamIds.length > 0 ? await db.teams.where('id').anyOf(teamIds).toArray() : [];
+    const teamMap = new Map(teams.map(t => [t.id, t.name]));
+
+    const enriched: EnrichedMatch[] = matched.map(m => ({
+      ...m,
+      localName: teamMap.get(m.localTeamId) || '???',
+      visitorName: teamMap.get(m.visitorTeamId) || '???',
+    }));
+
+    return {
+      matches: enriched,
+      totalFiltered,
+      totalFinished
+    };
+  }, [historyFilter, visibleLimit]);
+
+  if (activeMatches === undefined || finishedData === undefined) {
     return (
       <div className="flex-center text-muted" style={{ minHeight: '60vh' }}>
         Cargando tablero de partidos...
@@ -51,14 +128,9 @@ export function Matches() {
     );
   }
 
-  const activeMatches = matchesWithData.filter(m => m.status !== 'finished');
-  const finishedMatches = matchesWithData.filter(m => m.status === 'finished');
-
-  const filteredFinished = finishedMatches.filter(m => {
-    if (historyFilter === 'all') return true;
-    const mode = m.config?.mode || 'traditional';
-    return mode === historyFilter;
-  });
+  const totalMatchesCount = activeMatches.length + finishedData.totalFinished;
+  const filteredFinished = finishedData.matches;
+  const hasMoreFinished = finishedData.totalFiltered > filteredFinished.length;
 
   return (
     <div className="page-container">
@@ -105,7 +177,7 @@ export function Matches() {
       )}
 
       {/* --- FRANJA DE INDICADORES (KPIs) --- */}
-      {matchesWithData.length > 0 && (
+      {totalMatchesCount > 0 && (
         <div className="matches-kpi-strip">
           <div className={`kpi-card ${activeMatches.length > 0 ? 'is-highlight' : ''}`}>
             <span className="kpi-label">
@@ -122,7 +194,7 @@ export function Matches() {
               <CheckCircle2 size={13} color="var(--success)" />
               Finalizados
             </span>
-            <span className="kpi-value">{finishedMatches.length}</span>
+            <span className="kpi-value">{finishedData.totalFinished}</span>
           </div>
 
           <div className="kpi-card">
@@ -130,13 +202,13 @@ export function Matches() {
               <Trophy size={13} color="var(--secondary-light)" />
               Total Juegos
             </span>
-            <span className="kpi-value">{matchesWithData.length}</span>
+            <span className="kpi-value">{totalMatchesCount}</span>
           </div>
         </div>
       )}
 
       {/* --- ESTADO VACÍO --- */}
-      {matchesWithData.length === 0 && (
+      {totalMatchesCount === 0 && (
         <div className="empty-state">
           <div
             style={{
@@ -196,39 +268,39 @@ export function Matches() {
       )}
 
       {/* --- SECCIÓN HISTORIAL --- */}
-      {finishedMatches.length > 0 && (
+      {finishedData.totalFinished > 0 && (
         <section>
           <div className="section-header-bar">
             <h2 className="section-title">
               <Clock size={17} color="var(--secondary-light)" />
-              Historial de Resultados ({filteredFinished.length})
+              Historial de Resultados ({finishedData.totalFiltered})
             </h2>
 
             <div className="filter-pills">
               <button
                 type="button"
-                onClick={() => setHistoryFilter('all')}
+                onClick={() => handleFilterChange('all')}
                 className={`filter-pill-btn ${historyFilter === 'all' ? 'active' : ''}`}
               >
                 Todos
               </button>
               <button
                 type="button"
-                onClick={() => setHistoryFilter('traditional')}
+                onClick={() => handleFilterChange('traditional')}
                 className={`filter-pill-btn ${historyFilter === 'traditional' ? 'active' : ''}`}
               >
                 Tradicional
               </button>
               <button
                 type="button"
-                onClick={() => setHistoryFilter('race')}
+                onClick={() => handleFilterChange('race')}
                 className={`filter-pill-btn ${historyFilter === 'race' ? 'active' : ''}`}
               >
                 Race / Reta
               </button>
               <button
                 type="button"
-                onClick={() => setHistoryFilter('best-of-series')}
+                onClick={() => handleFilterChange('best-of-series')}
                 className={`filter-pill-btn ${historyFilter === 'best-of-series' ? 'active' : ''}`}
               >
                 Series
@@ -241,17 +313,32 @@ export function Matches() {
               No hay partidos finalizados en esta modalidad todavía.
             </div>
           ) : (
-            <div className="matches-grid">
-              {filteredFinished.map(m => (
-                <HistoryMatchTicket
-                  key={m.id}
-                  match={m}
-                  localName={m.localName}
-                  visitorName={m.visitorName}
-                  onClick={() => setSelectedMatchId(m.id!)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="matches-grid">
+                {filteredFinished.map(m => (
+                  <HistoryMatchTicket
+                    key={m.id}
+                    match={m}
+                    localName={m.localName}
+                    visitorName={m.visitorName}
+                    onClick={() => setSelectedMatchId(m.id!)}
+                  />
+                ))}
+              </div>
+
+              {hasMoreFinished && (
+                <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleLimit(prev => prev + PAGE_SIZE)}
+                    className="btn btn-secondary"
+                    style={{ margin: '0 auto' }}
+                  >
+                    Cargar más partidos ({filteredFinished.length} de {finishedData.totalFiltered})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

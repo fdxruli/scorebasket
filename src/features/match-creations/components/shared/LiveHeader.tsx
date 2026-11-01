@@ -61,13 +61,10 @@ export const LiveHeader: React.FC = () => {
       currentPeriod = match.currentQuarter || match.config?.bestOf?.currentGame || 1;
     }
 
-    const [scores, fouls] = await Promise.all([
-      db.scores.where('matchId').equals(match.id).toArray(),
-      db.fouls.where('matchId').equals(match.id).toArray()
+    const [periodScores, periodFouls] = await Promise.all([
+      db.scores.where('[matchId+quarter]').equals([match.id, currentPeriod]).toArray(),
+      db.fouls.where('[matchId+quarter]').equals([match.id, currentPeriod]).toArray()
     ]);
-
-    const periodScores = scores.filter(s => s.quarter === currentPeriod);
-    const periodFouls = fouls.filter(f => f.quarter === currentPeriod);
 
     const latestScore = [...periodScores].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     const latestFoul = [...periodFouls].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];

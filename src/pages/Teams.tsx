@@ -31,13 +31,21 @@ export function Teams() {
                 db.players.toArray()
             ]);
 
-            return rawTeams.map(team => {
-                const roster = allPlayers.filter(p => p.teamId === team.id && !p.isArchived);
-                return {
-                    ...team,
-                    roster
-                };
-            });
+            const rosterByTeamId = new Map<number, typeof allPlayers>();
+            for (const p of allPlayers) {
+                if (p.isArchived || p.teamId === undefined) continue;
+                let roster = rosterByTeamId.get(p.teamId);
+                if (!roster) {
+                    roster = [];
+                    rosterByTeamId.set(p.teamId, roster);
+                }
+                roster.push(p);
+            }
+
+            return rawTeams.map(team => ({
+                ...team,
+                roster: rosterByTeamId.get(team.id!) || []
+            }));
         } catch (err) {
             console.error("Error cargando equipos:", err);
             return [];

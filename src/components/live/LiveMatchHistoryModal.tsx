@@ -40,19 +40,37 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
 
   // 1. Obtenemos datos combinados
   const historyData = useLiveQuery(async () => {
-    const [scores, fouls, players, teams, matchData] = await Promise.all([
+    const matchData = await db.matches.get(matchId);
+    if (!matchData) return null;
+
+    const teamIds = [matchData.localTeamId, matchData.visitorTeamId].filter((id): id is number => typeof id === 'number');
+
+    const [scores, fouls, matchPlayers, matchTeams] = await Promise.all([
       db.scores.where({ matchId }).toArray(),
       db.fouls.where({ matchId }).toArray(),
-      db.players.toArray(),
-      db.teams.toArray(),
-      db.matches.get(matchId)
+      db.players.where('teamId').anyOf(teamIds).toArray(),
+      db.teams.where('id').anyOf(teamIds).toArray()
     ]);
 
-    const playerMap = new Map(players.map(p => [p.id!, p]));
-    const teamMap = new Map(teams.map(t => [t.id!, t]));
-    const activePlayersByTeam = new Map<number, typeof players>();
+    const playerMap = new Map(matchPlayers.map(p => [p.id!, p]));
+    const missingPlayerIds = new Set<number>();
+    for (const s of scores) {
+      if (s.playerId && !playerMap.has(s.playerId)) missingPlayerIds.add(s.playerId);
+    }
+    for (const f of fouls) {
+      if (f.playerId && !playerMap.has(f.playerId)) missingPlayerIds.add(f.playerId);
+    }
+    if (missingPlayerIds.size > 0) {
+      const extraPlayers = await db.players.where('id').anyOf(Array.from(missingPlayerIds)).toArray();
+      for (const ep of extraPlayers) {
+        if (ep.id) playerMap.set(ep.id, ep);
+      }
+    }
 
-    for (const p of players) {
+    const teamMap = new Map(matchTeams.map(t => [t.id!, t]));
+    const activePlayersByTeam = new Map<number, typeof matchPlayers>();
+
+    for (const p of matchPlayers) {
       if (p.isArchived) continue;
       const list = activePlayersByTeam.get(p.teamId) || [];
       list.push(p);

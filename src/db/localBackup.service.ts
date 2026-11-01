@@ -103,7 +103,7 @@ function parseAndValidate(rawJson: string): BackupData {
 
   const teamIds = idsUnique(data.teams, 'teams');
   const playerIds = idsUnique(data.players, 'players');
-  const matchIds = idsUnique(data.matches, 'matches');
+  idsUnique(data.matches, 'matches');
   idsUnique(data.scores, 'scores');
   idsUnique(data.fouls, 'fouls');
   const players = new Map(data.players.map(p => [p.id!, p]));
@@ -167,7 +167,7 @@ function counts(data: BackupData): BackupCounts {
 
 export const LocalBackupService = {
   async exportJson(): Promise<string> {
-    const data = await db.transaction('r', db.teams, db.players, db.matches, db.scores, db.fouls,
+    const data = await db.transaction('r', [db.teams, db.players, db.matches, db.scores, db.fouls],
       async (): Promise<BackupData> => {
         const [teams, players, matches, scores, fouls] = await Promise.all([
           db.teams.toArray(), db.players.toArray(), db.matches.toArray(),
@@ -188,7 +188,7 @@ export const LocalBackupService = {
   async restoreIntoEmpty(rawJson: string): Promise<BackupCounts> {
     // Toda validación potencialmente costosa se hace ANTES de iniciar el bloqueo de escritura.
     const data = parseAndValidate(rawJson);
-    await db.transaction('rw', db.teams, db.players, db.matches, db.scores, db.fouls, async () => {
+    await db.transaction('rw', [db.teams, db.players, db.matches, db.scores, db.fouls], async () => {
       const existing = await Promise.all([
         db.teams.count(), db.players.count(), db.matches.count(),
         db.scores.count(), db.fouls.count()

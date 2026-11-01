@@ -9,6 +9,7 @@ import { startQuickPickupMatch } from '../utils/matchHelpers';
 
 import { ActiveMatchCard } from '../features/match-creations/components/ActiveMatchCard';
 import { HistoryMatchTicket } from '../features/match-creations/components/HistoryMatchTicket';
+import { LocalBackupControls } from '../components/matches/LocalBackupControls';
 
 export function Matches() {
   const navigate = useNavigate();
@@ -81,6 +82,8 @@ export function Matches() {
           </Link>
         </div>
       </header>
+
+      <LocalBackupControls />
 
       {/* --- MODAL DE REPORTE / BOX SCORE --- */}
       {selectedMatchId && (

@@ -24,3 +24,11 @@
 Ejecutar `npm run test`, `npm run build`, `npm run lint`. El CI actualmente ejecuta pruebas y build; ampliar el gate de lint forma parte del cierre de calidad.
 
 Verificar migraciones v2, v6, v7 y v8 hacia v9; que los ID y enlaces sobreviven y que los índices compuestos funcionan. El test `sb14-indexeddb-v9-architecture.test.ts` cubre una base v8, el repositorio y paginación.
+
+## Respaldo y recuperación
+
+- `LocalBackupService.exportJson()` captura las cinco tablas dentro de una única transacción de lectura consistente.
+- `restoreIntoEmpty()` verifica formato, versión de esquema, IDs únicos, equipos, jugadores, partidos y relaciones antes de realizar escrituras; rechaza una base no vacía y no borra registros.
+- Se conservan fechas `Date` y `gameHistory[*].finishedAt`; el restore utiliza una única transacción de escritura para rollback completo ante cualquier fallo.
+- La protección adicional `navigator.storage.persist()` se solicita **solo mediante clic** y puede ser denegada; no reemplaza un respaldo físico.
+- Limitaciones: exportación JSON completa en memoria, sin cifrado, ni reconciliación de respaldos con datos existentes; probar con grandes bases en dispositivos de gama baja.

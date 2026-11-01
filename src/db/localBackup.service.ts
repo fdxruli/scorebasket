@@ -9,7 +9,7 @@ import type { GameResult } from './models/MatchConfig';
 import { validateMatchConfig } from '../config/validations';
 
 export const LOCAL_BACKUP_FORMAT = 'scorebasket-local-backup';
-export const LOCAL_BACKUP_VERSION = 1;
+export const LOCAL_BACKUP_VERSION = 2;
 
 export const MIN_PLAUSIBLE_TIMESTAMP = 946684800000; // 2000-01-01T00:00:00.000Z
 export const MAX_PLAUSIBLE_TIMESTAMP = 4102444800000; // 2100-01-01T00:00:00.000Z
@@ -184,6 +184,69 @@ export async function computeDataChecksum(text: string): Promise<string> {
  */
 export async function computeSha256(text: string): Promise<string> {
   return computeDataChecksum(text);
+}
+
+/**
+ * Serializador canónico determinista compatible con RFC 8785 (JSON Canonicalization Scheme - JCS).
+ * Garantiza que la representación en cadena de cualquier estructura JSON sea unívoca e idéntica,
+ * ordenando recursivamente las claves de los objetos lexicográficamente y preservando
+ * el orden estricto de los arreglos. Omite propiedades undefined, funciones y símbolos.
+ */
+export function canonicalizeJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+
+  if (Array.isArray(value)) {
+    const items = value.map(item => canonicalizeJson(item));
+    return `[${items.join(',')}]`;
+  }
+
+  const obj = value as Record<string, unknown>;
+  const sortedKeys = Object.keys(obj).sort();
+  const entries: string[] = [];
+
+  for (const key of sortedKeys) {
+    const val = obj[key];
+    if (val === undefined || typeof val === 'symbol' || typeof val === 'function') {
+      continue;
+    }
+    entries.push(`${JSON.stringify(key)}:${canonicalizeJson(val)}`);
+  }
+
+  return `{${entries.join(',')}}`;
+}
+
+export interface CanonicalBackupEnvelope {
+  app: string;
+  counts: BackupCounts;
+  data: BackupData;
+  exportedAt: string;
+  format: string;
+  sourceSchemaVersion: number;
+  version: number;
+}
+
+export function computeCanonicalEnvelopeString(payload: CanonicalBackupEnvelope): string {
+  return canonicalizeJson({
+    app: payload.app,
+    counts: payload.counts,
+    data: payload.data,
+    exportedAt: payload.exportedAt,
+    format: payload.format,
+    sourceSchemaVersion: payload.sourceSchemaVersion,
+    version: payload.version
+  });
+}
+
+export async function computeEnvelopeChecksum(payload: CanonicalBackupEnvelope): Promise<string> {
+  const canonicalStr = computeCanonicalEnvelopeString(payload);
+  const rawHash = await computeDataChecksum(canonicalStr);
+  return `sha256:${rawHash}`;
 }
 
 function parseRecord(value: unknown, fieldName: string): Record<string, unknown> {
@@ -436,12 +499,20 @@ export function validateAndNormalizeBackup(
 
     // 2. Estado de reloj según el estado deportivo del partido:
     if (match.status === 'finished') {
+      // Inmutabilidad estricta: nunca pausar ni alterar un partido finalizado.
       match.timerLastStart = undefined;
-      match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
+      if (typeof match.timerSecondsRemaining === 'number' && Number.isFinite(match.timerSecondsRemaining)) {
+        match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining));
+      } else {
+        match.timerSecondsRemaining = 0;
+      }
+      match.timerRecoveryState = 'normal';
+      match.timerRecoveryReason = undefined;
     } else {
       // Partido activo ('playing', 'paused', 'created')
       if (timerLastStart !== undefined) {
         // Estaba corriendo: pausar preventivamente al tiempo exacto del respaldo
+        match.status = 'paused';
         match.timerLastStart = undefined;
         match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
         match.timerRecoveryState = 'recovery_required';
@@ -745,21 +816,33 @@ export const LocalBackupService = {
     );
 
     const counts = countRecords(data);
-    const serializedData = JSON.stringify(data);
-    const rawHash = await computeDataChecksum(serializedData);
-    const checksum = `sha256:${rawHash}`;
+    const exportedAt = new Date().toISOString();
+    const sourceSchemaVersion = db.verno;
+
+    // Construcción y sellado criptográfico del sobre canónico completo (R2.1)
+    const canonicalPayload: CanonicalBackupEnvelope = {
+      app: 'ScoreBasket',
+      counts,
+      data,
+      exportedAt,
+      format: LOCAL_BACKUP_FORMAT,
+      sourceSchemaVersion,
+      version: LOCAL_BACKUP_VERSION
+    };
+
+    const checksum = await computeEnvelopeChecksum(canonicalPayload);
 
     const envelope: BackupEnvelope = {
       format: LOCAL_BACKUP_FORMAT,
       version: LOCAL_BACKUP_VERSION,
       app: 'ScoreBasket',
-      sourceSchemaVersion: db.verno,
-      exportedAt: new Date().toISOString(),
+      sourceSchemaVersion,
+      exportedAt,
       metadata: {
         counts,
         checksum,
         checksumAlgorithm: 'SHA-256',
-        generatedBy: 'ScoreBasket LocalBackupService v1'
+        generatedBy: 'ScoreBasket LocalBackupService v2'
       },
       data
     };
@@ -888,6 +971,42 @@ export const LocalBackupService = {
       );
     }
 
+    // Validación obligatoria de versión del formato y prevención de degradación (R2.1)
+    if (root.version !== LOCAL_BACKUP_VERSION) {
+      if (root.version === 1) {
+        throw new BackupValidationError(
+          'Versión de formato de respaldo obsoleta (versión 1). Por política estricta de seguridad e integridad criptográfica del sobre, ScoreBasket requiere versión 2.'
+        );
+      }
+      throw new BackupValidationError(
+        `Versión de formato de respaldo no soportada: ${String(root.version)}. Se esperaba versión ${LOCAL_BACKUP_VERSION}.`
+      );
+    }
+
+    if (root.format !== LOCAL_BACKUP_FORMAT) {
+      throw new BackupValidationError(
+        `Formato de respaldo no reconocido: "${String(root.format)}". Se esperaba "${LOCAL_BACKUP_FORMAT}".`
+      );
+    }
+
+    if (root.app !== 'ScoreBasket') {
+      throw new BackupValidationError(
+        `Aplicación no compatible: "${String(root.app)}". Se esperaba "ScoreBasket".`
+      );
+    }
+
+    if (
+      typeof root.sourceSchemaVersion !== 'number' ||
+      !Number.isInteger(root.sourceSchemaVersion) ||
+      root.sourceSchemaVersion < 1
+    ) {
+      throw new BackupValidationError(
+        `Versión de esquema origen inválida: "${String(root.sourceSchemaVersion)}".`
+      );
+    }
+
+    parseValidDate(root.exportedAt, 'archivo.exportedAt', true);
+
     // Validación de coherencia del manifiesto (R2-05)
     if (!meta.counts || typeof meta.counts !== 'object' || Array.isArray(meta.counts)) {
       throw new BackupValidationError(
@@ -909,14 +1028,23 @@ export const LocalBackupService = {
       }
     }
 
-    // Verificación criptográfica SHA-256 sobre el cuerpo de datos serializado
+    // Verificación criptográfica SHA-256 del sobre canónico completo (R2.1)
     const expectedHash = meta.checksum.slice('sha256:'.length).toLowerCase();
-    const serializedPayload = JSON.stringify(root.data);
-    const computedHash = (await computeDataChecksum(serializedPayload)).toLowerCase();
+    const canonicalPayload: CanonicalBackupEnvelope = {
+      app: String(root.app),
+      counts: meta.counts as BackupCounts,
+      data: root.data as BackupData,
+      exportedAt: String(root.exportedAt),
+      format: String(root.format),
+      sourceSchemaVersion: Number(root.sourceSchemaVersion),
+      version: Number(root.version)
+    };
+    const canonicalStr = computeCanonicalEnvelopeString(canonicalPayload);
+    const computedHash = (await computeDataChecksum(canonicalStr)).toLowerCase();
 
     if (computedHash !== expectedHash) {
       throw new BackupValidationError(
-        'La suma de verificación SHA-256 no coincide con los datos del respaldo. El archivo está corrupto, truncado o fue alterado externamente.'
+        'La suma de verificación SHA-256 no coincide con el contenido y metadatos del sobre de respaldo. El archivo está corrupto, truncado o fue alterado externamente.'
       );
     }
 

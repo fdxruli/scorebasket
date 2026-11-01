@@ -3,7 +3,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { db } from '../db/db';
 import { LocalBackupControls } from '../components/matches/LocalBackupControls';
-import { LocalBackupService, computeDataChecksum } from '../db/localBackup.service';
+import {
+  LocalBackupService,
+  computeEnvelopeChecksum,
+  LOCAL_BACKUP_FORMAT,
+  LOCAL_BACKUP_VERSION,
+  type BackupData
+} from '../db/localBackup.service';
 
 describe('LocalBackupControls UI Component', () => {
   beforeEach(async () => {
@@ -101,17 +107,27 @@ describe('LocalBackupControls UI Component', () => {
       scores: [],
       fouls: []
     };
-    const rawHash = await computeDataChecksum(JSON.stringify(rawData));
+    const counts = { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 };
+    const exportedAt = new Date().toISOString();
+    const checksum = await computeEnvelopeChecksum({
+      app: 'ScoreBasket',
+      counts,
+      data: rawData as unknown as BackupData,
+      exportedAt,
+      format: LOCAL_BACKUP_FORMAT,
+      sourceSchemaVersion: 8,
+      version: LOCAL_BACKUP_VERSION
+    });
     const mockBackup = {
-      format: 'scorebasket-local-backup',
-      version: 1,
+      format: LOCAL_BACKUP_FORMAT,
+      version: LOCAL_BACKUP_VERSION,
       app: 'ScoreBasket',
       sourceSchemaVersion: 8,
-      exportedAt: new Date().toISOString(),
+      exportedAt,
       metadata: {
-        counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
+        counts,
         checksumAlgorithm: 'SHA-256',
-        checksum: `sha256:${rawHash}`,
+        checksum,
         generatedBy: 'ScoreBasket Test'
       },
       data: rawData

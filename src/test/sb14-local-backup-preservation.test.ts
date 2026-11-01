@@ -10,6 +10,8 @@ import {
   LOCAL_BACKUP_VERSION,
   computePureSha256,
   computeDataChecksum,
+  computeEnvelopeChecksum,
+  type CanonicalBackupEnvelope,
   type BackupEnvelope,
   type BackupData,
   type BackupMetadata,
@@ -21,7 +23,7 @@ import type { Match, Team, Player, Score, Foul } from '../db/models';
 
 /**
  * Función auxiliar para generar respaldos de prueba íntegros y válidos,
- * calculando automáticamente los conteos del manifiesto y la suma SHA-256.
+ * calculando automáticamente los conteos del manifiesto y la suma SHA-256 canónica del sobre completo.
  */
 async function buildTestBackup(
   data: Partial<BackupData>,
@@ -44,19 +46,34 @@ async function buildTestBackup(
     fouls: fullData.fouls.length
   };
 
-  const serialized = JSON.stringify(fullData);
-  const rawHash = await computeDataChecksum(serialized);
+  const format = (rootOverrides?.format as string) ?? LOCAL_BACKUP_FORMAT;
+  const version = (rootOverrides?.version as number) ?? LOCAL_BACKUP_VERSION;
+  const app = (rootOverrides?.app as string) ?? 'ScoreBasket';
+  const sourceSchemaVersion = (rootOverrides?.sourceSchemaVersion as number) ?? 8;
+  const exportedAt = (rootOverrides?.exportedAt as string) ?? new Date().toISOString();
+
+  const canonicalPayload: CanonicalBackupEnvelope = {
+    app,
+    counts: metaOverrides?.counts ?? counts,
+    data: fullData,
+    exportedAt,
+    format,
+    sourceSchemaVersion,
+    version
+  };
+
+  const defaultChecksum = await computeEnvelopeChecksum(canonicalPayload);
 
   const envelope = {
-    format: LOCAL_BACKUP_FORMAT,
-    version: LOCAL_BACKUP_VERSION,
-    app: 'ScoreBasket',
-    sourceSchemaVersion: 8,
-    exportedAt: new Date().toISOString(),
+    format,
+    version,
+    app,
+    sourceSchemaVersion,
+    exportedAt,
     metadata: {
       counts,
       checksumAlgorithm: 'SHA-256',
-      checksum: `sha256:${rawHash}`,
+      checksum: defaultChecksum,
       generatedBy: 'ScoreBasket Test Helper',
       ...metaOverrides
     },
@@ -1161,33 +1178,14 @@ describe('DB-F1: Conservación, Respaldo y Recuperación Local (QA-01 a QA-38)',
   // QA-27: Adversarial - Continuidad del Generador de Claves Auto-incrementales tras Restaurar
   it('QA-27: Continuidad de claves: tras restaurar registros con IDs explícitos, db.table.add() genera el siguiente ID sin colisión', async () => {
     // Respaldo con equipos en IDs no contiguos: 10 y 5000
-    const rawBackup = {
-      format: LOCAL_BACKUP_FORMAT,
-      version: LOCAL_BACKUP_VERSION,
-      app: 'ScoreBasket',
-      sourceSchemaVersion: 8,
-      exportedAt: new Date().toISOString(),
-      metadata: {
-        counts: { teams: 2, players: 0, matches: 0, scores: 0, fouls: 0 },
-        checksumAlgorithm: 'SHA-256',
-        generatedBy: 'ScoreBasket Test'
-      },
-      data: {
-        teams: [
-          { id: 10, name: 'Team Diez', createdAt: '2026-01-01T00:00:00Z', isArchived: false },
-          { id: 5000, name: 'Team Cinco Mil', createdAt: '2026-01-01T00:00:00Z', isArchived: false }
-        ],
-        players: [],
-        matches: [],
-        scores: [],
-        fouls: []
-      }
-    };
+    const rawBackup = await buildTestBackup({
+      teams: [
+        { id: 10, name: 'Team Diez', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
+        { id: 5000, name: 'Team Cinco Mil', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
+      ]
+    });
 
-    const checksum = `sha256:${await computeDataChecksum(JSON.stringify(rawBackup.data))}`;
-    (rawBackup.metadata as { checksum?: string }).checksum = checksum;
-
-    await LocalBackupService.restoreIntoEmpty(JSON.stringify(rawBackup));
+    await LocalBackupService.restoreIntoEmpty(rawBackup);
 
     // Verificar que los equipos 10 y 5000 existen intactos
     expect(await db.teams.get(10)).toBeDefined();
@@ -1330,11 +1328,8 @@ describe('DB-F1: Conservación, Respaldo y Recuperación Local (QA-01 a QA-38)',
     });
     const parsed = JSON.parse(validJson) as BackupEnvelope;
 
-    // Conteo declarado falsificado
-    parsed.metadata.counts.teams = 99; // Real es 1
-    // Re-firmamos el checksum sobre data para verificar que la falla es específicamente de manifiesto
-    const rawHash = await computeDataChecksum(JSON.stringify(parsed.data));
-    parsed.metadata.checksum = `sha256:${rawHash}`;
+    // Conteo declarado falsificado (Real es 1, declaramos 99)
+    parsed.metadata.counts.teams = 99;
 
     await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
       .rejects.toThrow(/Manifiesto inconsistente en la tabla "teams"/i);
@@ -1715,5 +1710,158 @@ describe('DB-F1: Conservación, Respaldo y Recuperación Local (QA-01 a QA-38)',
     expect(result.filename).toBe('test-export-r2.json');
     expect(result.counts.teams).toBe(1);
     expect(typeof result.downloadInitiated).toBe('boolean');
+  });
+
+  // QA-39: R2.1 - Integridad del envelope: alteración de sourceSchemaVersion
+  it('QA-39: R2.1 - Rechaza respaldos donde sourceSchemaVersion haya sido alterado respecto a la firma original', async () => {
+    const validJson = await buildTestBackup({
+      teams: [{ id: 1, name: 'Team Schema Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
+    });
+    const parsed = JSON.parse(validJson);
+
+    // Alterar sourceSchemaVersion (ej. de 8 a 2 para intentar forzar reglas de migración obsoletas)
+    parsed.sourceSchemaVersion = 2;
+
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
+      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
+  });
+
+  // QA-40: R2.1 - Integridad del envelope: alteración de version y política anti-downgrade
+  it('QA-40: R2.1 - Rechaza alteración de version del sobre y bloquea intentos de degradación a versión 1', async () => {
+    const validJson = await buildTestBackup({
+      teams: [{ id: 1, name: 'Team Version Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
+    });
+    const parsed = JSON.parse(validJson);
+
+    // 1. Intento de degradación a versión 1
+    parsed.version = 1;
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
+      .rejects.toThrow(/Versión de formato de respaldo obsoleta \(versión 1\)/i);
+
+    // 2. Versión desconocida / futura
+    parsed.version = 99;
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
+      .rejects.toThrow(/Versión de formato de respaldo no soportada: 99/i);
+  });
+
+  // QA-41: R2.1 - Integridad del envelope: alteración de format o app
+  it('QA-41: R2.1 - Rechaza respaldos con alteración en format o app', async () => {
+    const validJson = await buildTestBackup({
+      teams: [{ id: 1, name: 'Team Format Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
+    });
+
+    const parsedFormat = JSON.parse(validJson);
+    parsedFormat.format = 'compromised-format';
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsedFormat)))
+      .rejects.toThrow(/Formato de respaldo no reconocido/i);
+
+    const parsedApp = JSON.parse(validJson);
+    parsedApp.app = 'OtherApp';
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsedApp)))
+      .rejects.toThrow(/Aplicación no compatible/i);
+  });
+
+  // QA-42: R2.1 - Integridad del envelope: alteración de exportedAt
+  it('QA-42: R2.1 - Detecta y rechaza la alteración de la marca temporal exportedAt', async () => {
+    const validJson = await buildTestBackup({
+      teams: [{ id: 1, name: 'Team Date Test', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
+    });
+    const parsed = JSON.parse(validJson);
+
+    // Modificar la fecha de exportación
+    parsed.exportedAt = '2026-12-31T23:59:59.000Z';
+
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
+      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
+  });
+
+  // QA-43: R2.1 - Integridad del envelope: alteración de registros en data
+  it('QA-43: R2.1 - Detecta y rechaza cualquier modificación interna de los registros en data', async () => {
+    const validJson = await buildTestBackup({
+      teams: [{ id: 1, name: 'Team Original', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }]
+    });
+    const parsed = JSON.parse(validJson);
+
+    // Modificar el nombre del equipo en data
+    parsed.data.teams[0].name = 'Team Tampered';
+
+    await expect(LocalBackupService.restoreIntoEmpty(JSON.stringify(parsed)))
+      .rejects.toThrow(/suma de verificación SHA-256 no coincide con el contenido y metadatos/i);
+  });
+
+  // QA-44: R2.1 - Inmutabilidad estricta y preservación temporal de partidos finalizados
+  it('QA-44: R2.1 - La restauración preserva estrictamente el estado finished y el tiempo restante de partidos terminados', async () => {
+    const finishedMatchBackup = await buildTestBackup({
+      teams: [
+        { id: 1, name: 'Team Final A', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false },
+        { id: 2, name: 'Team Final B', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false }
+      ],
+      matches: [
+        {
+          id: 50,
+          localTeamId: 1,
+          visitorTeamId: 2,
+          status: 'finished',
+          createdAt: new Date('2026-01-01T10:00:00Z'),
+          finishedAt: new Date('2026-01-01T11:45:00Z'),
+          config: { mode: 'traditional', traditional: { totalQuarters: 4, minutesPerQuarter: 10 } },
+          currentQuarter: 4,
+          timerSecondsRemaining: 0,
+          timerLastStart: undefined,
+          timerOwnerTabId: 'old-tab-finished',
+          timerLeaseExpiresAt: Date.now() + 10000,
+          timerLockMode: 'web_locks',
+          timerRecoveryState: 'normal',
+          localScore: 88,
+          visitorScore: 82,
+          localFouls: 4,
+          visitorFouls: 3
+        }
+      ]
+    });
+
+    await LocalBackupService.restoreIntoEmpty(finishedMatchBackup);
+
+    const restored = (await db.matches.get(50))!;
+    expect(restored).toBeDefined();
+
+    // 1. El estado finished es ESTRICTAMENTE inmutable (nunca pasa a paused)
+    expect(restored.status).toBe('finished');
+
+    // 2. Limpieza de autoridades efímeras de la sesión previa
+    expect(restored.timerOwnerTabId).toBeUndefined();
+    expect(restored.timerLeaseExpiresAt).toBe(0);
+    expect(restored.timerLockMode).toBeUndefined();
+
+    // 3. Reloj inerte y sin necesidad de recuperación
+    expect(restored.timerLastStart).toBeUndefined();
+    expect(restored.timerSecondsRemaining).toBe(0);
+    expect(restored.timerRecoveryState).toBe('normal');
+
+    // 4. Marcadores deportivos íntegros
+    expect(restored.localScore).toBe(88);
+    expect(restored.visitorScore).toBe(82);
+  });
+
+  // QA-45: R2.1 - Exportación y restauración canónica determinista
+  it('QA-45: R2.1 - Exporta y restaura bajo la especificación canónica JCS v2 con total coherencia', async () => {
+    await db.teams.add({ name: 'Canonical Team', createdAt: new Date('2026-01-01T00:00:00Z'), isArchived: false });
+
+    const exportedJson = await LocalBackupService.exportJson();
+    const parsed = JSON.parse(exportedJson);
+
+    expect(parsed.format).toBe('scorebasket-local-backup');
+    expect(parsed.version).toBe(2);
+    expect(parsed.metadata.checksumAlgorithm).toBe('SHA-256');
+    expect(parsed.metadata.checksum).toMatch(/^sha256:[a-f0-9]{64}$/i);
+
+    // Vaciar y restaurar
+    await db.teams.clear();
+    const counts = await LocalBackupService.restoreIntoEmpty(exportedJson);
+    expect(counts.teams).toBe(1);
+
+    const reExportedJson = await LocalBackupService.exportJson();
+    const reParsed = JSON.parse(reExportedJson);
+    expect(reParsed.data.teams[0].name).toBe('Canonical Team');
   });
 });

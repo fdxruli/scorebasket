@@ -37,7 +37,9 @@ export type BackupCounts = Record<keyof BackupData, number>;
 
 export interface BackupMetadata {
   counts: BackupCounts;
-  checksum?: string;
+  checksum: string;
+  checksumAlgorithm: 'SHA-256';
+  generatedBy: string;
 }
 
 export interface BackupEnvelope {
@@ -69,30 +71,109 @@ const REQUIRED_TABLE_KEYS: readonly (keyof BackupData)[] = [
 ] as const;
 
 /**
- * Calcula un checksum SHA-256 criptográfico para el contenido serializado.
- * Utiliza crypto.subtle cuando está disponible; en caso contrario, provee
- * un fallback determinista para entornos restringidos.
+ * Constantes K de la especificación FIPS 180-4 (SHA-256).
  */
-export async function computeSha256(text: string): Promise<string> {
-  if (typeof crypto !== 'undefined' && crypto?.subtle) {
+const SHA256_K = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+];
+
+/**
+ * Implementación determinista pura de SHA-256 (FIPS 180-4) en TypeScript.
+ * Garantiza que el cálculo del checksum produzca exactamente los mismos
+ * 256 bits (64 caracteres hexadecimales) en cualquier navegador, entorno
+ * sin `crypto.subtle`, Web Worker o runtime de pruebas.
+ */
+export function computePureSha256(bytes: Uint8Array): string {
+  let H0 = 0x6a09e667, H1 = 0xbb67ae85, H2 = 0x3c6ef372, H3 = 0xa54ff53a;
+  let H4 = 0x510e527f, H5 = 0x9b05688c, H6 = 0x1f83d9ab, H7 = 0x5be0cd19;
+
+  const l = bytes.length;
+  const bitLen = l * 8;
+  const padLen = (l % 64 < 56) ? (56 - (l % 64)) : (120 - (l % 64));
+  const totalLen = l + padLen + 8;
+  const padded = new Uint8Array(totalLen);
+  padded.set(bytes);
+  padded[l] = 0x80;
+
+  const view = new DataView(padded.buffer);
+  view.setUint32(totalLen - 4, bitLen >>> 0);
+  view.setUint32(totalLen - 8, Math.floor(bitLen / 0x100000000));
+
+  const W = new Uint32Array(64);
+  const rotr = (n: number, b: number) => (n >>> b) | (n << (32 - b));
+
+  for (let i = 0; i < totalLen; i += 64) {
+    for (let t = 0; t < 16; t++) {
+      W[t] = view.getUint32(i + t * 4);
+    }
+    for (let t = 16; t < 64; t++) {
+      const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
+      const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
+      W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
+    }
+
+    let a = H0, b = H1, c = H2, d = H3, e = H4, f = H5, g = H6, h = H7;
+
+    for (let t = 0; t < 64; t++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ ((~e) & g);
+      const temp1 = (h + S1 + ch + SHA256_K[t] + W[t]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    H0 = (H0 + a) >>> 0;
+    H1 = (H1 + b) >>> 0;
+    H2 = (H2 + c) >>> 0;
+    H3 = (H3 + d) >>> 0;
+    H4 = (H4 + e) >>> 0;
+    H5 = (H5 + f) >>> 0;
+    H6 = (H6 + g) >>> 0;
+    H7 = (H7 + h) >>> 0;
+  }
+
+  const out = [H0, H1, H2, H3, H4, H5, H6, H7];
+  return out.map(n => n.toString(16).padStart(8, '0')).join('');
+}
+
+/**
+ * Calcula un checksum SHA-256 determinista para el contenido serializado.
+ * Utiliza Web Crypto cuando está disponible por aceleración por hardware;
+ * si no existe o falla, recurre a `computePureSha256`, garantizando
+ * EXACTAMENTE el mismo valor hexadecimal en cualquier entorno.
+ */
+export async function computeDataChecksum(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+
+  if (typeof crypto !== 'undefined' && crypto?.subtle?.digest) {
     try {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(text);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     } catch {
-      // Fallback
+      // Si crypto.subtle lanza error imprevisto, se ejecuta el cálculo puro FIPS
     }
   }
 
-  // Fallback FNV-1a 32-bit determinista
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+  return computePureSha256(data);
 }
 
 function parseRecord(value: unknown, fieldName: string): Record<string, unknown> {
@@ -160,7 +241,8 @@ function assertUniqueIds(rows: { id?: number }[], tableLabel: string): Set<numbe
 
 /**
  * Valida la estructura, tipos, relaciones, fechas y reglas de negocio del respaldo.
- * Aplica compatibilidad histórica no destructiva para migraciones anteriores (v2 - v7).
+ * Aplica compatibilidad histórica no destructiva para esquemas v2 - v7 y
+ * resuelve la seguridad temporal ante la restauración de partidos con cronómetro en marcha.
  */
 export function validateAndNormalizeBackup(
   envelope: unknown,
@@ -214,6 +296,9 @@ export function validateAndNormalizeBackup(
     };
   });
 
+  const rawScores = rawData.scores as Score[];
+  const rawFouls = rawData.fouls as Foul[];
+
   const matches: Match[] = (rawData.matches as Match[]).map((row, idx) => {
     const recovered = recoverDateFields(
       row,
@@ -244,24 +329,69 @@ export function validateAndNormalizeBackup(
       };
     }
 
+    // Compatibilidad histórica para marcadores desnormalizados anteriores a v6:
+    // Si el registro legacy no contenía localScore/visitorScore, agregamos desde scores y fouls del respaldo
+    let localScore = recovered.localScore;
+    let visitorScore = recovered.visitorScore;
+    let localFouls = recovered.localFouls;
+    let visitorFouls = recovered.visitorFouls;
+
+    if (localScore === undefined && recovered.id !== undefined) {
+      localScore = rawScores
+        .filter(s => s.matchId === recovered.id && s.teamId === recovered.localTeamId)
+        .reduce((acc, curr) => acc + (curr.points || 0), 0);
+    }
+    if (visitorScore === undefined && recovered.id !== undefined) {
+      visitorScore = rawScores
+        .filter(s => s.matchId === recovered.id && s.teamId === recovered.visitorTeamId)
+        .reduce((acc, curr) => acc + (curr.points || 0), 0);
+    }
+    if (localFouls === undefined && recovered.id !== undefined) {
+      localFouls = rawFouls
+        .filter(f => f.matchId === recovered.id && f.teamId === recovered.localTeamId).length;
+    }
+    if (visitorFouls === undefined && recovered.id !== undefined) {
+      visitorFouls = rawFouls
+        .filter(f => f.matchId === recovered.id && f.teamId === recovered.visitorTeamId).length;
+    }
+
     const match: Match = {
       ...recovered,
       config,
       ...(gameHistory !== undefined ? { gameHistory } : {}),
-      localScore: recovered.localScore ?? 0,
-      visitorScore: recovered.visitorScore ?? 0,
-      localFouls: recovered.localFouls ?? 0,
-      visitorFouls: recovered.visitorFouls ?? 0
+      localScore: localScore ?? 0,
+      visitorScore: visitorScore ?? 0,
+      localFouls: localFouls ?? 0,
+      visitorFouls: visitorFouls ?? 0
     };
+
+    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS ACTIVOS:
+    // Si el partido fue respaldado mientras el cronómetro estaba corriendo (timerLastStart definido),
+    // la referencia física de reloj de la sesión anterior no existe en la máquina o pestaña destino.
+    // Para evitar que la proyección temporal descuente horas/días acumulados y vacíe el cuarto a 00:00:
+    // 1. Se detiene el cronómetro preventivamente (timerLastStart = undefined).
+    // 2. Se preservan intactos los segundos restantes exactos (timerSecondsRemaining).
+    // 3. Se limpian los identificadores de pestaña y contratos de lease obsoletos.
+    // 4. Se establece `timerRecoveryState: 'recovery_required'` para que TraditionalEngine
+    //    despliegue el panel de confirmación y ajuste manual del árbitro (Fase 2C C-29 / C-31).
+    if (recovered.timerLastStart !== undefined && match.status !== 'finished') {
+      match.timerLastStart = undefined;
+      match.timerOwnerTabId = undefined;
+      match.timerLeaseExpiresAt = 0;
+      match.timerLockMode = undefined;
+      match.timerRecoveryState = 'recovery_required';
+      match.timerRecoveryReason =
+        'Partido restaurado desde respaldo con cronómetro en marcha. Tiempo detenido preventivamente para evitar salto anómalo.';
+    }
 
     return match;
   });
 
-  const scores: Score[] = (rawData.scores as Score[]).map((row, idx) => {
+  const scores: Score[] = rawScores.map((row, idx) => {
     return recoverDateFields(row, ['createdAt'], `scores[${idx}]`);
   });
 
-  const fouls: Foul[] = (rawData.fouls as Foul[]).map((row, idx) => {
+  const fouls: Foul[] = rawFouls.map((row, idx) => {
     return recoverDateFields(row, ['createdAt'], `fouls[${idx}]`);
   });
 
@@ -496,7 +626,7 @@ export const StoragePersistenceService = {
 export const LocalBackupService = {
   /**
    * Exporta todos los registros de los 5 almacenes locales en una única
-   * transacción de lectura consistente, calculando un checksum SHA-256.
+   * transacción de lectura consistente, calculando un checksum SHA-256 estándar.
    */
   async exportJson(): Promise<string> {
     const data = await db.transaction(
@@ -516,7 +646,8 @@ export const LocalBackupService = {
 
     const counts = countRecords(data);
     const serializedData = JSON.stringify(data);
-    const checksum = await computeSha256(serializedData);
+    const rawHash = await computeDataChecksum(serializedData);
+    const checksum = `sha256:${rawHash}`;
 
     const envelope: BackupEnvelope = {
       format: LOCAL_BACKUP_FORMAT,
@@ -526,7 +657,9 @@ export const LocalBackupService = {
       exportedAt: new Date().toISOString(),
       metadata: {
         counts,
-        checksum
+        checksum,
+        checksumAlgorithm: 'SHA-256',
+        generatedBy: 'ScoreBasket LocalBackupService v1'
       },
       data
     };
@@ -590,8 +723,8 @@ export const LocalBackupService = {
 
   /**
    * Restaura un respaldo JSON estrictamente sobre una base de datos vacía.
-   * Valida envelope, formato, checksum, relaciones, fechas y modalidades ANTES
-   * de escribir. La escritura es 100% transaccional y atómica; cualquier falla
+   * Valida envelope, formato, checksum SHA-256, relaciones, fechas y modalidades
+   * ANTES de escribir. La escritura es 100% transaccional y atómica; cualquier falla
    * provoca rollback total automático en IndexedDB.
    */
   async restoreIntoEmpty(
@@ -611,11 +744,38 @@ export const LocalBackupService = {
     if (root.metadata && typeof root.metadata === 'object' && !Array.isArray(root.metadata)) {
       const meta = root.metadata as Record<string, unknown>;
       if (typeof meta.checksum === 'string' && root.data) {
-        const computedChecksum = await computeSha256(JSON.stringify(root.data));
-        if (computedChecksum !== meta.checksum) {
-          throw new BackupValidationError(
-            'La suma de verificación (checksum) del archivo no coincide con los datos. El archivo está incompleto o fue modificado externamente.'
-          );
+        const serializedPayload = JSON.stringify(root.data);
+        const actualChecksum = meta.checksum;
+
+        if (actualChecksum.startsWith('sha256:')) {
+          const rawHash = actualChecksum.slice('sha256:'.length);
+          const computed = await computeDataChecksum(serializedPayload);
+          if (computed !== rawHash) {
+            throw new BackupValidationError(
+              'La suma de verificación SHA-256 no coincide con los datos del respaldo. El archivo está incompleto o fue alterado.'
+            );
+          }
+        } else if (actualChecksum.startsWith('fnv1a:')) {
+          // Compatibilidad con respaldos emitidos en versiones de desarrollo tempranas
+          let hash = 0x811c9dc5;
+          for (let i = 0; i < serializedPayload.length; i++) {
+            hash ^= serializedPayload.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193);
+          }
+          const computedFnv = `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+          if (computedFnv !== actualChecksum) {
+            throw new BackupValidationError(
+              'La suma de verificación FNV-1a no coincide con los datos del respaldo.'
+            );
+          }
+        } else {
+          // Si el hash no tiene prefijo, se evalúa contra SHA-256 directo
+          const computed = await computeDataChecksum(serializedPayload);
+          if (computed !== actualChecksum) {
+            throw new BackupValidationError(
+              'La suma de verificación del archivo no coincide con los datos. El archivo está corrupto o fue modificado externamente.'
+            );
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ import {
   startTraditionalOvertime,
 } from '../features/match-creations/hooks/useTraditionalLogic';
 import { pauseMatchTimerIdempotent } from '../hooks/useMatchTimer';
+import { timerAuthorityCoordinator } from '../services/timerAuthority.coordinator';
 
 describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter Transitions, Overtime, and Persistence', () => {
   let localTeamId: number;
@@ -256,6 +257,8 @@ describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter
         visitorTimeouts: 0,
       })) as number;
 
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
+
       // Consume 2 local timeouts and 1 visitor timeout during Q1
       await TimeoutService.requestTimeout(matchId, 'local');
       await TimeoutService.requestTimeout(matchId, 'local');
@@ -301,6 +304,8 @@ describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter
         visitorTimeouts: 2,
       })) as number;
 
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
+
       // Confirm local is exhausted at end of Q2
       const rejectedInQ2 = await TimeoutService.requestTimeout(matchId, 'local');
       expect(rejectedInQ2.success).toBe(false);
@@ -345,6 +350,8 @@ describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter
         visitorTimeouts: 2,
       })) as number;
 
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
+
       // Real transition Q3 -> Q4
       const advancedToQ4 = await advanceTraditionalQuarter(matchId);
       expect(advancedToQ4).toBe(true);
@@ -387,6 +394,8 @@ describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter
         localTimeouts: 2, // Exhausted in Q4
         visitorTimeouts: 2, // Exhausted in Q4
       })) as number;
+
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
 
       // Start OT1 (5 minutes) via real production function
       const startedOT1 = await startTraditionalOvertime(matchId, 5);
@@ -434,6 +443,8 @@ describe('SB-03, C-04 & R1.2-B: Timeouts Limits, Idempotent Clock Pause, Quarter
         localTimeouts: 0,
         visitorTimeouts: 0,
       })) as number;
+
+      await timerAuthorityCoordinator.acquireAuthority(matchId);
 
       // Consume 2 local timeouts in Q1 and advance to Q2
       await TimeoutService.requestTimeout(matchId, 'local');

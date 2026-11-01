@@ -55,7 +55,14 @@ export const RaceLiveCard = ({ match, localName, visitorName }: Props) => {
   );
 };
 
-const TeamRow = ({ name, score, target, isWinning }: any) => (
+interface TeamRowProps {
+  name: string;
+  score: number;
+  target: number;
+  isWinning: boolean;
+}
+
+const TeamRow = ({ name, score, target, isWinning }: TeamRowProps) => (
   <div className={`live-team-row ${isWinning ? 'winning' : ''}`}>
     <div className="team-info-group">
       <div className="team-avatar-placeholder">{name.substring(0, 1)}</div>

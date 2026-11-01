@@ -26,77 +26,119 @@ export const VALIDATION_RULES = {
 } as const;
 
 /**
- * Valida una configuración de partido
+ * Valida una configuración de partido.
+ * Inspecciona rigurosamente tipos, límites numéricos enteros, ausencia de NaN/Infinity,
+ * presencia de subconfiguraciones requeridas y coherencia deportiva.
  */
-export function validateMatchConfig(config: MatchConfig): {
+export function validateMatchConfig(config: unknown): {
   isValid: boolean;
   errors: string[];
 } {
   const errors: string[] = [];
-  
-  switch (config.mode) {
+
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return {
+      isValid: false,
+      errors: ['Configuración de partido inválida o ausente (debe ser un objeto)']
+    };
+  }
+
+  const cfg = config as Partial<MatchConfig>;
+
+  if (!cfg.mode || !['traditional', 'race', 'best-of-series'].includes(cfg.mode)) {
+    return {
+      isValid: false,
+      errors: [`Modo de juego inválido o no reconocido: "${String(cfg.mode)}". Los modos válidos son traditional, race y best-of-series.`]
+    };
+  }
+
+  const isStrictInteger = (val: unknown, min: number, max: number): boolean => {
+    return (
+      typeof val === 'number' &&
+      Number.isInteger(val) &&
+      !Number.isNaN(val) &&
+      Number.isFinite(val) &&
+      val >= min &&
+      val <= max
+    );
+  };
+
+  switch (cfg.mode) {
     case 'traditional': {
-      if (!config.traditional) {
-        errors.push('Configuración tradicional requerida');
+      if (!cfg.traditional || typeof cfg.traditional !== 'object' || Array.isArray(cfg.traditional)) {
+        errors.push('Configuración tradicional requerida y debe ser un objeto');
         break;
-      }
-      
-      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = config.traditional;
-      const rules = VALIDATION_RULES.traditional;
-      
-      if (totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
-        errors.push(`Los cuartos deben estar entre ${rules.minQuarters} y ${rules.maxQuarters}`);
-      }
-      
-      if (minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
-        errors.push(`Los minutos deben estar entre ${rules.minMinutes} y ${rules.maxMinutes}`);
       }
 
-      if (timeoutsPerTeam !== undefined && (timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
-        errors.push(`Los tiempos fuera deben estar entre ${rules.minTimeouts} y ${rules.maxTimeouts}`);
+      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = cfg.traditional;
+      const rules = VALIDATION_RULES.traditional;
+
+      if (!isStrictInteger(totalQuarters, rules.minQuarters, rules.maxQuarters)) {
+        errors.push(
+          `Los cuartos deben ser un número entero entre ${rules.minQuarters} y ${rules.maxQuarters}`
+        );
+      }
+
+      if (!isStrictInteger(minutesPerQuarter, rules.minMinutes, rules.maxMinutes)) {
+        errors.push(
+          `Los minutos deben ser un número entero entre ${rules.minMinutes} y ${rules.maxMinutes}`
+        );
+      }
+
+      if (
+        timeoutsPerTeam !== undefined &&
+        !isStrictInteger(timeoutsPerTeam, rules.minTimeouts, rules.maxTimeouts)
+      ) {
+        errors.push(
+          `Los tiempos fuera deben ser un número entero entre ${rules.minTimeouts} y ${rules.maxTimeouts}`
+        );
       }
       break;
     }
-    
+
     case 'race': {
-      if (!config.race) {
-        errors.push('Configuración Race requerida');
+      if (!cfg.race || typeof cfg.race !== 'object' || Array.isArray(cfg.race)) {
+        errors.push('Configuración Race requerida y debe ser un objeto');
         break;
       }
-      
-      const { targetScore } = config.race;
+
+      const { targetScore } = cfg.race;
       const rules = VALIDATION_RULES.race;
-      
-      if (targetScore < rules.minScore || targetScore > rules.maxScore) {
-        errors.push(`El puntaje objetivo debe estar entre ${rules.minScore} y ${rules.maxScore}`);
+
+      if (!isStrictInteger(targetScore, rules.minScore, rules.maxScore)) {
+        errors.push(
+          `El puntaje objetivo debe ser un número entero entre ${rules.minScore} y ${rules.maxScore}`
+        );
       }
       break;
     }
-    
+
     case 'best-of-series': {
-      if (!config.bestOf) {
-        errors.push('Configuración Best-of requerida');
+      if (!cfg.bestOf || typeof cfg.bestOf !== 'object' || Array.isArray(cfg.bestOf)) {
+        errors.push('Configuración Best-of requerida y debe ser un objeto');
         break;
       }
-      
-      const { totalGames, targetScorePerGame } = config.bestOf;
+
+      const { totalGames, targetScorePerGame } = cfg.bestOf;
       const rules = VALIDATION_RULES.bestOf;
-      
-      if (totalGames < rules.minGames || totalGames > rules.maxGames) {
-        errors.push(`El número de partidos debe estar entre ${rules.minGames} y ${rules.maxGames}`);
-      }
-      
-      if (totalGames % 2 === 0) {
+
+      if (!isStrictInteger(totalGames, rules.minGames, rules.maxGames)) {
+        errors.push(
+          `El número de partidos debe ser un número entero entre ${rules.minGames} y ${rules.maxGames}`
+        );
+      } else if (totalGames % 2 === 0) {
         errors.push('El número de partidos debe ser impar (ej: 3, 5, 7)');
       }
-      
-      if (targetScorePerGame < rules.minScorePerGame || targetScorePerGame > rules.maxScorePerGame) {
-        errors.push(`El puntaje por partido debe estar entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`);
+
+      if (!isStrictInteger(targetScorePerGame, rules.minScorePerGame, rules.maxScorePerGame)) {
+        errors.push(
+          `El puntaje por partido debe ser un número entero entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`
+        );
       }
       break;
     }
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors

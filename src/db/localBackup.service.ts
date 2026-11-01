@@ -11,6 +11,9 @@ import { validateMatchConfig } from '../config/validations';
 export const LOCAL_BACKUP_FORMAT = 'scorebasket-local-backup';
 export const LOCAL_BACKUP_VERSION = 1;
 
+export const MIN_PLAUSIBLE_TIMESTAMP = 946684800000; // 2000-01-01T00:00:00.000Z
+export const MAX_PLAUSIBLE_TIMESTAMP = 4102444800000; // 2100-01-01T00:00:00.000Z
+
 export class BackupValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -176,6 +179,13 @@ export async function computeDataChecksum(text: string): Promise<string> {
   return computePureSha256(data);
 }
 
+/**
+ * Función compatible para cómputo de checksum SHA-256.
+ */
+export async function computeSha256(text: string): Promise<string> {
+  return computeDataChecksum(text);
+}
+
 function parseRecord(value: unknown, fieldName: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new BackupValidationError(`El registro "${fieldName}" debe ser un objeto.`);
@@ -190,41 +200,39 @@ function parseValidId(value: unknown, fieldName: string): number {
   return value;
 }
 
-function parseValidDate(raw: unknown, fieldName: string): Date {
-  if (raw instanceof Date) {
-    if (!Number.isFinite(raw.getTime())) {
-      throw new BackupValidationError(`Fecha inválida en "${fieldName}".`);
+/**
+ * Valida y normaliza un campo de fecha. Distingue entre campos obligatorios y opcionales,
+ * rechazando nulos o ausencias cuando isRequired es verdadero, y validando rango admisible (2000-2100).
+ */
+export function parseValidDate(raw: unknown, fieldName: string, isRequired: boolean): Date | undefined {
+  if (raw === undefined || raw === null || raw === '') {
+    if (isRequired) {
+      throw new BackupValidationError(`El campo de fecha obligatorio "${fieldName}" está ausente o es nulo.`);
     }
-    return raw;
+    return undefined;
   }
 
-  if (typeof raw !== 'string' && typeof raw !== 'number') {
+  let date: Date;
+  if (raw instanceof Date) {
+    date = raw;
+  } else if (typeof raw === 'string' || typeof raw === 'number') {
+    date = new Date(raw);
+  } else {
     throw new BackupValidationError(`Fecha en "${fieldName}" no tiene formato serializable válido.`);
   }
 
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) {
+  const time = date.getTime();
+  if (!Number.isFinite(time)) {
     throw new BackupValidationError(`Fecha inválida en "${fieldName}": ${String(raw)}.`);
   }
-  return date;
-}
 
-function recoverDateFields<T>(
-  row: T,
-  dateFieldNames: readonly string[],
-  recordLabel: string
-): T {
-  const record = parseRecord(row, recordLabel);
-  const result: Record<string, unknown> = { ...record };
-
-  for (const name of dateFieldNames) {
-    const val = result[name];
-    if (val !== undefined && val !== null) {
-      result[name] = parseValidDate(val, `${recordLabel}.${name}`);
-    }
+  if (time < MIN_PLAUSIBLE_TIMESTAMP || time > MAX_PLAUSIBLE_TIMESTAMP) {
+    throw new BackupValidationError(
+      `Fecha fuera del rango histórico admisible (2000-2100) en "${fieldName}": ${date.toISOString()}.`
+    );
   }
 
-  return result as T;
+  return date;
 }
 
 function assertUniqueIds(rows: { id?: number }[], tableLabel: string): Set<number> {
@@ -242,7 +250,7 @@ function assertUniqueIds(rows: { id?: number }[], tableLabel: string): Set<numbe
 /**
  * Valida la estructura, tipos, relaciones, fechas y reglas de negocio del respaldo.
  * Aplica compatibilidad histórica no destructiva para esquemas v2 - v7 y
- * resuelve la seguridad temporal ante la restauración de partidos con cronómetro en marcha.
+ * resuelve la seguridad temporal ante la restauración de partidos.
  */
 export function validateAndNormalizeBackup(
   envelope: unknown,
@@ -262,13 +270,27 @@ export function validateAndNormalizeBackup(
     );
   }
 
-  const sourceSchema = typeof root.sourceSchemaVersion === 'number'
-    ? root.sourceSchemaVersion
-    : currentSchemaVersion;
-
-  if (sourceSchema > currentSchemaVersion) {
+  if (root.app !== 'ScoreBasket') {
     throw new BackupValidationError(
-      `El respaldo proviene de una versión de esquema posterior (${sourceSchema} > ${currentSchemaVersion}). Actualiza ScoreBasket antes de restaurar.`
+      `Aplicación no compatible: "${String(root.app)}". Se esperaba "ScoreBasket".`
+    );
+  }
+
+  parseValidDate(root.exportedAt, 'archivo.exportedAt', true);
+
+  if (
+    typeof root.sourceSchemaVersion !== 'number' ||
+    !Number.isInteger(root.sourceSchemaVersion) ||
+    root.sourceSchemaVersion < 1
+  ) {
+    throw new BackupValidationError(
+      `Versión de esquema origen inválida: "${String(root.sourceSchemaVersion)}".`
+    );
+  }
+
+  if (root.sourceSchemaVersion > currentSchemaVersion) {
+    throw new BackupValidationError(
+      `El respaldo proviene de una versión de esquema posterior (${root.sourceSchemaVersion} > ${currentSchemaVersion}). Actualiza ScoreBasket antes de restaurar.`
     );
   }
 
@@ -280,83 +302,123 @@ export function validateAndNormalizeBackup(
   }
 
   // 1. Deserializar fechas y normalizar modelos sin alterar campos originales
-  const teams: Team[] = (rawData.teams as Team[]).map((row, idx) => {
-    const recovered = recoverDateFields(row, ['createdAt', 'archivedAt'], `teams[${idx}]`);
+  const teams: Team[] = (rawData.teams as unknown[]).map((rawRow, idx) => {
+    const row = parseRecord(rawRow, `teams[${idx}]`);
+    const createdAt = parseValidDate(row.createdAt, `teams[${idx}].createdAt`, true)!;
+    const archivedAt = parseValidDate(row.archivedAt, `teams[${idx}].archivedAt`, false);
+
+    if (typeof row.name !== 'string' || row.name.trim() === '') {
+      throw new BackupValidationError(`Nombre de equipo inválido en teams[${idx}].`);
+    }
+
     return {
-      ...recovered,
-      isArchived: recovered.isArchived ?? false
+      ...(row as unknown as Team),
+      createdAt,
+      ...(archivedAt ? { archivedAt } : {}),
+      isArchived: Boolean(row.isArchived ?? false)
     };
   });
 
-  const players: Player[] = (rawData.players as Player[]).map((row, idx) => {
-    const recovered = recoverDateFields(row, ['createdAt', 'archivedAt'], `players[${idx}]`);
+  const players: Player[] = (rawData.players as unknown[]).map((rawRow, idx) => {
+    const row = parseRecord(rawRow, `players[${idx}]`);
+    const createdAt = parseValidDate(row.createdAt, `players[${idx}].createdAt`, true)!;
+    const archivedAt = parseValidDate(row.archivedAt, `players[${idx}].archivedAt`, false);
+
+    if (typeof row.name !== 'string' || row.name.trim() === '') {
+      throw new BackupValidationError(`Nombre de jugador inválido en players[${idx}].`);
+    }
+
+    if (
+      row.number !== undefined &&
+      row.number !== null &&
+      (typeof row.number !== 'number' || !Number.isInteger(row.number) || row.number < 0)
+    ) {
+      throw new BackupValidationError(`Número de dorsal inválido en players[${idx}]: debe ser un entero >= 0.`);
+    }
+
     return {
-      ...recovered,
-      isArchived: recovered.isArchived ?? false
+      ...(row as unknown as Player),
+      createdAt,
+      ...(archivedAt ? { archivedAt } : {}),
+      isArchived: Boolean(row.isArchived ?? false)
     };
   });
 
-  const rawScores = rawData.scores as Score[];
-  const rawFouls = rawData.fouls as Foul[];
+  const rawScores = rawData.scores as unknown[];
+  const rawFouls = rawData.fouls as unknown[];
 
-  const matches: Match[] = (rawData.matches as Match[]).map((row, idx) => {
-    const recovered = recoverDateFields(
-      row,
-      ['createdAt', 'finishedAt', 'timerLastStart'],
-      `matches[${idx}]`
-    );
+  const matches: Match[] = (rawData.matches as unknown[]).map((rawRow, idx) => {
+    const row = parseRecord(rawRow, `matches[${idx}]`);
+    const createdAt = parseValidDate(row.createdAt, `matches[${idx}].createdAt`, true)!;
+    const finishedAt = parseValidDate(row.finishedAt, `matches[${idx}].finishedAt`, false);
+    const timerLastStart = parseValidDate(row.timerLastStart, `matches[${idx}].timerLastStart`, false);
 
     // Deserializar fechas anidadas en gameHistory
     let gameHistory: GameResult[] | undefined = undefined;
-    if (recovered.gameHistory !== undefined) {
-      if (!Array.isArray(recovered.gameHistory)) {
+    if (row.gameHistory !== undefined) {
+      if (!Array.isArray(row.gameHistory)) {
         throw new BackupValidationError(`matches[${idx}].gameHistory debe ser un arreglo de juegos.`);
       }
-      gameHistory = recovered.gameHistory.map((game, gIdx) => {
-        return recoverDateFields(game, ['finishedAt'], `matches[${idx}].gameHistory[${gIdx}]`);
+      gameHistory = row.gameHistory.map((rawGame, gIdx) => {
+        const game = parseRecord(rawGame, `matches[${idx}].gameHistory[${gIdx}]`);
+        const gameFinishedAt = parseValidDate(
+          game.finishedAt,
+          `matches[${idx}].gameHistory[${gIdx}].finishedAt`,
+          false
+        );
+        return {
+          ...(game as unknown as GameResult),
+          ...(gameFinishedAt ? { finishedAt: gameFinishedAt } : {})
+        };
       });
     }
 
     // Compatibilidad histórica para registros anteriores a v7
-    let config = recovered.config;
+    let config = row.config as Match['config'] | undefined;
     if (!config) {
       config = {
         mode: 'traditional',
         traditional: {
-          totalQuarters: recovered.totalQuarters || 4,
-          minutesPerQuarter: recovered.quarterDuration || 10
+          totalQuarters: (row.totalQuarters as number) || 4,
+          minutesPerQuarter: (row.quarterDuration as number) || 10
         }
       };
     }
 
     // Compatibilidad histórica para marcadores desnormalizados anteriores a v6:
-    // Si el registro legacy no contenía localScore/visitorScore, agregamos desde scores y fouls del respaldo
-    let localScore = recovered.localScore;
-    let visitorScore = recovered.visitorScore;
-    let localFouls = recovered.localFouls;
-    let visitorFouls = recovered.visitorFouls;
+    let localScore = row.localScore as number | undefined;
+    let visitorScore = row.visitorScore as number | undefined;
+    let localFouls = row.localFouls as number | undefined;
+    let visitorFouls = row.visitorFouls as number | undefined;
 
-    if (localScore === undefined && recovered.id !== undefined) {
-      localScore = rawScores
-        .filter(s => s.matchId === recovered.id && s.teamId === recovered.localTeamId)
-        .reduce((acc, curr) => acc + (curr.points || 0), 0);
+    const rowId = row.id as number | undefined;
+    const localTeamId = row.localTeamId as number | undefined;
+    const visitorTeamId = row.visitorTeamId as number | undefined;
+
+    if (localScore === undefined && rowId !== undefined) {
+      localScore = (rawScores as Record<string, unknown>[])
+        .filter(s => s.matchId === rowId && s.teamId === localTeamId)
+        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
     }
-    if (visitorScore === undefined && recovered.id !== undefined) {
-      visitorScore = rawScores
-        .filter(s => s.matchId === recovered.id && s.teamId === recovered.visitorTeamId)
-        .reduce((acc, curr) => acc + (curr.points || 0), 0);
+    if (visitorScore === undefined && rowId !== undefined) {
+      visitorScore = (rawScores as Record<string, unknown>[])
+        .filter(s => s.matchId === rowId && s.teamId === visitorTeamId)
+        .reduce((acc, curr) => acc + ((curr.points as number) || 0), 0);
     }
-    if (localFouls === undefined && recovered.id !== undefined) {
-      localFouls = rawFouls
-        .filter(f => f.matchId === recovered.id && f.teamId === recovered.localTeamId).length;
+    if (localFouls === undefined && rowId !== undefined) {
+      localFouls = (rawFouls as Record<string, unknown>[])
+        .filter(f => f.matchId === rowId && f.teamId === localTeamId).length;
     }
-    if (visitorFouls === undefined && recovered.id !== undefined) {
-      visitorFouls = rawFouls
-        .filter(f => f.matchId === recovered.id && f.teamId === recovered.visitorTeamId).length;
+    if (visitorFouls === undefined && rowId !== undefined) {
+      visitorFouls = (rawFouls as Record<string, unknown>[])
+        .filter(f => f.matchId === rowId && f.teamId === visitorTeamId).length;
     }
 
     const match: Match = {
-      ...recovered,
+      ...(row as unknown as Match),
+      createdAt,
+      ...(finishedAt ? { finishedAt } : {}),
+      ...(timerLastStart ? { timerLastStart } : {}),
       config,
       ...(gameHistory !== undefined ? { gameHistory } : {}),
       localScore: localScore ?? 0,
@@ -365,34 +427,66 @@ export function validateAndNormalizeBackup(
       visitorFouls: visitorFouls ?? 0
     };
 
-    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS ACTIVOS:
-    // Si el partido fue respaldado mientras el cronómetro estaba corriendo (timerLastStart definido),
-    // la referencia física de reloj de la sesión anterior no existe en la máquina o pestaña destino.
-    // Para evitar que la proyección temporal descuente horas/días acumulados y vacíe el cuarto a 00:00:
-    // 1. Se detiene el cronómetro preventivamente (timerLastStart = undefined).
-    // 2. Se preservan intactos los segundos restantes exactos (timerSecondsRemaining).
-    // 3. Se limpian los identificadores de pestaña y contratos de lease obsoletos.
-    // 4. Se establece `timerRecoveryState: 'recovery_required'` para que TraditionalEngine
-    //    despliegue el panel de confirmación y ajuste manual del árbitro (Fase 2C C-29 / C-31).
-    if (recovered.timerLastStart !== undefined && match.status !== 'finished') {
+    // SEGURIDAD Y AUTORIDAD TEMPORAL EN PARTIDOS RESTAURADOS (R2-04):
+    // La sesión o pestaña que generó el respaldo es externa a la instancia receptora.
+    // 1. SIEMPRE invalidar autoridades efímeras de la sesión previa:
+    match.timerOwnerTabId = undefined;
+    match.timerLeaseExpiresAt = 0;
+    match.timerLockMode = undefined;
+
+    // 2. Estado de reloj según el estado deportivo del partido:
+    if (match.status === 'finished') {
       match.timerLastStart = undefined;
-      match.timerOwnerTabId = undefined;
-      match.timerLeaseExpiresAt = 0;
-      match.timerLockMode = undefined;
-      match.timerRecoveryState = 'recovery_required';
-      match.timerRecoveryReason =
-        'Partido restaurado desde respaldo con cronómetro en marcha. Tiempo detenido preventivamente para evitar salto anómalo.';
+      match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
+    } else {
+      // Partido activo ('playing', 'paused', 'created')
+      if (timerLastStart !== undefined) {
+        // Estaba corriendo: pausar preventivamente al tiempo exacto del respaldo
+        match.timerLastStart = undefined;
+        match.timerSecondsRemaining = Math.max(0, Math.floor(match.timerSecondsRemaining ?? 0));
+        match.timerRecoveryState = 'recovery_required';
+        match.timerRecoveryReason =
+          'Partido restaurado desde respaldo con cronómetro en marcha. Tiempo detenido preventivamente para evitar salto anómalo.';
+      } else {
+        // Estaba pausado: preservar tiempo y estado de recuperación previo
+        const remaining = match.timerSecondsRemaining ?? 0;
+        if (!Number.isFinite(remaining) || remaining < 0) {
+          match.timerSecondsRemaining = Math.max(0, Math.floor(remaining || 0));
+          match.timerRecoveryState = 'recovery_required';
+          match.timerRecoveryReason =
+            'Tiempo restante anómalo detectado en el respaldo. Ajuste y confirmación requeridos.';
+        } else {
+          match.timerSecondsRemaining = Math.floor(remaining);
+          if (row.timerRecoveryState === 'recovery_required') {
+            match.timerRecoveryState = 'recovery_required';
+            match.timerRecoveryReason =
+              (row.timerRecoveryReason as string) || 'Recuperación pendiente conservada desde el respaldo.';
+          } else {
+            match.timerRecoveryState = 'normal';
+          }
+        }
+      }
     }
 
     return match;
   });
 
-  const scores: Score[] = rawScores.map((row, idx) => {
-    return recoverDateFields(row, ['createdAt'], `scores[${idx}]`);
+  const scores: Score[] = (rawScores as unknown[]).map((rawRow, idx) => {
+    const row = parseRecord(rawRow, `scores[${idx}]`);
+    const createdAt = parseValidDate(row.createdAt, `scores[${idx}].createdAt`, true)!;
+    return {
+      ...(row as unknown as Score),
+      createdAt
+    };
   });
 
-  const fouls: Foul[] = rawFouls.map((row, idx) => {
-    return recoverDateFields(row, ['createdAt'], `fouls[${idx}]`);
+  const fouls: Foul[] = (rawFouls as unknown[]).map((rawRow, idx) => {
+    const row = parseRecord(rawRow, `fouls[${idx}]`);
+    const createdAt = parseValidDate(row.createdAt, `fouls[${idx}].createdAt`, true)!;
+    return {
+      ...(row as unknown as Foul),
+      createdAt
+    };
   });
 
   // 2. Unicidad e integridad de IDs primarios
@@ -466,11 +560,17 @@ export function validateAndNormalizeBackup(
     if (match.gameHistory) {
       for (let gIdx = 0; gIdx < match.gameHistory.length; gIdx++) {
         const gh = match.gameHistory[gIdx];
-        if (typeof gh.gameNumber !== 'number' || gh.gameNumber < 1) {
-          throw new BackupValidationError(`Historial inválido en partido #${match.id}: gameNumber debe ser >= 1.`);
+        if (typeof gh.gameNumber !== 'number' || !Number.isInteger(gh.gameNumber) || gh.gameNumber < 1) {
+          throw new BackupValidationError(`Historial inválido en partido #${match.id}: gameNumber debe ser un entero >= 1.`);
         }
         if (!['local', 'visitor', 'tie'].includes(gh.winner)) {
           throw new BackupValidationError(`Historial inválido en partido #${match.id}: ganador no reconocido.`);
+        }
+        if (typeof gh.localScore !== 'number' || !Number.isInteger(gh.localScore) || gh.localScore < 0) {
+          throw new BackupValidationError(`Historial inválido en partido #${match.id}: localScore debe ser un entero >= 0.`);
+        }
+        if (typeof gh.visitorScore !== 'number' || !Number.isInteger(gh.visitorScore) || gh.visitorScore < 0) {
+          throw new BackupValidationError(`Historial inválido en partido #${match.id}: visitorScore debe ser un entero >= 0.`);
         }
       }
     }
@@ -669,8 +769,14 @@ export const LocalBackupService = {
 
   /**
    * Dispara la descarga del archivo de respaldo en el navegador.
+   * Emplea desasociación asíncrona de URL para compatibilidad móvil
+   * e informa fehacientemente si la descarga fue iniciada.
    */
-  async exportToFile(customFilename?: string): Promise<{ filename: string; counts: BackupCounts }> {
+  async exportToFile(customFilename?: string): Promise<{
+    filename: string;
+    counts: BackupCounts;
+    downloadInitiated: boolean;
+  }> {
     const json = await this.exportJson();
     const parsed = JSON.parse(json) as BackupEnvelope;
     const now = new Date();
@@ -678,6 +784,7 @@ export const LocalBackupService = {
     const defaultFilename = `scorebasket-backup-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`;
     const filename = customFilename || defaultFilename;
 
+    let downloadInitiated = false;
     if (typeof document !== 'undefined' && typeof window !== 'undefined') {
       const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -687,10 +794,23 @@ export const LocalBackupService = {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+
+      // Desasociar URL de forma asíncrona para compatibilidad con navegadores móviles
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // Ignorar si ya fue revocado
+        }
+      }, 1500);
+      downloadInitiated = true;
     }
 
-    return { filename, counts: parsed.metadata.counts };
+    return {
+      filename,
+      counts: parsed.metadata.counts,
+      downloadInitiated
+    };
   },
 
   /**
@@ -723,9 +843,9 @@ export const LocalBackupService = {
 
   /**
    * Restaura un respaldo JSON estrictamente sobre una base de datos vacía.
-   * Valida envelope, formato, checksum SHA-256, relaciones, fechas y modalidades
-   * ANTES de escribir. La escritura es 100% transaccional y atómica; cualquier falla
-   * provoca rollback total automático en IndexedDB.
+   * Valida obligatoriedad y formato estricto del checksum SHA-256, coherencia
+   * del manifiesto, relaciones, fechas obligatorias y modalidades ANTES de escribir.
+   * La escritura es 100% transaccional y atómica; cualquier falla provoca rollback total.
    */
   async restoreIntoEmpty(
     rawJson: string,
@@ -739,45 +859,65 @@ export const LocalBackupService = {
       throw new BackupValidationError('El contenido provisto no es un JSON válido.');
     }
 
-    // 2. Verificar suma de integridad (checksum) si está presente
     const root = parseRecord(envelope, 'archivo');
-    if (root.metadata && typeof root.metadata === 'object' && !Array.isArray(root.metadata)) {
-      const meta = root.metadata as Record<string, unknown>;
-      if (typeof meta.checksum === 'string' && root.data) {
-        const serializedPayload = JSON.stringify(root.data);
-        const actualChecksum = meta.checksum;
 
-        if (actualChecksum.startsWith('sha256:')) {
-          const rawHash = actualChecksum.slice('sha256:'.length);
-          const computed = await computeDataChecksum(serializedPayload);
-          if (computed !== rawHash) {
-            throw new BackupValidationError(
-              'La suma de verificación SHA-256 no coincide con los datos del respaldo. El archivo está incompleto o fue alterado.'
-            );
-          }
-        } else if (actualChecksum.startsWith('fnv1a:')) {
-          // Compatibilidad con respaldos emitidos en versiones de desarrollo tempranas
-          let hash = 0x811c9dc5;
-          for (let i = 0; i < serializedPayload.length; i++) {
-            hash ^= serializedPayload.charCodeAt(i);
-            hash = Math.imul(hash, 0x01000193);
-          }
-          const computedFnv = `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-          if (computedFnv !== actualChecksum) {
-            throw new BackupValidationError(
-              'La suma de verificación FNV-1a no coincide con los datos del respaldo.'
-            );
-          }
-        } else {
-          // Si el hash no tiene prefijo, se evalúa contra SHA-256 directo
-          const computed = await computeDataChecksum(serializedPayload);
-          if (computed !== actualChecksum) {
-            throw new BackupValidationError(
-              'La suma de verificación del archivo no coincide con los datos. El archivo está corrupto o fue modificado externamente.'
-            );
-          }
-        }
+    // 2. Validación obligatoria de metadatos y Checksum SHA-256 (R2-01, R2-05)
+    if (!root.metadata || typeof root.metadata !== 'object' || Array.isArray(root.metadata)) {
+      throw new BackupValidationError(
+        'El archivo de respaldo no incluye la sección obligatoria "metadata".'
+      );
+    }
+    const meta = root.metadata as Record<string, unknown>;
+
+    if (typeof meta.checksum !== 'string' || meta.checksum.trim() === '') {
+      throw new BackupValidationError(
+        'La suma de verificación (checksum) obligatoria está ausente o vacía en los metadatos del respaldo. No se permite restaurar respaldos sin verificar.'
+      );
+    }
+
+    if (meta.checksumAlgorithm !== 'SHA-256') {
+      throw new BackupValidationError(
+        `Algoritmo de suma de verificación no admitido: "${String(meta.checksumAlgorithm)}". Solo se admite "SHA-256".`
+      );
+    }
+
+    const CHECKSUM_PATTERN = /^sha256:[a-f0-9]{64}$/i;
+    if (!CHECKSUM_PATTERN.test(meta.checksum)) {
+      throw new BackupValidationError(
+        `Formato de suma de verificación inválido o malformado: "${meta.checksum}". Debe cumplir el formato "sha256:<64_hex>".`
+      );
+    }
+
+    // Validación de coherencia del manifiesto (R2-05)
+    if (!meta.counts || typeof meta.counts !== 'object' || Array.isArray(meta.counts)) {
+      throw new BackupValidationError(
+        'Los metadatos del manifiesto no contienen la sección "counts" con el conteo de tablas.'
+      );
+    }
+    const declaredCounts = meta.counts as Record<string, unknown>;
+    const rawDataObj = parseRecord(root.data, 'data');
+    for (const key of REQUIRED_TABLE_KEYS) {
+      const tableArr = rawDataObj[key];
+      if (!Array.isArray(tableArr)) {
+        throw new BackupValidationError(`Falta la tabla requerida "${key}" en los datos del respaldo.`);
       }
+      const declared = declaredCounts[key];
+      if (typeof declared !== 'number' || !Number.isInteger(declared) || declared !== tableArr.length) {
+        throw new BackupValidationError(
+          `Manifiesto inconsistente en la tabla "${key}": el conteo declarado (${String(declared)}) no coincide con la cantidad real de registros (${tableArr.length}).`
+        );
+      }
+    }
+
+    // Verificación criptográfica SHA-256 sobre el cuerpo de datos serializado
+    const expectedHash = meta.checksum.slice('sha256:'.length).toLowerCase();
+    const serializedPayload = JSON.stringify(root.data);
+    const computedHash = (await computeDataChecksum(serializedPayload)).toLowerCase();
+
+    if (computedHash !== expectedHash) {
+      throw new BackupValidationError(
+        'La suma de verificación SHA-256 no coincide con los datos del respaldo. El archivo está corrupto, truncado o fue alterado externamente.'
+      );
     }
 
     // 3. Validar y normalizar los datos

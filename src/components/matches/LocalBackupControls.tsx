@@ -50,10 +50,16 @@ export function LocalBackupControls() {
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const { filename, counts } = await LocalBackupService.exportToFile();
-      setSuccessMessage(
-        `Respaldo guardado como "${filename}" (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas).`
-      );
+      const { filename, counts, downloadInitiated } = await LocalBackupService.exportToFile();
+      if (downloadInitiated) {
+        setSuccessMessage(
+          `Respaldo generado exitosamente. Descarga iniciada como "${filename}" (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas). Revisa tu bandeja de descargas.`
+        );
+      } else {
+        setSuccessMessage(
+          `Respaldo generado exitosamente (${counts.teams} equipos, ${counts.players} jugadores, ${counts.matches} partidos, ${counts.scores} anotaciones, ${counts.fouls} faltas).`
+        );
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido al generar el respaldo.';
       setErrorMessage(`No se pudo generar el respaldo: ${msg}`);

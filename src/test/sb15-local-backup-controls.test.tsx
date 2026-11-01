@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { db } from '../db/db';
 import { LocalBackupControls } from '../components/matches/LocalBackupControls';
-import { LocalBackupService } from '../db/localBackup.service';
+import { LocalBackupService, computeDataChecksum } from '../db/localBackup.service';
 
 describe('LocalBackupControls UI Component', () => {
   beforeEach(async () => {
@@ -41,7 +41,8 @@ describe('LocalBackupControls UI Component', () => {
 
     vi.spyOn(LocalBackupService, 'exportToFile').mockResolvedValue({
       filename: 'scorebasket-backup-test.json',
-      counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 }
+      counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
+      downloadInitiated: true
     });
 
     render(<LocalBackupControls />);
@@ -57,7 +58,7 @@ describe('LocalBackupControls UI Component', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Respaldo guardado como/i)).toBeDefined();
+      expect(screen.getByText(/Respaldo generado exitosamente|Descarga iniciada/i)).toBeDefined();
     });
   });
 
@@ -93,20 +94,27 @@ describe('LocalBackupControls UI Component', () => {
       fireEvent.click(screen.getByText('Respaldo y Seguridad de Datos Locales'));
     });
 
+    const rawData = {
+      teams: [{ id: 1, name: 'Restored Team', createdAt: '2026-01-01T00:00:00Z', isArchived: false }],
+      players: [],
+      matches: [],
+      scores: [],
+      fouls: []
+    };
+    const rawHash = await computeDataChecksum(JSON.stringify(rawData));
     const mockBackup = {
       format: 'scorebasket-local-backup',
       version: 1,
       app: 'ScoreBasket',
       sourceSchemaVersion: 8,
       exportedAt: new Date().toISOString(),
-      metadata: { counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 } },
-      data: {
-        teams: [{ id: 1, name: 'Restored Team', createdAt: '2026-01-01T00:00:00Z', isArchived: false }],
-        players: [],
-        matches: [],
-        scores: [],
-        fouls: []
-      }
+      metadata: {
+        counts: { teams: 1, players: 0, matches: 0, scores: 0, fouls: 0 },
+        checksumAlgorithm: 'SHA-256',
+        checksum: `sha256:${rawHash}`,
+        generatedBy: 'ScoreBasket Test'
+      },
+      data: rawData
     };
 
     const file = new File([JSON.stringify(mockBackup)], 'backup.json', { type: 'application/json' });

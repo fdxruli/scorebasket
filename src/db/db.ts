@@ -112,6 +112,14 @@ export class BasketControlDB extends Dexie {
         this.version(8).stores({
             matches: '++id, status, createdAt, config.mode, localTeamId, visitorTeamId'
         });
+
+        // V9: Índices adicionales únicamente. Conserva IDs, eventos, marcadores y
+        // todas las migraciones anteriores; nunca reescribe resultados históricos.
+        this.version(9).stores({
+            matches: '++id, status, createdAt, config.mode, localTeamId, visitorTeamId, [status+createdAt], [status+config.mode+createdAt]',
+            scores: '++id, matchId, teamId, quarter, [matchId+quarter], [matchId+quarter+createdAt]',
+            fouls: '++id, matchId, teamId, playerId, quarter, [matchId+quarter], [matchId+teamId+quarter], [matchId+playerId], [matchId+quarter+createdAt]'
+        });
     }
 }
 

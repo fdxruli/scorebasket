@@ -13,10 +13,10 @@ describe('SB-01: Índices de IndexedDB, Migraciones Históricas (v2, v6, v7 -> v
     await db.fouls.clear();
   });
 
-  it('Apertura de una base nueva con esquema versión 8', async () => {
+  it('Apertura de una base nueva con esquema versión 9', async () => {
     const testDb = new BasketControlDB(`test_db_new_${Date.now()}`);
     await testDb.open();
-    expect(testDb.verno).toBe(8);
+    expect(testDb.verno).toBe(9);
 
     // Verificar que los índices 'localTeamId' y 'visitorTeamId' existen en 'matches'
     const schema = testDb.tables.find(t => t.name === 'matches')?.schema;
@@ -115,7 +115,7 @@ describe('SB-01: Índices de IndexedDB, Migraciones Históricas (v2, v6, v7 -> v
     // 2. Abrir con BasketControlDB actual (ejecuta upgrades v3 -> v4 -> v5 -> v6 -> v7 -> v8)
     const migratedDb = new BasketControlDB(dbName);
     await migratedDb.open();
-    expect(migratedDb.verno).toBe(8);
+    expect(migratedDb.verno).toBe(9);
 
     // Verificar preservación de equipos, IDs y upgrade v5 (isArchived = false)
     const mTeamLocal = await migratedDb.teams.get(teamLocalId);
@@ -247,7 +247,7 @@ describe('SB-01: Índices de IndexedDB, Migraciones Históricas (v2, v6, v7 -> v
     // 2. Abrir con BasketControlDB (ejecuta v7 -> v8)
     const migratedDb = new BasketControlDB(dbName);
     await migratedDb.open();
-    expect(migratedDb.verno).toBe(8);
+    expect(migratedDb.verno).toBe(9);
 
     const preservedMatch = await migratedDb.matches.get(matchV6Id);
     expect(preservedMatch?.id).toBe(matchV6Id);
@@ -343,7 +343,7 @@ describe('SB-01: Índices de IndexedDB, Migraciones Históricas (v2, v6, v7 -> v
     // 2. Abrir con BasketControlDB que incluye versión 8
     const migratedDb = new BasketControlDB(dbName);
     await migratedDb.open();
-    expect(migratedDb.verno).toBe(8);
+    expect(migratedDb.verno).toBe(9);
 
     // Verificar que los datos anteriores se conservaron intactos
     const preservedTeam = await migratedDb.teams.get(team1Id);

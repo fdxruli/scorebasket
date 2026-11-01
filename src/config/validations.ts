@@ -44,15 +44,15 @@ export function validateMatchConfig(config: MatchConfig): {
       const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = config.traditional;
       const rules = VALIDATION_RULES.traditional;
       
-      if (totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
+      if (!Number.isInteger(totalQuarters) || totalQuarters < rules.minQuarters || totalQuarters > rules.maxQuarters) {
         errors.push(`Los cuartos deben estar entre ${rules.minQuarters} y ${rules.maxQuarters}`);
       }
       
-      if (minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
+      if (!Number.isInteger(minutesPerQuarter) || minutesPerQuarter < rules.minMinutes || minutesPerQuarter > rules.maxMinutes) {
         errors.push(`Los minutos deben estar entre ${rules.minMinutes} y ${rules.maxMinutes}`);
       }
 
-      if (timeoutsPerTeam !== undefined && (timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
+      if (timeoutsPerTeam !== undefined && (!Number.isInteger(timeoutsPerTeam) || timeoutsPerTeam < rules.minTimeouts || timeoutsPerTeam > rules.maxTimeouts)) {
         errors.push(`Los tiempos fuera deben estar entre ${rules.minTimeouts} y ${rules.maxTimeouts}`);
       }
       break;
@@ -67,7 +67,7 @@ export function validateMatchConfig(config: MatchConfig): {
       const { targetScore } = config.race;
       const rules = VALIDATION_RULES.race;
       
-      if (targetScore < rules.minScore || targetScore > rules.maxScore) {
+      if (!Number.isInteger(targetScore) || targetScore < rules.minScore || targetScore > rules.maxScore) {
         errors.push(`El puntaje objetivo debe estar entre ${rules.minScore} y ${rules.maxScore}`);
       }
       break;
@@ -82,7 +82,7 @@ export function validateMatchConfig(config: MatchConfig): {
       const { totalGames, targetScorePerGame } = config.bestOf;
       const rules = VALIDATION_RULES.bestOf;
       
-      if (totalGames < rules.minGames || totalGames > rules.maxGames) {
+      if (!Number.isInteger(totalGames) || totalGames < rules.minGames || totalGames > rules.maxGames) {
         errors.push(`El número de partidos debe estar entre ${rules.minGames} y ${rules.maxGames}`);
       }
       
@@ -90,11 +90,13 @@ export function validateMatchConfig(config: MatchConfig): {
         errors.push('El número de partidos debe ser impar (ej: 3, 5, 7)');
       }
       
-      if (targetScorePerGame < rules.minScorePerGame || targetScorePerGame > rules.maxScorePerGame) {
+      if (!Number.isInteger(targetScorePerGame) || targetScorePerGame < rules.minScorePerGame || targetScorePerGame > rules.maxScorePerGame) {
         errors.push(`El puntaje por partido debe estar entre ${rules.minScorePerGame} y ${rules.maxScorePerGame}`);
       }
       break;
     }
+    default:
+      errors.push('Modalidad de juego desconocida');
   }
   
   return {

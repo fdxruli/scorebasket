@@ -2,8 +2,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/db';
-import type { Match } from '../db/models';
+import { MatchesRepository } from '../db/matches.repository';
 import { TeamsRepository } from '../db/teams.repository';
 import { Play, AlertCircle, Trophy, Zap, Shield } from 'lucide-react';
 import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
@@ -73,34 +72,11 @@ export function NewMatch() {
     setIsCreating(true);
 
     try {
-      const matchData: Omit<Match, 'id'> = {
+      const matchId = await MatchesRepository.create({
         localTeamId: Number(localTeamId),
         visitorTeamId: Number(visitorTeamId),
-        status: 'created',
-        createdAt: new Date(),
-        eventsProvenance: 'live_session',
-        config: config,
-        localScore: 0,
-        visitorScore: 0,
-        localFouls: 0,
-        visitorFouls: 0
-      };
-
-      if (config.mode === 'traditional' && config.traditional) {
-        matchData.currentQuarter = 1;
-        matchData.timerSecondsRemaining = config.traditional.minutesPerQuarter * 60;
-        matchData.timerLastStart = undefined;
-        matchData.totalQuarters = config.traditional.totalQuarters;
-        matchData.quarterDuration = config.traditional.minutesPerQuarter;
-        matchData.localTimeouts = 0;
-        matchData.visitorTimeouts = 0;
-      }
-
-      if (config.mode === 'race' || config.mode === 'best-of-series') {
-        matchData.gameHistory = [];
-      }
-
-      const matchId = await db.matches.add(matchData);
+        config
+      });
       navigate(`/live/${matchId}`);
     } catch (err) {
       console.error(err);

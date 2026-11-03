@@ -220,7 +220,7 @@ export const GameActionsRepository = {
    * Deshace la última acción registrada en el periodo/juego/set actual
    * usando la misma transacción y validaciones de integridad atómica.
    */
-  async undoLastAction(matchId: number): Promise<DeleteActionResult> {
+  async undoLastAction(matchId: number, expectedPeriod?: number): Promise<DeleteActionResult> {
     return db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
       const currentMatch = await db.matches.get(matchId);
       if (!currentMatch) {
@@ -236,6 +236,15 @@ export const GameActionsRepository = {
         throw new Error(`Periodo no verificable: ${periodRes.reason}`);
       }
       const currentPeriod = periodRes.period;
+
+      if (expectedPeriod !== undefined) {
+        if (expectedPeriod !== currentPeriod) {
+          throw new Error('No se pueden deshacer acciones de un juego o set ya cerrado o cuando el periodo ha cambiado.');
+        }
+        if (currentMatch.gameHistory?.some(g => g.gameNumber === expectedPeriod)) {
+          throw new Error('No se pueden deshacer acciones de un juego o set ya registrado y cerrado en el historial.');
+        }
+      }
 
       const [scores, fouls] = await Promise.all([
         db.scores.where('matchId').equals(matchId).toArray(),

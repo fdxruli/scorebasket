@@ -668,10 +668,11 @@ describe('DB-F4: Integridad de operaciones concurrentes en IndexedDB (QA-01 a QA
       gameHistory: [
         {
           gameNumber: 1,
-          finalScore: { local: 2, visitor: 0 },
+          localScore: 2,
+          visitorScore: 0,
           winner: 'local',
-          durationSeconds: 120,
-          endedAt: new Date(),
+          duration: 120,
+          finishedAt: new Date(),
         },
       ],
     });

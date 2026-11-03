@@ -552,4 +552,168 @@ describe('DB-F4: Integridad de operaciones concurrentes en IndexedDB (QA-01 a QA
     const integrity = ScoreIntegrityService.verifyScoreIntegrity(finalMatch, finalScores);
     expect(integrity.status).toBe('CONSISTENT');
   });
+
+  // =========================================================================
+  // QA-09: Best-of-Series — avanzar de Set 1 a Set 2 actualiza callbacks,
+  // acepta anotaciones para Set 2 y rechaza acciones de la vista de Set 1
+  // =========================================================================
+  it('QA-09: Best-of-Series: avanzar de Set 1 a Set 2 actualiza callbacks de useGameActions, acepta Set 2 y rechaza vista obsoleta de Set 1', async () => {
+    // 1. Crear una serie Best-of-Series con marcador inicial 19-10
+    const matchId = await createSeriesMatch({
+      localScore: 19,
+      visitorScore: 10,
+    });
+
+    // Agregar eventos base respetando el contrato de integridad de puntuación
+    const initialScores: Omit<Score, 'id'>[] = [];
+    for (let i = 0; i < 6; i++) {
+      initialScores.push({ matchId, teamId: localTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 5000 + i * 10) });
+    }
+    initialScores.push({ matchId, teamId: localTeamId, points: 1, quarter: 1, createdAt: new Date(Date.now() - 4000) }); // 19 pts local
+    for (let i = 0; i < 3; i++) {
+      initialScores.push({ matchId, teamId: visitorTeamId, points: 3, quarter: 1, createdAt: new Date(Date.now() - 3000 + i * 10) });
+    }
+    initialScores.push({ matchId, teamId: visitorTeamId, points: 1, quarter: 1, createdAt: new Date(Date.now() - 2000) }); // 10 pts visitante
+    await db.scores.bulkAdd(initialScores as Score[]);
+
+    const tab = createTabContext(matchId);
+    await waitFor(() => expect(tab.result.current.liveMatch).toBeDefined());
+    expect(tab.result.current.liveMatch?.config?.bestOf?.currentGame).toBe(1);
+
+    // Guardar referencia a los callbacks generados durante el Set 1
+    const addScoreSet1 = tab.result.current.addScore;
+    const undoSet1 = tab.result.current.undoLastAction;
+
+    // 2. Registrar 2 puntos para que el equipo local alcance 21 y confirmar válidamente el Set 1
+    const scoreRes = await tab.result.current.addScore(localTeamId, 2);
+    expect(scoreRes.success).toBe(true);
+
+    const matchBeforeConfirm = (await db.matches.get(matchId))!;
+    expect(matchBeforeConfirm.localScore).toBe(21);
+
+    const confirmRes = await SeriesService.confirmSet({ matchId, setNumber: 1 });
+    expect(confirmRes.status).toBe('confirmed');
+
+    // 3 y 4. Mantener el mismo partido, avanzar al Set 2 y confirmar que React actualiza el periodo visible
+    await waitFor(() => {
+      expect(tab.result.current.liveMatch?.config?.bestOf?.currentGame).toBe(2);
+      expect(tab.result.current.liveMatch?.localScore).toBe(0);
+      expect(tab.result.current.liveMatch?.visitorScore).toBe(0);
+    });
+
+    // Comprobar que los callbacks de useGameActions se actualizaron con la nueva referencia de match
+    expect(tab.result.current.addScore).not.toBe(addScoreSet1);
+    expect(tab.result.current.undoLastAction).not.toBe(undoSet1);
+
+    // 5 y 6. Registrar una anotación válida desde la nueva vista: se acepta y pertenece al Set 2
+    const scoreSet2Res = await tab.result.current.addScore(localTeamId, 3);
+    expect(scoreSet2Res.success).toBe(true);
+
+    const matchAfterSet2Score = (await db.matches.get(matchId))!;
+    expect(matchAfterSet2Score.localScore).toBe(3);
+
+    const scoresSet2 = await db.scores
+      .where('matchId')
+      .equals(matchId)
+      .and(s => s.quarter === 2)
+      .toArray();
+    expect(scoresSet2).toHaveLength(1);
+    expect(scoresSet2[0].points).toBe(3);
+    expect(scoresSet2[0].quarter).toBe(2);
+
+    // 7. Confirmar que una acción realmente iniciada desde la vista obsoleta del Set 1 es rechazada
+    const staleActionRes = await addScoreSet1(visitorTeamId, 2);
+    expect(staleActionRes.success).toBe(false);
+    expect(staleActionRes.error).toMatch(/periodo|set/i);
+
+    const staleUndoRes = await undoSet1();
+    expect(staleUndoRes.success).toBe(false);
+
+    // Comprobar que el Set 2 no se vio alterado por las acciones obsoletas
+    const finalMatch = (await db.matches.get(matchId))!;
+    expect(finalMatch.localScore).toBe(3);
+    expect(finalMatch.visitorScore).toBe(0);
+
+    const allScores = await db.scores.where('matchId').equals(matchId).toArray();
+    const set2Scores = allScores.filter(s => s.quarter === 2);
+    expect(set2Scores).toHaveLength(1);
+  });
+
+  // =========================================================================
+  // QA-10: Race — avanzar de Juego 1 a Juego 2 actualiza callbacks,
+  // acepta acciones para Juego 2 y rechaza acciones de Juego 1
+  // =========================================================================
+  it('QA-10: Race: avanzar de Juego 1 a Juego 2 actualiza callbacks de useGameActions, acepta Juego 2 y rechaza vista obsoleta de Juego 1', async () => {
+    // 1. Crear un partido Race
+    const matchId = await createRaceMatch();
+
+    const tab = createTabContext(matchId);
+    await waitFor(() => expect(tab.result.current.liveMatch).toBeDefined());
+    expect(tab.result.current.liveMatch?.config?.race?.currentGame).toBe(1);
+
+    const addScoreGame1 = tab.result.current.addScore;
+    const addFoulGame1 = tab.result.current.addFoul;
+
+    // 2. Registrar puntos en Juego 1
+    const s1 = await tab.result.current.addScore(localTeamId, 2);
+    expect(s1.success).toBe(true);
+
+    // 3. Simular revancha / avance a Juego 2 (como hace RaceEngine al dar la revancha)
+    await db.matches.update(matchId, {
+      localScore: 0,
+      visitorScore: 0,
+      localFouls: 0,
+      visitorFouls: 0,
+      'config.race.currentGame': 2,
+      gameHistory: [
+        {
+          gameNumber: 1,
+          finalScore: { local: 2, visitor: 0 },
+          winner: 'local',
+          durationSeconds: 120,
+          endedAt: new Date(),
+        },
+      ],
+    });
+
+    // 4. Confirmar que React actualiza el periodo visible a Juego 2
+    await waitFor(() => {
+      expect(tab.result.current.liveMatch?.config?.race?.currentGame).toBe(2);
+      expect(tab.result.current.liveMatch?.localScore).toBe(0);
+    });
+
+    // Callbacks actualizados
+    expect(tab.result.current.addScore).not.toBe(addScoreGame1);
+    expect(tab.result.current.addFoul).not.toBe(addFoulGame1);
+
+    // 5 y 6. Registrar anotación válida desde la nueva vista: se acepta y pertenece al Juego 2
+    const scoreGame2Res = await tab.result.current.addScore(localTeamId, 3);
+    expect(scoreGame2Res.success).toBe(true);
+
+    const matchAfterGame2 = (await db.matches.get(matchId))!;
+    expect(matchAfterGame2.localScore).toBe(3);
+
+    const game2Scores = await db.scores
+      .where('matchId')
+      .equals(matchId)
+      .and(s => s.quarter === 2)
+      .toArray();
+    expect(game2Scores).toHaveLength(1);
+    expect(game2Scores[0].points).toBe(3);
+
+    // 7. Acción iniciada desde la vista previa de Juego 1 es rechazada
+    const staleActionRes = await addScoreGame1(visitorTeamId, 2);
+    expect(staleActionRes.success).toBe(false);
+    expect(staleActionRes.error).toMatch(/periodo|set/i);
+
+    const staleFoulRes = await addFoulGame1(visitorTeamId);
+    expect(staleFoulRes.success).toBe(false);
+    expect(staleFoulRes.error).toMatch(/periodo|set/i);
+
+    // El estado del Juego 2 permanece inalterado
+    const matchFinal = (await db.matches.get(matchId))!;
+    expect(matchFinal.localScore).toBe(3);
+    expect(matchFinal.visitorScore).toBe(0);
+    expect(matchFinal.visitorFouls).toBe(0);
+  });
 });

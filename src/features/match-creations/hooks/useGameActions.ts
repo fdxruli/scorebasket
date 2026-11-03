@@ -3,13 +3,24 @@
 import { useCallback } from 'react';
 import { db } from '../../../db/db';
 import { useLiveMatch } from '../components/context/LiveMatchContext';
-import { GameActionsRepository } from '../../../db/gameActions.repository';
+import { GameActionsRepository, type DeleteActionResult } from '../../../db/gameActions.repository';
 import { unlockAudioContext, playScorePop, playWhistle } from '../../../utils/soundEffects';
 import type { Score, Foul } from '../../../db/models';
 import type { Match } from '../../../db/models/Match';
 
+export type { DeleteActionResult };
+
 type TeamSide = 'local' | 'visitor';
 type ScorePoints = 1 | 2 | 3;
+
+export interface ActionExecutionOptions {
+  expectedPeriod?: number;
+}
+
+export interface ActionExecutionResult {
+  success: boolean;
+  error?: string;
+}
 
 const getMode = (match: Match) => match.config?.mode || 'traditional';
 
@@ -72,6 +83,13 @@ const validateScoreWindow = (match: Match) => {
     if (localHasWon || visitorHasWon) {
       throw new Error('Este set ya terminó. Confirma el set antes de registrar más puntos.');
     }
+
+    const totalGames = match.config?.bestOf?.totalGames || 3;
+    const setsToWin = Math.floor(totalGames / 2) + 1;
+    const currentWins = match.config?.bestOf?.wins || { local: 0, visitor: 0 };
+    if (currentWins.local >= setsToWin || currentWins.visitor >= setsToWin) {
+      throw new Error('La serie ya fue decidida previamente; no se permiten anotaciones adicionales.');
+    }
   }
 };
 
@@ -80,7 +98,7 @@ const notifyActionError = (error: unknown, fallbackMessage: string) => {
 
   const message = error instanceof Error ? error.message : fallbackMessage;
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
     window.alert(message);
   }
 };
@@ -97,21 +115,39 @@ export const useGameActions = () => {
   /**
    * Acción: Agregar Puntos
    */
-  const addScore = useCallback(async (teamId: number, points: number, playerId?: number) => {
+  const addScore = useCallback(async (
+    teamId: number,
+    points: number,
+    playerId?: number,
+    options?: ActionExecutionOptions
+  ): Promise<ActionExecutionResult> => {
     try {
-      if (!match?.id) return;
+      if (!match?.id) return { success: false, error: 'Partido no disponible' };
 
       const normalizedPoints = normalizePoints(points);
+      const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
+      const expectedPeriod = options?.expectedPeriod ?? renderPeriod;
 
       await db.transaction('rw', db.matches, db.scores, async () => {
         const currentMatch = await db.matches.get(match.id!);
         if (!currentMatch) throw new Error('El partido no existe');
 
         validateMatchIsActive(currentMatch);
+
+        const currentPeriod = getCurrentActionPeriod(currentMatch);
+
+        if (expectedPeriod !== undefined) {
+          if (expectedPeriod !== currentPeriod) {
+            throw new Error(`El periodo o set ya cambió (esperado: #${expectedPeriod}, vigente: #${currentPeriod}). No se pueden registrar puntos en un periodo anterior.`);
+          }
+          if (currentMatch.gameHistory?.some(g => g.gameNumber === expectedPeriod)) {
+            throw new Error(`El periodo o set #${expectedPeriod} ya fue cerrado en el historial.`);
+          }
+        }
+
         validateScoreWindow(currentMatch);
 
         const side = getTeamSide(currentMatch, teamId);
-        const currentPeriod = getCurrentActionPeriod(currentMatch);
 
         const newScore: Omit<Score, 'id'> = {
           matchId: currentMatch.id!,
@@ -137,17 +173,29 @@ export const useGameActions = () => {
 
       unlockAudioContext();
       playScorePop(normalizedPoints);
+      return { success: true };
     } catch (error) {
       notifyActionError(error, 'No se pudieron registrar los puntos.');
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'No se pudieron registrar los puntos.'
+      };
     }
-  }, [match?.id]);
+  }, [match]);
 
   /**
    * Acción: Agregar Falta
    */
-  const addFoul = useCallback(async (teamId: number, playerId?: number) => {
+  const addFoul = useCallback(async (
+    teamId: number,
+    playerId?: number,
+    options?: ActionExecutionOptions
+  ): Promise<ActionExecutionResult> => {
     try {
-      if (!match?.id) return;
+      if (!match?.id) return { success: false, error: 'Partido no disponible' };
+
+      const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
+      const expectedPeriod = options?.expectedPeriod ?? renderPeriod;
 
       await db.transaction('rw', db.matches, db.fouls, async () => {
         const currentMatch = await db.matches.get(match.id!);
@@ -155,8 +203,18 @@ export const useGameActions = () => {
 
         validateMatchIsActive(currentMatch);
 
-        const side = getTeamSide(currentMatch, teamId);
         const currentPeriod = getCurrentActionPeriod(currentMatch);
+
+        if (expectedPeriod !== undefined) {
+          if (expectedPeriod !== currentPeriod) {
+            throw new Error(`El periodo o set ya cambió (esperado: #${expectedPeriod}, vigente: #${currentPeriod}). No se pueden registrar faltas en un periodo anterior.`);
+          }
+          if (currentMatch.gameHistory?.some(g => g.gameNumber === expectedPeriod)) {
+            throw new Error(`El periodo o set #${expectedPeriod} ya fue cerrado en el historial.`);
+          }
+        }
+
+        const side = getTeamSide(currentMatch, teamId);
 
         const newFoul: Omit<Foul, 'id'> = {
           matchId: currentMatch.id!,
@@ -181,28 +239,45 @@ export const useGameActions = () => {
 
       unlockAudioContext();
       playWhistle();
+      return { success: true };
     } catch (error) {
       notifyActionError(error, 'No se pudo registrar la falta.');
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'No se pudo registrar la falta.'
+      };
     }
-  }, [match?.id]);
+  }, [match]);
 
   /**
    * Acción: Deshacer (Undo)
    *
    * Importante: en Race y Series solo deshace acciones del juego/set actual.
    * Centralizado a través de GameActionsRepository.undoLastAction con transacciones seguras.
+   * Acepta options?: ActionExecutionOptions o llamadas directas de eventos UI (onClick={undoLastAction}).
    */
-  const undoLastAction = useCallback(async () => {
+  const undoLastAction = useCallback(async (options?: ActionExecutionOptions | unknown): Promise<DeleteActionResult> => {
     try {
-      if (!match?.id) return;
-      const result = await GameActionsRepository.undoLastAction(match.id);
+      if (!match?.id) return { success: false, deleted: false, error: 'Partido no disponible' };
+      const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
+      const parsedOptions = (options && typeof options === 'object' && !('nativeEvent' in options) && 'expectedPeriod' in options)
+        ? (options as ActionExecutionOptions)
+        : undefined;
+      const expectedPeriod = parsedOptions?.expectedPeriod ?? renderPeriod;
+      const result = await GameActionsRepository.undoLastAction(match.id, expectedPeriod);
       if (!result.success) {
         throw new Error(result.error || 'No se pudo deshacer la última acción.');
       }
+      return result;
     } catch (error) {
       notifyActionError(error, 'No se pudo deshacer la última acción.');
+      return {
+        success: false,
+        deleted: false,
+        error: error instanceof Error ? error.message : 'No se pudo deshacer la última acción.'
+      };
     }
-  }, [match?.id]);
+  }, [match]);
 
   return {
     addScore,

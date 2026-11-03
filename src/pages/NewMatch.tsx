@@ -2,9 +2,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/db';
-import type { Match } from '../db/models';
 import { TeamsRepository } from '../db/teams.repository';
+import { MatchesRepository } from '../db/matches.repository';
 import { Play, AlertCircle, Trophy, Zap, Shield } from 'lucide-react';
 import { GameModeSelector } from '../features/match-creations/components/GameModeSelector';
 import { TraditionalConfigComponent } from '../features/match-creations/components/TraditionalConfig';
@@ -12,7 +11,6 @@ import { RaceConfigComponent } from '../features/match-creations/components/Race
 import { BestOfConfigComponent } from '../features/match-creations/components/BestOfConfig';
 import { ConfigSummary } from '../features/match-creations/components/ConfigSummary';
 import { useMatchConfig } from '../features/match-creations/hooks/useMatchConfig';
-import { startQuickPickupMatch } from '../utils/matchHelpers';
 
 export function NewMatch() {
   const navigate = useNavigate();
@@ -25,11 +23,12 @@ export function NewMatch() {
     if (isCreating) return;
     setIsCreating(true);
     try {
-      const matchId = await startQuickPickupMatch(21);
+      const matchId = await MatchesRepository.createQuickPickup(21);
       navigate(`/live/${matchId}`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setError('No se pudo iniciar la Reta Rápida.');
+      const message = err instanceof Error ? err.message : 'No se pudo iniciar la Reta Rápida.';
+      setError(message);
       setIsCreating(false);
     }
   };
@@ -73,38 +72,16 @@ export function NewMatch() {
     setIsCreating(true);
 
     try {
-      const matchData: Omit<Match, 'id'> = {
+      const matchId = await MatchesRepository.create({
         localTeamId: Number(localTeamId),
         visitorTeamId: Number(visitorTeamId),
-        status: 'created',
-        createdAt: new Date(),
-        eventsProvenance: 'live_session',
-        config: config,
-        localScore: 0,
-        visitorScore: 0,
-        localFouls: 0,
-        visitorFouls: 0
-      };
-
-      if (config.mode === 'traditional' && config.traditional) {
-        matchData.currentQuarter = 1;
-        matchData.timerSecondsRemaining = config.traditional.minutesPerQuarter * 60;
-        matchData.timerLastStart = undefined;
-        matchData.totalQuarters = config.traditional.totalQuarters;
-        matchData.quarterDuration = config.traditional.minutesPerQuarter;
-        matchData.localTimeouts = 0;
-        matchData.visitorTimeouts = 0;
-      }
-
-      if (config.mode === 'race' || config.mode === 'best-of-series') {
-        matchData.gameHistory = [];
-      }
-
-      const matchId = await db.matches.add(matchData);
+        config
+      });
       navigate(`/live/${matchId}`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setError("Hubo un error al crear el partido.");
+      const message = err instanceof Error ? err.message : "Hubo un error al crear el partido.";
+      setError(message);
       setIsCreating(false);
     }
   };

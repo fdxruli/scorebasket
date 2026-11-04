@@ -44,12 +44,7 @@ export function NewMatch() {
   } = useMatchConfig('traditional');
 
   const teams = useLiveQuery(async () => {
-    try {
-      return await TeamsRepository.getAll();
-    } catch (err) {
-      console.error("Error cargando equipos:", err);
-      return [];
-    }
+    return await TeamsRepository.getAll();
   });
 
   const handleStartMatch = async () => {

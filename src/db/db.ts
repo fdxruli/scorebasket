@@ -112,6 +112,17 @@ export class BasketControlDB extends Dexie {
         this.version(8).stores({
             matches: '++id, status, createdAt, config.mode, localTeamId, visitorTeamId'
         });
+
+        // Manejo defensivo de eventos multi-pestaña para continuidad de almacenamiento
+        this.on('versionchange', () => {
+            // Cuando otra pestaña o proceso abre una versión superior, cerrar la conexión
+            // local para permitir la actualización sin bloquear ni corromper datos.
+            this.close();
+        });
+
+        this.on('blocked', () => {
+            console.warn('ScoreBasket: La actualización o apertura de la base de datos está bloqueada por otra pestaña.');
+        });
     }
 }
 

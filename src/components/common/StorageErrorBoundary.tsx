@@ -1,6 +1,7 @@
 // src/components/common/StorageErrorBoundary.tsx
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, HardDrive } from 'lucide-react';
+import { AlertTriangle, RefreshCw, HardDrive, AlertCircle } from 'lucide-react';
+import Dexie from 'dexie';
 
 interface Props {
   children: ReactNode;
@@ -11,6 +12,34 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+export function isStorageError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof Dexie.DexieError) return true;
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return (
+      error.name === 'QuotaExceededError' ||
+      error.name === 'InvalidStateError' ||
+      error.name === 'AbortError' ||
+      error.name === 'VersionError' ||
+      error.name === 'UnknownError'
+    );
+  }
+  if (error instanceof Error) {
+    const text = `${error.name} ${error.message}`.toLowerCase();
+    return (
+      text.includes('indexeddb') ||
+      text.includes('dexie') ||
+      text.includes('database') ||
+      text.includes('almacenamiento') ||
+      text.includes('connectionfailed') ||
+      text.includes('openfailed') ||
+      text.includes('versionchange') ||
+      text.includes('quota')
+    );
+  }
+  return false;
 }
 
 export class StorageErrorBoundary extends Component<Props, State> {
@@ -27,7 +56,7 @@ export class StorageErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('StorageErrorBoundary capturó un fallo de almacenamiento local:', error, errorInfo);
+    console.error('StorageErrorBoundary capturó un fallo:', error, errorInfo);
   }
 
   handleRetry = () => {
@@ -48,10 +77,18 @@ export class StorageErrorBoundary extends Component<Props, State> {
       return this.props.children;
     }
 
-    const title = this.props.fallbackTitle || 'Problema con el almacenamiento local';
-    const message =
-      this.state.error?.message ||
-      'No se pudo conectar con la base de datos local (IndexedDB).';
+    const storageFault = isStorageError(this.state.error);
+    const title =
+      this.props.fallbackTitle ||
+      (storageFault
+        ? 'Problema de acceso al almacenamiento local'
+        : 'Problema al cargar la vista');
+
+    const defaultMessage = storageFault
+      ? 'No fue posible acceder o leer los datos desde el almacenamiento local.'
+      : 'Se produjo un error inesperado al renderizar este componente.';
+
+    const message = this.state.error?.message || defaultMessage;
 
     return (
       <div
@@ -85,7 +122,9 @@ export class StorageErrorBoundary extends Component<Props, State> {
         </h2>
 
         <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: '0 0 1rem 0', lineHeight: 1.5 }}>
-          No fue posible leer o inicializar los datos desde el almacenamiento local del navegador.
+          {storageFault
+            ? 'No fue posible leer o conectar con los datos locales en este momento.'
+            : 'Ocurrió un problema de ejecución al presentar esta pantalla.'}
         </p>
 
         <div
@@ -100,13 +139,21 @@ export class StorageErrorBoundary extends Component<Props, State> {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.25rem' }}>
-            <HardDrive size={14} />
-            Protección de datos activa:
+            {storageFault ? <HardDrive size={14} /> : <AlertCircle size={14} />}
+            {storageFault ? 'Protección de datos activa:' : 'Estado de la aplicación:'}
           </div>
           <ul style={{ margin: 0, paddingLeft: '1.2rem', lineHeight: 1.4 }}>
-            <li>Tus registros previos <strong>no han sido eliminados</strong>.</li>
-            <li>No se aplicó ninguna reinicialización ni borrado destructivo.</li>
-            <li>Esto puede ocurrir por permisos restringidos, modo incógnito estricto o un bloqueo temporal por otra pestaña.</li>
+            {storageFault ? (
+              <>
+                <li>ScoreBasket no aplica reinicializaciones ni borrados automáticos ante errores de lectura.</li>
+                <li>El acceso puede estar restringido por el navegador, modo privado o concurrencia con otra pestaña.</li>
+              </>
+            ) : (
+              <>
+                <li>Se evitó el bloqueo general de la aplicación.</li>
+                <li>Tus datos en almacenamiento local no han sido modificados por este fallo de interfaz.</li>
+              </>
+            )}
           </ul>
         </div>
 
@@ -136,7 +183,7 @@ export class StorageErrorBoundary extends Component<Props, State> {
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
           >
             <RefreshCw size={14} />
-            Reintentar lectura
+            {storageFault ? 'Reintentar lectura' : 'Reintentar'}
           </button>
           <button
             type="button"

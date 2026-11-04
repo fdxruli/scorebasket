@@ -1,10 +1,13 @@
 // src/test/sb19-db-f5-storage-continuity.test.tsx
 // @vitest-environment jsdom
+import type { ReactNode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { db, BasketControlDB } from '../db/db';
 import { StorageErrorBoundary } from '../components/common/StorageErrorBoundary';
 import { LocalBackupControls } from '../components/matches/LocalBackupControls';
+import { Layout } from '../components/Layout';
 import { StoragePersistenceService,
   LocalBackupService,
   LOCAL_BACKUP_FORMAT,
@@ -189,8 +192,8 @@ describe('DB-F5: Continuidad, Persistencia y Seguridad del Almacenamiento Local 
     }
   });
 
-  // QA-04: Error real de lectura en useLiveQuery no se presenta como base vacía
-  it('QA-04: StorageErrorBoundary intercepta fallos reales en consultas useLiveQuery de Teams y no presenta estado vacío ("No hay equipos")', async () => {
+  // QA-04: Gestión precisa de errores de almacenamiento vs UI (A, B, C, D)
+  it('QA-04 (B): StorageErrorBoundary intercepta fallos reales en consultas useLiveQuery de Teams y no presenta estado vacío ("No hay equipos")', async () => {
     // Espiar TeamsRepository.getAll para simular un fallo real de lectura de IndexedDB dentro de useLiveQuery
     const getAllSpy = vi.spyOn(TeamsRepository, 'getAll').mockImplementation(() => {
       return Promise.reject(new Error('IndexedDB ConnectionFailedError: simulated storage access fault'));
@@ -198,7 +201,7 @@ describe('DB-F5: Continuidad, Persistencia y Seguridad del Almacenamiento Local 
 
     try {
       render(
-        <StorageErrorBoundary fallbackTitle="Problema con el almacenamiento local (IndexedDB)">
+        <StorageErrorBoundary>
           <Teams />
         </StorageErrorBoundary>
       );
@@ -207,14 +210,73 @@ describe('DB-F5: Continuidad, Persistencia y Seguridad del Almacenamiento Local 
       await waitFor(() => {
         // 1. No debe mostrar el falso estado vacío de "Aún no hay equipos registrados"
         expect(screen.queryByText(/Aún no hay equipos registrados/i)).toBeNull();
-        // 2. Debe mostrar la interfaz de recuperación comprensible
-        expect(screen.getByText(/Problema con el almacenamiento local/i)).toBeDefined();
-        expect(screen.getByText(/Tus registros previos/i)).toBeDefined();
-        expect(screen.getByText(/no han sido eliminados/i)).toBeDefined();
+        // 2. Debe mostrar la interfaz de recuperación de almacenamiento
+        expect(screen.getByText(/Problema de acceso al almacenamiento local/i)).toBeDefined();
+        expect(screen.getByText(/ScoreBasket no aplica reinicializaciones ni borrados/i)).toBeDefined();
         expect(screen.getByText(/Reintentar lectura/i)).toBeDefined();
       });
     } finally {
       getAllSpy.mockRestore();
+    }
+  });
+
+  it('QA-04 (C): StorageErrorBoundary no atribuye errores genéricos de UI al almacenamiento', async () => {
+    function BrokenUIComponent(): ReactNode {
+      throw new Error('Error genérico de renderizado en componente de interfaz');
+    }
+
+    render(
+      <StorageErrorBoundary>
+        <BrokenUIComponent />
+      </StorageErrorBoundary>
+    );
+
+    // Debe mostrar título de error de vista, NO de almacenamiento
+    expect(screen.getByText('Problema al cargar la vista')).toBeDefined();
+    expect(screen.getByText(/Ocurrió un problema de ejecución/i)).toBeDefined();
+    expect(screen.getByText(/Tus datos en almacenamiento local no han sido modificados/i)).toBeDefined();
+    // Botón de reintento genérico, NO "Reintentar lectura"
+    expect(screen.getByText('Reintentar')).toBeDefined();
+    // No debe mencionar IndexedDB ni problema de almacenamiento local
+    expect(screen.queryByText(/Problema de acceso al almacenamiento local/i)).toBeNull();
+    expect(screen.queryByText(/Reintentar lectura/i)).toBeNull();
+  });
+
+  it('QA-04 (A y D): Layout diferencia lectura válida con cero registros (0) de fallo en consulta (—)', async () => {
+    // D: Lectura válida sin datos -> debe conservar el cero real "0"
+    const { unmount } = render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const statValues = screen.getAllByText('0');
+      // Debe haber al menos 2 elementos con "0" (En Juego y Equipos)
+      expect(statValues.length).toBeGreaterThanOrEqual(2);
+    });
+
+    unmount();
+
+    // A: Error en consulta de contadores de IndexedDB -> debe mostrar "—", nunca un cero inventado
+    const matchesSpy = vi.spyOn(db.matches, 'toArray').mockRejectedValue(
+      new Error('IndexedDB reading failure') as never
+    );
+
+    try {
+      render(
+        <MemoryRouter>
+          <Layout />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        // En lugar de ceros falsos, debe mostrar "—" para En Juego y Equipos
+        const dashes = screen.getAllByText('—');
+        expect(dashes.length).toBeGreaterThanOrEqual(2);
+      });
+    } finally {
+      matchesSpy.mockRestore();
     }
   });
 

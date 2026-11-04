@@ -167,12 +167,14 @@ export function Layout() {
           <div className="sidebar-stats-grid">
             <div className="sidebar-stat-box">
               <span className="sidebar-stat-val" style={{ color: counts?.activeMatches ? "var(--primary)" : undefined }}>
-                {counts?.activeMatches ?? 0}
+                {counts != null ? counts.activeMatches : "—"}
               </span>
               <span className="sidebar-stat-lbl">En Juego</span>
             </div>
             <div className="sidebar-stat-box">
-              <span className="sidebar-stat-val">{counts?.activeTeams ?? 0}</span>
+              <span className="sidebar-stat-val">
+                {counts != null ? counts.activeTeams : "—"}
+              </span>
               <span className="sidebar-stat-lbl">Equipos</span>
             </div>
           </div>

@@ -23,33 +23,28 @@ export function Teams() {
 
     // Consulta de equipos + jugadores activos por equipo para vista enriquecida
     const teamsWithRoster = useLiveQuery(async () => {
-        try {
-            const [rawTeams, allPlayers] = await Promise.all([
-                showArchived
-                    ? TeamsRepository.getAllIncludingArchived()
-                    : TeamsRepository.getAll(),
-                db.players.toArray()
-            ]);
+        const [rawTeams, allPlayers] = await Promise.all([
+            showArchived
+                ? TeamsRepository.getAllIncludingArchived()
+                : TeamsRepository.getAll(),
+            db.players.toArray()
+        ]);
 
-            const rosterByTeamId = new Map<number, typeof allPlayers>();
-            for (const p of allPlayers) {
-                if (p.isArchived || p.teamId === undefined) continue;
-                let roster = rosterByTeamId.get(p.teamId);
-                if (!roster) {
-                    roster = [];
-                    rosterByTeamId.set(p.teamId, roster);
-                }
-                roster.push(p);
+        const rosterByTeamId = new Map<number, typeof allPlayers>();
+        for (const p of allPlayers) {
+            if (p.isArchived || p.teamId === undefined) continue;
+            let roster = rosterByTeamId.get(p.teamId);
+            if (!roster) {
+                roster = [];
+                rosterByTeamId.set(p.teamId, roster);
             }
-
-            return rawTeams.map(team => ({
-                ...team,
-                roster: rosterByTeamId.get(team.id!) || []
-            }));
-        } catch (err) {
-            console.error("Error cargando equipos:", err);
-            return [];
+            roster.push(p);
         }
+
+        return rawTeams.map(team => ({
+            ...team,
+            roster: rosterByTeamId.get(team.id!) || []
+        }));
     }, [showArchived]);
 
     const handleAddTempPlayer = () => {
@@ -299,7 +294,11 @@ export function Teams() {
                         </button>
                     </div>
 
-                    {teamsWithRoster?.length === 0 ? (
+                    {teamsWithRoster === undefined ? (
+                        <div className="flex-center text-muted" style={{ minHeight: '120px' }}>
+                            Cargando equipos...
+                        </div>
+                    ) : teamsWithRoster.length === 0 ? (
                         <div className="empty-state" style={{ marginTop: 0 }}>
                             <UsersIcon size={36} color="var(--text-muted)" />
                             <h3 style={{ fontSize: '1.35rem', color: 'var(--text-main)' }}>
@@ -311,7 +310,7 @@ export function Teams() {
                         </div>
                     ) : (
                         <div className="teams-grid">
-                            {teamsWithRoster?.map(team => {
+                            {teamsWithRoster.map(team => {
                                 const isArchived = team.isArchived === true;
                                 const initials = team.name.trim().substring(0, 2).toUpperCase();
 

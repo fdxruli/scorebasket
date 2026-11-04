@@ -5,6 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Trophy, Users, PlusCircle, Zap, Activity, Flame } from "lucide-react";
 import { db } from "../db/db";
 import { startQuickPickupMatch } from "../utils/matchHelpers";
+import { StorageErrorBoundary } from "./common/StorageErrorBoundary";
 
 export function Layout() {
   const location = useLocation();
@@ -26,8 +27,9 @@ export function Layout() {
         totalMatches: matches.length,
         activeTeams
       };
-    } catch {
-      return { activeMatches: 0, totalMatches: 0, activeTeams: 0 };
+    } catch (err) {
+      console.warn("Layout: No se pudieron leer contadores de IndexedDB:", err);
+      return null;
     }
   }, []);
 
@@ -165,12 +167,14 @@ export function Layout() {
           <div className="sidebar-stats-grid">
             <div className="sidebar-stat-box">
               <span className="sidebar-stat-val" style={{ color: counts?.activeMatches ? "var(--primary)" : undefined }}>
-                {counts?.activeMatches ?? 0}
+                {counts != null ? counts.activeMatches : "—"}
               </span>
               <span className="sidebar-stat-lbl">En Juego</span>
             </div>
             <div className="sidebar-stat-box">
-              <span className="sidebar-stat-val">{counts?.activeTeams ?? 0}</span>
+              <span className="sidebar-stat-val">
+                {counts != null ? counts.activeTeams : "—"}
+              </span>
               <span className="sidebar-stat-lbl">Equipos</span>
             </div>
           </div>
@@ -179,7 +183,9 @@ export function Layout() {
 
       {/* --- CONTENIDO PRINCIPAL --- */}
       <main className="main-content">
-        <Outlet />
+        <StorageErrorBoundary>
+          <Outlet />
+        </StorageErrorBoundary>
       </main>
 
       {/* --- NAVBAR INFERIOR MÓVIL (< 768px) --- */}

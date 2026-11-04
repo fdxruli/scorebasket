@@ -24,6 +24,7 @@ export function LocalBackupControls() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirmRestore, setShowConfirmRestore] = useState<{
     fileContent: string;
@@ -48,6 +49,7 @@ export function LocalBackupControls() {
   const handleExport = async () => {
     setIsExporting(true);
     setErrorMessage(null);
+    setInfoMessage(null);
     setSuccessMessage(null);
     try {
       const { filename, counts, downloadInitiated } = await LocalBackupService.exportToFile();
@@ -75,6 +77,7 @@ export function LocalBackupControls() {
     // Resetear valor para permitir seleccionar el mismo archivo si fuese necesario
     e.target.value = '';
     setErrorMessage(null);
+    setInfoMessage(null);
     setSuccessMessage(null);
 
     try {
@@ -111,6 +114,7 @@ export function LocalBackupControls() {
     if (!showConfirmRestore) return;
     setIsRestoring(true);
     setErrorMessage(null);
+    setInfoMessage(null);
     setSuccessMessage(null);
 
     try {
@@ -131,13 +135,16 @@ export function LocalBackupControls() {
 
   const handleRequestPersistence = async () => {
     setErrorMessage(null);
+    setInfoMessage(null);
     try {
       const granted = await LocalBackupService.requestPersistentStorage();
       await loadStorageStatus();
       if (granted) {
-        setSuccessMessage('El navegador ha concedido almacenamiento persistente protegido.');
+        setSuccessMessage('El navegador ha concedido almacenamiento persistente protegido contra desalojo automático.');
       } else {
-        setErrorMessage('El navegador no concedió almacenamiento persistente en este momento.');
+        setInfoMessage(
+          'El navegador no otorgó almacenamiento persistente en este momento (mantiene almacenamiento estándar). Tus registros continúan guardados normalmente en este dispositivo; te recomendamos descargar respaldos periódicos en JSON.'
+        );
       }
     } catch {
       setErrorMessage('No se pudo solicitar la persistencia de almacenamiento.');
@@ -156,12 +163,41 @@ export function LocalBackupControls() {
         }}
         onClick={() => setIsOpen(prev => !prev)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Database size={20} color="var(--primary)" />
-          <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
-              Respaldo y Seguridad de Datos Locales
-            </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+          <Database size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                Respaldo y Seguridad de Datos Locales
+              </h2>
+              {storageStatus && (
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '9999px',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    backgroundColor: storageStatus.persisted
+                      ? 'rgba(34, 197, 94, 0.15)'
+                      : 'rgba(245, 158, 11, 0.15)',
+                    color: storageStatus.persisted ? 'var(--success)' : 'var(--warning, #f59e0b)'
+                  }}
+                >
+                  {storageStatus.persisted ? (
+                    <>
+                      <ShieldCheck size={11} /> Persistente
+                    </>
+                  ) : (
+                    <>
+                      <Shield size={11} /> Estándar
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
               Exporta copias de seguridad verificables o comprueba la persistencia de almacenamiento
             </p>
@@ -181,7 +217,7 @@ export function LocalBackupControls() {
 
       {isOpen && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-          {/* Mensajes de éxito y error */}
+          {/* Mensajes de éxito, aviso y error */}
           {successMessage && (
             <div
               style={{
@@ -202,6 +238,33 @@ export function LocalBackupControls() {
               <button
                 type="button"
                 onClick={() => setSuccessMessage(null)}
+                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {infoMessage && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '8px',
+                color: 'var(--warning, #f59e0b)',
+                marginBottom: '1rem',
+                fontSize: '0.85rem'
+              }}
+            >
+              <Shield size={18} style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>{infoMessage}</div>
+              <button
+                type="button"
+                onClick={() => setInfoMessage(null)}
                 style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
               >
                 ✕
@@ -309,41 +372,52 @@ export function LocalBackupControls() {
           </div>
 
           {/* Estado de Persistencia del Navegador */}
-          {storageStatus?.supported && (
+          <div
+            style={{
+              padding: '0.75rem 0.85rem',
+              backgroundColor: 'var(--bg-surface, #1e293b)',
+              borderRadius: '6px',
+              fontSize: '0.8rem',
+              marginBottom: '0.75rem'
+            }}
+          >
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '0.5rem',
-                padding: '0.6rem 0.8rem',
-                backgroundColor: 'var(--bg-surface, #1e293b)',
-                borderRadius: '6px',
-                fontSize: '0.8rem'
+                gap: '0.5rem'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                {storageStatus.persisted ? (
-                  <ShieldCheck size={16} color="var(--success)" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {storageStatus?.supported ? (
+                  storageStatus.persisted ? (
+                    <ShieldCheck size={16} color="var(--success)" style={{ flexShrink: 0 }} />
+                  ) : (
+                    <Shield size={16} color="var(--warning, #f59e0b)" style={{ flexShrink: 0 }} />
+                  )
                 ) : (
-                  <Shield size={16} color="var(--warning, #f59e0b)" />
+                  <HardDrive size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
                 )}
                 <span>
-                  {storageStatus.persisted
-                    ? 'Almacenamiento persistente activo (protegido contra desalojo).'
-                    : 'Almacenamiento estándar (el navegador podría limpiar datos si se queda sin espacio).'}
+                  {storageStatus?.supported
+                    ? storageStatus.persisted
+                      ? 'Almacenamiento persistente activo (protegido contra desalojo automático).'
+                      : 'Almacenamiento estándar (el navegador podría limpiar datos si se queda sin espacio en disco).'
+                    : 'API de persistencia de almacenamiento no disponible en este navegador o entorno (modo estándar activo).'}
                 </span>
-                {storageStatus.usageFormatted && (
+                {storageStatus?.usageFormatted && (
                   <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                     <HardDrive size={13} />
                     {storageStatus.usageFormatted}
                     {storageStatus.quotaFormatted ? ` / ${storageStatus.quotaFormatted}` : ''}
+                    {storageStatus.percentUsed !== undefined ? ` (${storageStatus.percentUsed}%)` : ''}
                   </span>
                 )}
               </div>
 
-              {!storageStatus.persisted && (
+              {storageStatus?.supported && !storageStatus.persisted && (
                 <button
                   type="button"
                   onClick={handleRequestPersistence}
@@ -354,7 +428,21 @@ export function LocalBackupControls() {
                 </button>
               )}
             </div>
-          )}
+
+            {/* Explicación breve de la importancia del respaldo */}
+            <div
+              style={{
+                marginTop: '0.5rem',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                lineHeight: 1.4
+              }}
+            >
+              <strong>Nota sobre la protección de datos:</strong> El almacenamiento local o persistente previene la depuración automática por falta de espacio en disco, pero <em>no</em> protege ante borrado manual del historial, limpieza de datos del sitio o cambio de dispositivo. Te recomendamos descargar respaldos periódicos en formato JSON.
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -6,6 +6,7 @@ import { Trophy, Users, PlusCircle, Zap, Activity, Flame } from "lucide-react";
 import { db } from "../db/db";
 import { startQuickPickupMatch } from "../utils/matchHelpers";
 import { StorageErrorBoundary } from "./common/StorageErrorBoundary";
+import { PwaNotice } from "./common/PwaNotice";
 
 export function Layout() {
   const location = useLocation();
@@ -187,6 +188,8 @@ export function Layout() {
           <Outlet />
         </StorageErrorBoundary>
       </main>
+
+      <PwaNotice />
 
       {/* --- NAVBAR INFERIOR MÓVIL (< 768px) --- */}
       <nav className="navbar">

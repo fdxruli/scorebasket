@@ -1,17 +1,17 @@
 // src/test/sb19-db-f5-storage-continuity.test.tsx
 // @vitest-environment jsdom
-import type { ReactNode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { db, BasketControlDB } from '../db/db';
 import { StorageErrorBoundary } from '../components/common/StorageErrorBoundary';
 import { LocalBackupControls } from '../components/matches/LocalBackupControls';
-import {
-  StoragePersistenceService,
+import { StoragePersistenceService,
   LocalBackupService,
   LOCAL_BACKUP_FORMAT,
   LOCAL_BACKUP_VERSION
 } from '../db/localBackup.service';
+import { Teams } from '../pages/Teams';
+import { TeamsRepository } from '../db/teams.repository';
 
 describe('DB-F5: Continuidad, Persistencia y Seguridad del Almacenamiento Local (QA-01 a QA-08)', () => {
   beforeEach(async () => {
@@ -189,28 +189,33 @@ describe('DB-F5: Continuidad, Persistencia y Seguridad del Almacenamiento Local 
     }
   });
 
-  // QA-04: Error de IndexedDB no se presenta como base vacía
-  it('QA-04: StorageErrorBoundary intercepta fallos de lectura y no presenta estado vacío ("0 partidos / cancha lista")', async () => {
-    // Componente que simula fallo al renderizar por error de IndexedDB
-    function FailingComponent(): ReactNode {
-      throw new Error('IndexedDB ConnectionFailedError: simulated storage access fault');
+  // QA-04: Error real de lectura en useLiveQuery no se presenta como base vacía
+  it('QA-04: StorageErrorBoundary intercepta fallos reales en consultas useLiveQuery de Teams y no presenta estado vacío ("No hay equipos")', async () => {
+    // Espiar TeamsRepository.getAll para simular un fallo real de lectura de IndexedDB dentro de useLiveQuery
+    const getAllSpy = vi.spyOn(TeamsRepository, 'getAll').mockImplementation(() => {
+      return Promise.reject(new Error('IndexedDB ConnectionFailedError: simulated storage access fault'));
+    });
+
+    try {
+      render(
+        <StorageErrorBoundary fallbackTitle="Problema con el almacenamiento local (IndexedDB)">
+          <Teams />
+        </StorageErrorBoundary>
+      );
+
+      // useLiveQuery propaga el fallo de la consulta al StorageErrorBoundary
+      await waitFor(() => {
+        // 1. No debe mostrar el falso estado vacío de "Aún no hay equipos registrados"
+        expect(screen.queryByText(/Aún no hay equipos registrados/i)).toBeNull();
+        // 2. Debe mostrar la interfaz de recuperación comprensible
+        expect(screen.getByText(/Problema con el almacenamiento local/i)).toBeDefined();
+        expect(screen.getByText(/Tus registros previos/i)).toBeDefined();
+        expect(screen.getByText(/no han sido eliminados/i)).toBeDefined();
+        expect(screen.getByText(/Reintentar lectura/i)).toBeDefined();
+      });
+    } finally {
+      getAllSpy.mockRestore();
     }
-
-    render(
-      <StorageErrorBoundary fallbackTitle="Error de prueba de almacenamiento">
-        <FailingComponent />
-      </StorageErrorBoundary>
-    );
-
-    // Verifica que se muestra el mensaje de protección de almacenamiento
-    expect(screen.getByText('Error de prueba de almacenamiento')).toBeDefined();
-    expect(screen.getByText(/Tus registros previos/i)).toBeDefined();
-    expect(screen.getByText(/no han sido eliminados/i)).toBeDefined();
-    expect(screen.getByText(/Reintentar lectura/i)).toBeDefined();
-
-    // Comprueba que NUNCA se renderiza el estado vacío de "cancha lista"
-    expect(screen.queryByText('¡La cancha está lista!')).toBeNull();
-    expect(screen.queryByText('Aún no hay equipos registrados')).toBeNull();
   });
 
   // QA-05: Datos históricos siguen siendo legibles (v2 a v8)

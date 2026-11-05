@@ -1,7 +1,6 @@
 // src/utils/shareCardGenerator.ts
 import { db } from '../db/db';
-import { formatPeriodLabel } from './matchHelpers';
-import { buildRaceReportProjection } from './raceLogicHelpers';
+import { computeMatchReportStats } from './matchHelpers';
 
 export interface ShareMatchCardInput {
   mode: 'traditional' | 'race' | 'best-of-series';
@@ -17,8 +16,28 @@ export interface ShareMatchCardInput {
   totalHeader: string; // 'Total', 'Ganados', 'Sets'
   localTotalCell: number;
   visitorTotalCell: number;
-  localPlayers: { name: string; number?: number; points: number; fouls: number }[];
-  visitorPlayers: { name: string; number?: number; points: number; fouls: number }[];
+  localPlayers: {
+    name: string;
+    number?: number;
+    points: number;
+    fouls: number;
+    baskets1?: number;
+    baskets2?: number;
+    baskets3?: number;
+  }[];
+  visitorPlayers: {
+    name: string;
+    number?: number;
+    points: number;
+    fouls: number;
+    baskets1?: number;
+    baskets2?: number;
+    baskets3?: number;
+  }[];
+  localPointsScored?: number | null;
+  visitorPointsScored?: number | null;
+  localFoulsTotal?: number | null;
+  visitorFoulsTotal?: number | null;
 }
 
 const CANVAS_W = 1080;
@@ -639,7 +658,7 @@ export async function generateMatchShareCardBlob(input: ShareMatchCardInput): Pr
     const cleanMvpTeam = truncateText(ctx, `EQUIPO: ${mvp.teamName.toUpperCase()}`, 460);
     ctx.fillText(cleanMvpTeam, infoX, cursorY + 112);
 
-    // Caja derecha con línea estadística del MVP (XX PTS · X FAL)
+    // Caja derecha con línea estadística del MVP
     const statBoxW = 248;
     const statBoxH = 102;
     const statBoxX = PAD_X + CONTENT_W - statBoxW - 20;
@@ -658,13 +677,13 @@ export async function generateMatchShareCardBlob(input: ShareMatchCardInput): Pr
     ctx.textBaseline = 'middle';
     ctx.fillText(`${mvp.points} PTS`, statBoxX + statBoxW / 2, statBoxY + 40);
 
-    ctx.font = `700 17px ${FONT_MONO}`;
+    ctx.font = `700 16px ${FONT_MONO}`;
     ctx.fillStyle = '#cbd5e1';
-    ctx.fillText(
-      `${mvp.points} PTS · ${mvp.fouls} FAL`,
-      statBoxX + statBoxW / 2,
-      statBoxY + 78
-    );
+    const mvpSubLine =
+      mvp.baskets1 !== undefined || mvp.baskets2 !== undefined || mvp.baskets3 !== undefined
+        ? `+1:${mvp.baskets1 ?? 0} +2:${mvp.baskets2 ?? 0} +3:${mvp.baskets3 ?? 0} · ${mvp.fouls} FAL`
+        : `${mvp.points} PTS · ${mvp.fouls} FAL`;
+    ctx.fillText(mvpSubLine, statBoxX + statBoxW / 2, statBoxY + 78);
 
     ctx.restore();
     cursorY += mvpH + 24; // 818
@@ -838,11 +857,15 @@ export async function generateMatchShareCardBlob(input: ShareMatchCardInput): Pr
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Calcular métricas globales del partido
+    // Calcular métricas globales del partido sin reemplazar marcador oficial por sumas parciales
     const localPtsSum =
-      (input.periodStats || []).reduce((acc, p) => acc + p.local, 0) || input.mainLocalScore;
+      input.localPointsScored !== undefined && input.localPointsScored !== null
+        ? input.localPointsScored
+        : (input.periodStats || []).reduce((acc, p) => acc + p.local, 0) || input.mainLocalScore;
     const visitorPtsSum =
-      (input.periodStats || []).reduce((acc, p) => acc + p.visitor, 0) || input.mainVisitorScore;
+      input.visitorPointsScored !== undefined && input.visitorPointsScored !== null
+        ? input.visitorPointsScored
+        : (input.periodStats || []).reduce((acc, p) => acc + p.visitor, 0) || input.mainVisitorScore;
     const combinedPoints = localPtsSum + visitorPtsSum;
     const diffScore = Math.abs(input.mainLocalScore - input.mainVisitorScore);
     const periodsPlayed = Math.max(1, (input.periodStats || []).length);
@@ -1058,7 +1081,7 @@ export async function shareOrDownloadMatchCard(
 
 /**
  * Construye el objeto ShareMatchCardInput consultando Dexie en tiempo real para un matchId.
- * Funciona tanto para partidos finalizados como para partidos en vivo justo en el modal de fin de juego.
+ * Reutiliza computeMatchReportStats para garantizar 100% de consistencia con MatchHistoryModal.
  */
 export async function buildShareMatchCardInputFromDb(
   matchId: number
@@ -1066,7 +1089,7 @@ export async function buildShareMatchCardInputFromDb(
   const match = await db.matches.get(matchId);
   if (!match) return null;
 
-  const [localTeam, visitorTeam, scores, fouls, players] = await Promise.all([
+  const [localTeam, visitorTeam, scores, fouls, teamPlayers] = await Promise.all([
     db.teams.get(match.localTeamId),
     db.teams.get(match.visitorTeamId),
     db.scores.where({ matchId }).toArray(),
@@ -1074,169 +1097,44 @@ export async function buildShareMatchCardInputFromDb(
     db.players.where('teamId').anyOf([match.localTeamId, match.visitorTeamId]).toArray()
   ]);
 
-  const mode = match.config?.mode || 'traditional';
   const safeScores = scores || [];
   const safeFouls = fouls || [];
-  const safePlayers = players || [];
+  const playersList = [...(teamPlayers || [])];
+  const knownIds = new Set(playersList.map(p => p.id!));
+  const missingIds = new Set<number>();
 
-  const localPointsTotal = safeScores
-    .filter(s => s.teamId === match.localTeamId)
-    .reduce((a, b) => a + b.points, 0);
-  const visitorPointsTotal = safeScores
-    .filter(s => s.teamId === match.visitorTeamId)
-    .reduce((a, b) => a + b.points, 0);
-
-  let mainLocalScore = localPointsTotal || match.localScore || 0;
-  let mainVisitorScore = visitorPointsTotal || match.visitorScore || 0;
-
-  const quartersSet = new Set([
-    ...safeScores.map(s => s.quarter),
-    ...safeFouls.map(f => f.quarter)
-  ]);
-  const maxDataQuarter = Math.max(...Array.from(quartersSet), 0);
-  const totalQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
-  const maxDisplayPeriod =
-    mode === 'traditional' ? Math.max(maxDataQuarter, totalQuarters) : maxDataQuarter;
-
-  let rawPeriods: { period: number; local: number; visitor: number }[] = [];
-  for (let q = 1; q <= maxDisplayPeriod; q++) {
-    rawPeriods.push({
-      period: q,
-      local: safeScores
-        .filter(s => s.teamId === match.localTeamId && s.quarter === q)
-        .reduce((a, b) => a + b.points, 0),
-      visitor: safeScores
-        .filter(s => s.teamId === match.visitorTeamId && s.quarter === q)
-        .reduce((a, b) => a + b.points, 0)
-    });
+  for (const s of safeScores) {
+    if (s.playerId !== undefined && !knownIds.has(s.playerId)) missingIds.add(s.playerId);
+  }
+  for (const f of safeFouls) {
+    if (f.playerId !== undefined && !knownIds.has(f.playerId)) missingIds.add(f.playerId);
+  }
+  if (missingIds.size > 0) {
+    const extraPlayers = await db.players.where('id').anyOf(Array.from(missingIds)).toArray();
+    for (const ep of extraPlayers) {
+      if (ep.id !== undefined && !knownIds.has(ep.id)) {
+        playersList.push(ep);
+        knownIds.add(ep.id);
+      }
+    }
   }
 
-  // Usar proyección centralizada para modo race sin entradas ni finishedAt ficticios (C-03)
-  const isFinished = match.status === 'finished';
-  let isRaceWithGames = false;
-  let localTotalCell = mainLocalScore;
-  let visitorTotalCell = mainVisitorScore;
-  let totalHeader = 'Total';
+  const stats = computeMatchReportStats({
+    match,
+    scores: safeScores,
+    fouls: safeFouls,
+    players: playersList
+  });
 
-  if (mode === 'race') {
-    const raceProjection = buildRaceReportProjection(match, safeScores);
-    mainLocalScore = raceProjection.mainLocalScore;
-    mainVisitorScore = raceProjection.mainVisitorScore;
-    localTotalCell = raceProjection.localTotalCell;
-    visitorTotalCell = raceProjection.visitorTotalCell;
-    totalHeader = raceProjection.totalHeader;
-    isRaceWithGames = raceProjection.isRaceWithGames;
-    rawPeriods = raceProjection.periodStats.map(p => ({
-      period: p.period,
-      local: p.local,
-      visitor: p.visitor
+  const periodStats = stats.periodStats
+    .filter(p => p.available && p.local !== null && p.visitor !== null)
+    .map(rp => ({
+      label: rp.label,
+      local: rp.local ?? 0,
+      visitor: rp.visitor ?? 0
     }));
-  }
-
-  if (mode === 'best-of-series') {
-    const storedSets = [...(match.gameHistory || [])];
-    const historyBySet = new Map<number, { local: number; visitor: number }>();
-    for (const g of storedSets) {
-      historyBySet.set(g.gameNumber, { local: g.localScore, visitor: g.visitorScore });
-    }
-
-    const currentSetNum = match.currentQuarter || match.config?.bestOf?.currentGame || 1;
-    const hasLiveSetScore = (match.localScore || 0) > 0 || (match.visitorScore || 0) > 0;
-    const maxSetNum = Math.max(
-      maxDataQuarter,
-      ...storedSets.map(g => g.gameNumber),
-      hasLiveSetScore ? currentSetNum : 0
-    );
-
-    const mergedSets: { period: number; local: number; visitor: number }[] = [];
-    for (let sNum = 1; sNum <= maxSetNum; sNum++) {
-      const fromHist = historyBySet.get(sNum);
-      const fromScoresLocal = safeScores
-        .filter(s => s.teamId === match.localTeamId && s.quarter === sNum)
-        .reduce((a, b) => a + b.points, 0);
-      const fromScoresVisitor = safeScores
-        .filter(s => s.teamId === match.visitorTeamId && s.quarter === sNum)
-        .reduce((a, b) => a + b.points, 0);
-
-      let setLocal = fromHist ? fromHist.local : fromScoresLocal;
-      let setVisitor = fromHist ? fromHist.visitor : fromScoresVisitor;
-
-      if (setLocal === 0 && setVisitor === 0 && (fromScoresLocal > 0 || fromScoresVisitor > 0)) {
-        setLocal = fromScoresLocal;
-        setVisitor = fromScoresVisitor;
-      }
-
-      if (
-        sNum === currentSetNum &&
-        !fromHist &&
-        setLocal === 0 &&
-        setVisitor === 0 &&
-        hasLiveSetScore
-      ) {
-        setLocal = match.localScore || 0;
-        setVisitor = match.visitorScore || 0;
-      }
-
-      if (setLocal > 0 || setVisitor > 0 || fromHist) {
-        mergedSets.push({
-          period: sNum,
-          local: setLocal,
-          visitor: setVisitor
-        });
-      }
-    }
-
-    rawPeriods = mergedSets;
-    const histLocalWins = storedSets.filter(g => g.winner === 'local').length;
-    const histVisitorWins = storedSets.filter(g => g.winner === 'visitor').length;
-    mainLocalScore = Math.max(match.config.bestOf?.wins?.local || 0, histLocalWins);
-    mainVisitorScore = Math.max(match.config.bestOf?.wins?.visitor || 0, histVisitorWins);
-    totalHeader = 'Sets';
-    localTotalCell = mainLocalScore;
-    visitorTotalCell = mainVisitorScore;
-  }
-
-  const getLabel = (p: number) => {
-    if (mode === 'best-of-series') return `Set ${p}`;
-    if (mode === 'race') return `Juego ${p}`;
-    return formatPeriodLabel(p, totalQuarters);
-  };
-
-  const periodStats = rawPeriods.map(rp => ({
-    label: getLabel(rp.period),
-    local: rp.local,
-    visitor: rp.visitor
-  }));
 
   const periodHeaders = periodStats.map(ps => ps.label);
-
-  const scoreUnitLabel =
-    mode === 'best-of-series'
-      ? 'SETS'
-      : isRaceWithGames
-        ? 'JUEGOS'
-        : isFinished
-          ? 'FINAL'
-          : 'EN CURSO';
-
-  const buildTeamPlayerStats = (teamId: number) => {
-    return safePlayers
-      .filter(p => p.teamId === teamId)
-      .map(p => {
-        const points = safeScores
-          .filter(s => s.playerId === p.id)
-          .reduce((acc, curr) => acc + curr.points, 0);
-        const foulsCount = safeFouls.filter(f => f.playerId === p.id).length;
-        return {
-          name: p.name,
-          number: p.number,
-          points,
-          fouls: foulsCount
-        };
-      })
-      .filter(p => p.points > 0 || p.fouls > 0)
-      .sort((a, b) => b.points - a.points);
-  };
 
   let dateStr = '';
   try {
@@ -1253,20 +1151,40 @@ export async function buildShareMatchCardInputFromDb(
   }
 
   return {
-    mode,
-    isFinished,
+    mode: stats.mode,
+    isFinished: stats.isFinished,
     dateStr,
     localName: localTeam?.name || 'Local',
     visitorName: visitorTeam?.name || 'Visitante',
-    mainLocalScore,
-    mainVisitorScore,
-    scoreUnitLabel,
+    mainLocalScore: stats.mainLocalScore,
+    mainVisitorScore: stats.mainVisitorScore,
+    scoreUnitLabel: stats.scoreUnitLabel,
     periodHeaders,
     periodStats,
-    totalHeader,
-    localTotalCell,
-    visitorTotalCell,
-    localPlayers: buildTeamPlayerStats(match.localTeamId),
-    visitorPlayers: buildTeamPlayerStats(match.visitorTeamId)
+    totalHeader: stats.totalHeader,
+    localTotalCell: stats.localTotalCell,
+    visitorTotalCell: stats.visitorTotalCell,
+    localPointsScored: stats.localTeamStats.officialPoints,
+    visitorPointsScored: stats.visitorTeamStats.officialPoints,
+    localFoulsTotal: stats.localTeamStats.fouls,
+    visitorFoulsTotal: stats.visitorTeamStats.fouls,
+    localPlayers: stats.localStats.map(p => ({
+      name: p.name,
+      number: p.number,
+      points: p.points,
+      fouls: p.fouls,
+      baskets1: p.baskets1,
+      baskets2: p.baskets2,
+      baskets3: p.baskets3
+    })),
+    visitorPlayers: stats.visitorStats.map(p => ({
+      name: p.name,
+      number: p.number,
+      points: p.points,
+      fouls: p.fouls,
+      baskets1: p.baskets1,
+      baskets2: p.baskets2,
+      baskets3: p.baskets3
+    }))
   };
 }

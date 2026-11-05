@@ -1,6 +1,6 @@
 // src/features/match-creations/components/shared/LiveToolsBar.tsx
 import React, { useState } from 'react';
-import { Users, Shirt, Bell, Volume2, VolumeX, Flag } from 'lucide-react';
+import { Users, Shirt, Bell, Volume2, VolumeX, Flag, Timer } from 'lucide-react';
 import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 
 interface Props {
@@ -13,6 +13,10 @@ interface Props {
   /** Gestión opcional de quintetos en cancha (solo partidos Traditional) */
   onManageLineups?: () => void;
   lineupsEnabled?: boolean;
+  /** Reloj de posesión opcional (24s / 14s) (solo partidos Traditional, DEPORT-04) */
+  onToggleShotClock?: () => void;
+  shotClockEnabled?: boolean;
+  isTimerRunning?: boolean;
 }
 
 /**
@@ -26,7 +30,10 @@ export const LiveToolsBar: React.FC<Props> = ({
   showBuzzer = false,
   endLabel = 'Finalizar',
   onManageLineups,
-  lineupsEnabled = false
+  lineupsEnabled = false,
+  onToggleShotClock,
+  shotClockEnabled = false,
+  isTimerRunning = false
 }) => {
   const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
 
@@ -64,6 +71,26 @@ export const LiveToolsBar: React.FC<Props> = ({
             <Shirt size={16} />
             <span>Gestionar jugadores en cancha</span>
             {lineupsEnabled && <span className="tool-chip-state">5v5</span>}
+          </button>
+        )}
+
+        {onToggleShotClock && (
+          <button
+            type="button"
+            onClick={onToggleShotClock}
+            disabled={isTimerRunning}
+            className={`tool-chip ${shotClockEnabled ? 'is-on' : ''}`}
+            aria-pressed={shotClockEnabled}
+            title={
+              isTimerRunning
+                ? 'Pausa el cronómetro para configurar el reloj de posesión'
+                : 'Reloj de posesión (24s / 14s)'
+            }
+            data-testid="btn-toggle-shot-clock"
+          >
+            <Timer size={16} />
+            <span>Reloj de posesión</span>
+            <span className="tool-chip-state">{shotClockEnabled ? 'ON' : 'OFF'}</span>
           </button>
         )}
 

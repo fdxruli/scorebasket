@@ -11,6 +11,12 @@ export interface MatchLineups {
   version: number;
 }
 
+export interface MatchShotClock {
+  enabled: boolean;
+  secondsRemaining: number;
+  lastStart?: Date;
+}
+
 export interface Match {
   id?: number;
   
@@ -45,6 +51,7 @@ export interface Match {
   localTimeouts?: number;
   visitorTimeouts?: number;
   lineups?: MatchLineups;
+  shotClock?: MatchShotClock;
 
   // Fencing y autoridad transaccional del cronómetro (Fase 2C R1.1 - C-11/C-14)
   timerEpoch?: number;

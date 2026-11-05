@@ -477,6 +477,20 @@ export function validateAndNormalizeBackup(
         .filter(f => f.matchId === rowId && f.teamId === visitorTeamId).length;
     }
 
+    let shotClock: Match['shotClock'] = undefined;
+    if (row.shotClock && typeof row.shotClock === 'object') {
+      const rawShot = row.shotClock as Record<string, unknown>;
+      const shotEnabled = Boolean(rawShot.enabled);
+      const shotSecs = typeof rawShot.secondsRemaining === 'number' && Number.isFinite(rawShot.secondsRemaining)
+        ? Math.max(0, Math.floor(rawShot.secondsRemaining))
+        : 24;
+      shotClock = {
+        enabled: shotEnabled,
+        secondsRemaining: shotSecs,
+        lastStart: undefined
+      };
+    }
+
     const match: Match = {
       ...(row as unknown as Match),
       createdAt,
@@ -484,6 +498,7 @@ export function validateAndNormalizeBackup(
       ...(timerLastStart ? { timerLastStart } : {}),
       config,
       ...(gameHistory !== undefined ? { gameHistory } : {}),
+      ...(shotClock !== undefined ? { shotClock } : {}),
       localScore: localScore ?? 0,
       visitorScore: visitorScore ?? 0,
       localFouls: localFouls ?? 0,

@@ -77,7 +77,13 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     confidence,
     isClockShiftDetected,
     resolveRecovery,
-    timerRecoveryState
+    timerRecoveryState,
+    shotClockTimeLeft,
+    isShotClockRunning,
+    isShotClockExpired,
+    isShotClockEnabled,
+    resetShotClock,
+    setShotClockEnabled
   } = useMatchTimer(match ?? undefined);
 
   // Si el reloj vuelve a tener tiempo (> 0), se resetea cualquier descarte previo para permitir
@@ -211,6 +217,12 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     confidence,
     isClockShiftDetected,
     resolveRecovery,
-    timerRecoveryState
+    timerRecoveryState,
+    shotClockTimeLeft,
+    isShotClockRunning,
+    isShotClockExpired,
+    isShotClockEnabled,
+    resetShotClock,
+    setShotClockEnabled
   };
 };

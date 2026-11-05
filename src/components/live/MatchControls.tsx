@@ -3,6 +3,7 @@ import { Play, Pause, FastForward, Clock } from 'lucide-react';
 import type { Player, Team } from '../../db/models';
 import type { GameAction } from './PlayerSelectModal';
 import { GameActionControls } from '../../features/match-creations/components/shared/GameActionControls';
+import { formatShotClock } from '../../db/matchTimer.service';
 
 interface MatchControlsProps {
   localTeam: Team;
@@ -22,6 +23,12 @@ interface MatchControlsProps {
   onToggleTimer: () => void;
   onNextQuarter: () => void;
   nextPeriodLabel?: string;
+  showShotClock?: boolean;
+  shotClockEnabled?: boolean;
+  shotClockTimeLeft?: number;
+  isShotClockRunning?: boolean;
+  isShotClockExpired?: boolean;
+  onResetShotClock?: (seconds: 24 | 14) => void;
 }
 
 const formatTime = (seconds: number) => {
@@ -48,7 +55,13 @@ export function MatchControls({
   onActionRequest,
   onToggleTimer,
   onNextQuarter,
-  nextPeriodLabel = 'Sig. Periodo'
+  nextPeriodLabel = 'Sig. Periodo',
+  showShotClock = false,
+  shotClockEnabled = false,
+  shotClockTimeLeft,
+  isShotClockRunning = false,
+  isShotClockExpired = false,
+  onResetShotClock
 }: MatchControlsProps) {
   return (
     <section className="controls-panel">
@@ -88,6 +101,50 @@ export function MatchControls({
             <FastForward size={18} />
             <span>{nextPeriodLabel}</span>
           </button>
+        </div>
+      )}
+
+      {/* 1b. RELOJ DE POSESIÓN (SHOT CLOCK) (DEPORT-04) */}
+      {showShotClock && shotClockEnabled && (
+        <div className="shot-clock-bar" data-testid="shot-clock-bar">
+          <div
+            className={`shot-clock-display ${isShotClockRunning ? 'is-running' : 'is-paused'} ${isShotClockExpired ? 'is-expired' : ''}`}
+            data-testid="shot-clock-display"
+            title={isShotClockExpired ? 'Posesión agotada' : isShotClockRunning ? 'Posesión en marcha' : 'Posesión pausada'}
+          >
+            <span className="shot-clock-label">POSESIÓN</span>
+            <span className="shot-clock-digits" data-testid="shot-clock-digits">
+              {formatShotClock(shotClockTimeLeft ?? 24)}
+            </span>
+          </div>
+
+          <div className="shot-clock-actions">
+            <button
+              type="button"
+              onClick={() => onResetShotClock?.(24)}
+              disabled={actionDisabled}
+              className="btn-shot-reset btn-shot-24"
+              data-testid="btn-shot-24"
+              title="Reiniciar posesión a 24 segundos"
+              aria-label="Reiniciar posesión a 24 segundos"
+            >
+              <span className="shot-btn-num">24</span>
+              <span className="shot-btn-sub">seg</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onResetShotClock?.(14)}
+              disabled={actionDisabled}
+              className="btn-shot-reset btn-shot-14"
+              data-testid="btn-shot-14"
+              title="Reiniciar posesión a 14 segundos"
+              aria-label="Reiniciar posesión a 14 segundos"
+            >
+              <span className="shot-btn-num">14</span>
+              <span className="shot-btn-sub">seg</span>
+            </button>
+          </div>
         </div>
       )}
 

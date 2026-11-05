@@ -1,6 +1,6 @@
 // src/features/match-creations/hooks/useGameActions.ts
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { db } from '../../../db/db';
 import { useLiveMatch } from '../components/context/LiveMatchContext';
 import { GameActionsRepository, type DeleteActionResult } from '../../../db/gameActions.repository';
@@ -13,13 +13,19 @@ export type { DeleteActionResult };
 type TeamSide = 'local' | 'visitor';
 type ScorePoints = 1 | 2 | 3;
 
+export type ExecutableGameAction =
+  | { type: 'score'; points: 1 | 2 | 3 }
+  | { type: 'foul' };
+
 export interface ActionExecutionOptions {
   expectedPeriod?: number;
+  notifyError?: boolean;
 }
 
 export interface ActionExecutionResult {
   success: boolean;
   error?: string;
+  inFlight?: boolean;
 }
 
 const getMode = (match: Match) => match.config?.mode || 'traditional';
@@ -105,6 +111,8 @@ const notifyActionError = (error: unknown, fallbackMessage: string) => {
 
 export const useGameActions = () => {
   const { match, localTeam, visitorTeam } = useLiveMatch();
+  const inFlightRef = useRef(false);
+  const [isActionPending, setIsActionPending] = useState(false);
 
   // Helper para identificar si el equipo es local desde el render actual.
   // Las escrituras usan el partido fresco dentro de cada transacción.
@@ -121,9 +129,22 @@ export const useGameActions = () => {
     playerId?: number,
     options?: ActionExecutionOptions
   ): Promise<ActionExecutionResult> => {
-    try {
-      if (!match?.id) return { success: false, error: 'Partido no disponible' };
+    if (inFlightRef.current) {
+      return {
+        success: false,
+        inFlight: true,
+        error: 'Ya hay una acción en proceso.'
+      };
+    }
 
+    if (!match?.id) {
+      return { success: false, error: 'Partido no disponible' };
+    }
+
+    inFlightRef.current = true;
+    setIsActionPending(true);
+
+    try {
       const normalizedPoints = normalizePoints(points);
       const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
       const expectedPeriod = options?.expectedPeriod ?? renderPeriod;
@@ -175,11 +196,16 @@ export const useGameActions = () => {
       playScorePop(normalizedPoints);
       return { success: true };
     } catch (error) {
-      notifyActionError(error, 'No se pudieron registrar los puntos.');
+      if (options?.notifyError !== false) {
+        notifyActionError(error, 'No se pudieron registrar los puntos.');
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : 'No se pudieron registrar los puntos.'
       };
+    } finally {
+      inFlightRef.current = false;
+      setIsActionPending(false);
     }
   }, [match]);
 
@@ -191,9 +217,22 @@ export const useGameActions = () => {
     playerId?: number,
     options?: ActionExecutionOptions
   ): Promise<ActionExecutionResult> => {
-    try {
-      if (!match?.id) return { success: false, error: 'Partido no disponible' };
+    if (inFlightRef.current) {
+      return {
+        success: false,
+        inFlight: true,
+        error: 'Ya hay una acción en proceso.'
+      };
+    }
 
+    if (!match?.id) {
+      return { success: false, error: 'Partido no disponible' };
+    }
+
+    inFlightRef.current = true;
+    setIsActionPending(true);
+
+    try {
       const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
       const expectedPeriod = options?.expectedPeriod ?? renderPeriod;
 
@@ -241,13 +280,33 @@ export const useGameActions = () => {
       playWhistle();
       return { success: true };
     } catch (error) {
-      notifyActionError(error, 'No se pudo registrar la falta.');
+      if (options?.notifyError !== false) {
+        notifyActionError(error, 'No se pudo registrar la falta.');
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : 'No se pudo registrar la falta.'
       };
+    } finally {
+      inFlightRef.current = false;
+      setIsActionPending(false);
     }
   }, [match]);
+
+  /**
+   * Ejecutor compartido para puntos o faltas en cualquier modalidad (Traditional, Race, Series).
+   */
+  const executeGameAction = useCallback(async (
+    teamId: number,
+    action: ExecutableGameAction,
+    playerId?: number,
+    options?: ActionExecutionOptions
+  ): Promise<ActionExecutionResult> => {
+    if (action.type === 'score') {
+      return addScore(teamId, action.points, playerId, options);
+    }
+    return addFoul(teamId, playerId, options);
+  }, [addScore, addFoul]);
 
   /**
    * Acción: Deshacer (Undo)
@@ -257,12 +316,32 @@ export const useGameActions = () => {
    * Acepta options?: ActionExecutionOptions o llamadas directas de eventos UI (onClick={undoLastAction}).
    */
   const undoLastAction = useCallback(async (options?: ActionExecutionOptions | unknown): Promise<DeleteActionResult> => {
+    if (inFlightRef.current) {
+      return {
+        success: false,
+        deleted: false,
+        error: 'Ya hay una acción en proceso.'
+      };
+    }
+
+    if (!match?.id) {
+      return { success: false, deleted: false, error: 'Partido no disponible' };
+    }
+
+    const parsedOptions = (
+      options &&
+      typeof options === 'object' &&
+      !('nativeEvent' in options) &&
+      ('expectedPeriod' in options || 'notifyError' in options)
+    )
+      ? (options as ActionExecutionOptions)
+      : undefined;
+
+    inFlightRef.current = true;
+    setIsActionPending(true);
+
     try {
-      if (!match?.id) return { success: false, deleted: false, error: 'Partido no disponible' };
       const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
-      const parsedOptions = (options && typeof options === 'object' && !('nativeEvent' in options) && 'expectedPeriod' in options)
-        ? (options as ActionExecutionOptions)
-        : undefined;
       const expectedPeriod = parsedOptions?.expectedPeriod ?? renderPeriod;
       const result = await GameActionsRepository.undoLastAction(match.id, expectedPeriod);
       if (!result.success) {
@@ -270,19 +349,26 @@ export const useGameActions = () => {
       }
       return result;
     } catch (error) {
-      notifyActionError(error, 'No se pudo deshacer la última acción.');
+      if (parsedOptions?.notifyError !== false) {
+        notifyActionError(error, 'No se pudo deshacer la última acción.');
+      }
       return {
         success: false,
         deleted: false,
         error: error instanceof Error ? error.message : 'No se pudo deshacer la última acción.'
       };
+    } finally {
+      inFlightRef.current = false;
+      setIsActionPending(false);
     }
   }, [match]);
 
   return {
     addScore,
     addFoul,
+    executeGameAction,
     undoLastAction,
+    isActionPending,
     isLocal,
     localTeam,
     visitorTeam

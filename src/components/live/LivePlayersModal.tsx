@@ -1,5 +1,5 @@
 // src/components/live/LivePlayersModal.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { PlayersRepository } from '../../db/players.repository';
@@ -21,11 +21,21 @@ export function LivePlayersModal({
   scoringOptions = [1, 2, 3]
 }: LivePlayersModalProps) {
   const { match, localTeam, visitorTeam, registerOpenModal } = useLiveMatch();
-  const { addScore, addFoul } = useGameActions();
+  const { addScore, addFoul, isActionPending } = useGameActions();
+  const actionLockRef = useRef(false);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return registerOpenModal('live-players-modal');
   }, [registerOpenModal]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'local' | 'visitor'>('local');
   const [addingForTeamId, setAddingForTeamId] = useState<number | null>(null);
@@ -65,27 +75,55 @@ export function LivePlayersModal({
   if (!match || !localTeam || !visitorTeam) return null;
 
   const showToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setErrorMsg(null);
     setFeedbackMsg(msg);
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setFeedbackMsg(prev => (prev === msg ? null : prev));
     }, 1800);
   };
 
   const showError = (msg: string) => {
+    if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    setFeedbackMsg(null);
     setErrorMsg(msg);
-    setTimeout(() => {
+    errorTimeoutRef.current = setTimeout(() => {
       setErrorMsg(prev => (prev === msg ? null : prev));
     }, 3500);
   };
 
   const handleQuickScore = async (teamId: number, playerId: number, playerName: string, pts: 1 | 2 | 3) => {
-    await addScore(teamId, pts, playerId);
-    showToast(`+${pts} PTS para ${playerName}`);
+    if (actionLockRef.current || isActionPending) return;
+    actionLockRef.current = true;
+    try {
+      const result = await addScore(teamId, pts, playerId, { notifyError: false });
+      if (!result.success) {
+        if (!result.inFlight) {
+          showError(result.error || 'No se pudieron registrar los puntos.');
+        }
+        return;
+      }
+      showToast(`+${pts} PTS para ${playerName}`);
+    } finally {
+      actionLockRef.current = false;
+    }
   };
 
   const handleQuickFoul = async (teamId: number, playerId: number, playerName: string) => {
-    await addFoul(teamId, playerId);
-    showToast(`Falta asignada a ${playerName}`);
+    if (actionLockRef.current || isActionPending) return;
+    actionLockRef.current = true;
+    try {
+      const result = await addFoul(teamId, playerId, { notifyError: false });
+      if (!result.success) {
+        if (!result.inFlight) {
+          showError(result.error || 'No se pudo registrar la falta.');
+        }
+        return;
+      }
+      showToast(`Falta asignada a ${playerName}`);
+    } finally {
+      actionLockRef.current = false;
+    }
   };
 
   const handleAddPlayer = async (teamId: number) => {
@@ -275,7 +313,7 @@ export function LivePlayersModal({
                       <button
                         key={pt}
                         type="button"
-                        disabled={isExpelled}
+                        disabled={isExpelled || isActionPending}
                         onClick={() => handleQuickScore(team.id!, player.id!, player.name, pt)}
                         className={`roster-quick-btn score-${side}`}
                         title={`Sumar +${pt} a ${player.name}`}
@@ -285,7 +323,7 @@ export function LivePlayersModal({
                     ))}
                     <button
                       type="button"
-                      disabled={isExpelled}
+                      disabled={isExpelled || isActionPending}
                       onClick={() => handleQuickFoul(team.id!, player.id!, player.name)}
                       className="roster-quick-btn foul"
                       title={`Registrar falta a ${player.name}`}

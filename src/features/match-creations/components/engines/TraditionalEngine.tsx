@@ -23,13 +23,21 @@ import { LiveToolsBar } from '../shared/LiveToolsBar';
 export const TraditionalEngine: React.FC = () => {
   const navigate = useNavigate();
   const { match, localTeam, visitorTeam, isActionModalOpen, setActionModalOpen } = useLiveMatch();
-  const { addScore, addFoul, undoLastAction } = useGameActions();
+  const { executeGameAction, undoLastAction, isActionPending } = useGameActions();
 
   const hasAnyPlayers = Boolean(
     (localTeam?.players && localTeam.players.length > 0) ||
     (visitorTeam?.players && visitorTeam.players.length > 0)
   );
   const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
+  const [prevHasAnyPlayers, setPrevHasAnyPlayers] = useState<boolean>(hasAnyPlayers);
+  if (hasAnyPlayers !== prevHasAnyPlayers) {
+    setPrevHasAnyPlayers(hasAnyPlayers);
+    if (hasAnyPlayers) {
+      setTrackPlayers(true);
+    }
+  }
+
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [customMinutes, setCustomMinutes] = useState('10');
   const [customSeconds, setCustomSeconds] = useState('00');
@@ -40,6 +48,7 @@ export const TraditionalEngine: React.FC = () => {
     isOpen: boolean;
     teamId: number;
     action: GameAction;
+    expectedPeriod?: number;
   }>({ isOpen: false, teamId: 0, action: { type: 'score', points: 2 } });
 
   // Sincronizar estado de modales locales con el contexto de prioridad
@@ -53,16 +62,6 @@ export const TraditionalEngine: React.FC = () => {
     setActionModalOpen('engine-dialog-modal', hasDialog);
     return () => setActionModalOpen('engine-dialog-modal', false);
   }, [showTimerModal, confirmDialog, setActionModalOpen]);
-
-  // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
-  // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
-  const prevHasAnyPlayersRef = useRef(false);
-  useEffect(() => {
-    if (hasAnyPlayers && !prevHasAnyPlayersRef.current) {
-      setTrackPlayers(true);
-    }
-    prevHasAnyPlayersRef.current = hasAnyPlayers;
-  }, [hasAnyPlayers]);
 
   useEffect(() => {
     if (match?.status === 'finished') {
@@ -121,15 +120,16 @@ export const TraditionalEngine: React.FC = () => {
     };
   }, [match?.id, match?.localTeamId, match?.visitorTeamId, match?.localFouls, match?.visitorFouls, currentQuarter]);
 
-  // Limpieza de estado local al cambiar el partido
+  // Limpieza de estado local al cambiar de un partido a otro distinto
   const currentMatchIdRef = useRef<number | undefined>(match?.id);
   useEffect(() => {
-    if (currentMatchIdRef.current !== match?.id) {
-      currentMatchIdRef.current = match?.id;
+    if (match?.id === undefined) return;
+    if (currentMatchIdRef.current !== undefined && currentMatchIdRef.current !== match.id) {
       setPlayerModal(prev => ({ ...prev, isOpen: false }));
       setShowTimerModal(false);
       setConfirmDialog(null);
     }
+    currentMatchIdRef.current = match.id;
   }, [match?.id]);
 
   if (!match || !localTeam || !visitorTeam) return null;
@@ -146,28 +146,31 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handleActionRequest = (teamId: number, action: GameAction) => {
+    if (isActionPending) return;
     if (!trackPlayers) {
-      if (action.type === 'score') {
-        addScore(teamId, action.points, undefined);
-      } else {
-        addFoul(teamId, undefined);
-      }
+      void executeGameAction(teamId, action, undefined, { expectedPeriod: currentQuarter });
       return;
     }
-    setPlayerModal({ isOpen: true, teamId, action });
+    setPlayerModal({ isOpen: true, teamId, action, expectedPeriod: currentQuarter });
   };
 
   const handlePlayerSelect = async (playerId: number | null, overrideAction?: GameAction) => {
     const finalAction = overrideAction || playerModal.action;
     const targetTeamId = playerModal.teamId;
+    const expectedPeriod = playerModal.expectedPeriod ?? currentQuarter;
 
-    if (finalAction.type === 'score') {
-      await addScore(targetTeamId, finalAction.points, playerId ?? undefined);
-    } else {
-      await addFoul(targetTeamId, playerId ?? undefined);
+    const result = await executeGameAction(
+      targetTeamId,
+      finalAction,
+      playerId ?? undefined,
+      { expectedPeriod, notifyError: false }
+    );
+
+    if (result.success) {
+      setPlayerModal(prev => ({ ...prev, isOpen: false }));
     }
 
-    setPlayerModal(prev => ({ ...prev, isOpen: false }));
+    return result;
   };
 
   const executeNextQuarter = async () => {
@@ -200,9 +203,11 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const handleUndoFromModal = async () => {
-    await undoLastAction();
-    setShowQuarterEndModal(false);
-    setShowMatchEndModal(false);
+    const result = await undoLastAction({ expectedPeriod: currentQuarter });
+    if (result.success) {
+      setShowQuarterEndModal(false);
+      setShowMatchEndModal(false);
+    }
   };
 
   const handleShareLiveResult = async () => {
@@ -371,6 +376,7 @@ export const TraditionalEngine: React.FC = () => {
         onTimerClick={hasAuthority ? openTimerEditor : undefined}
         possession={match.possession ?? null}
         onTogglePossession={handleTogglePossession}
+        actionDisabled={isActionPending}
         onToggleTimer={handleToggleTimer}
         onNextQuarter={handleNextQuarterClick}
         nextPeriodLabel={nextPeriodBtnLabel}

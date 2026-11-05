@@ -17,6 +17,7 @@ interface MatchControlsProps {
   onTogglePossession?: () => void;
   showTimer?: boolean;
   showPossession?: boolean;
+  actionDisabled?: boolean;
   onActionRequest: (teamId: number, teamName: string, players: Player[], action: GameAction) => void;
   onToggleTimer: () => void;
   onNextQuarter: () => void;
@@ -43,6 +44,7 @@ export function MatchControls({
   onTogglePossession,
   showTimer = true,
   showPossession = true,
+  actionDisabled = false,
   onActionRequest,
   onToggleTimer,
   onNextQuarter,
@@ -123,6 +125,7 @@ export function MatchControls({
             teamName={localTeam.name}
             variant="local"
             scoringOptions={[1, 2, 3]}
+            disabled={actionDisabled}
             onScore={(pts) => onActionRequest(localTeam.id!, localTeam.name, localPlayers, { type: 'score', points: pts })}
             onFoul={() => onActionRequest(localTeam.id!, localTeam.name, localPlayers, { type: 'foul' })}
           />
@@ -133,6 +136,7 @@ export function MatchControls({
             teamName={visitorTeam.name}
             variant="visitor"
             scoringOptions={[1, 2, 3]}
+            disabled={actionDisabled}
             onScore={(pts) => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, { type: 'score', points: pts })}
             onFoul={() => onActionRequest(visitorTeam.id!, visitorTeam.name, visitorPlayers, { type: 'foul' })}
           />

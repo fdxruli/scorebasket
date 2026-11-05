@@ -17,7 +17,7 @@ import type { Player } from '../../../../db/models';
 
 export const SeriesEngine: React.FC = () => {
     const { match, localTeam, visitorTeam } = useLiveMatch();
-    const { addScore, addFoul, undoLastAction } = useGameActions();
+    const { executeGameAction, undoLastAction, isActionPending } = useGameActions();
     const navigate = useNavigate();
 
     const hasAnyPlayers = Boolean(
@@ -25,18 +25,16 @@ export const SeriesEngine: React.FC = () => {
         (visitorTeam?.players && visitorTeam.players.length > 0)
     );
     const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
-    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
-    const [isSharingCard, setIsSharingCard] = useState(false);
-
-    // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
-    // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
-    const prevHasAnyPlayersRef = useRef(false);
-    useEffect(() => {
-        if (hasAnyPlayers && !prevHasAnyPlayersRef.current) {
+    const [prevHasAnyPlayers, setPrevHasAnyPlayers] = useState<boolean>(hasAnyPlayers);
+    if (hasAnyPlayers !== prevHasAnyPlayers) {
+        setPrevHasAnyPlayers(hasAnyPlayers);
+        if (hasAnyPlayers) {
             setTrackPlayers(true);
         }
-        prevHasAnyPlayersRef.current = hasAnyPlayers;
-    }, [hasAnyPlayers]);
+    }
+
+    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
+    const [isSharingCard, setIsSharingCard] = useState(false);
 
     const {
         currentSet,
@@ -62,6 +60,7 @@ export const SeriesEngine: React.FC = () => {
         teamName: string;
         players: Player[];
         action: GameAction;
+        expectedPeriod: number;
     } | null>(null);
 
     const handleEarlyFinish = async (countCurrentSet: boolean) => {
@@ -71,14 +70,15 @@ export const SeriesEngine: React.FC = () => {
         }
     };
 
-    // Limpieza de estado local al cambiar el partido
+    // Limpieza de estado local al cambiar de un partido a otro distinto
     const currentMatchIdRef = useRef<number | undefined>(match?.id);
     useEffect(() => {
-        if (currentMatchIdRef.current !== match?.id) {
-            currentMatchIdRef.current = match?.id;
+        if (match?.id === undefined) return;
+        if (currentMatchIdRef.current !== undefined && currentMatchIdRef.current !== match.id) {
             setCurrentAction(null);
             setShowEarlyFinishConfirm(false);
         }
+        currentMatchIdRef.current = match.id;
     }, [match?.id]);
 
     if (!match || !localTeam || !visitorTeam) return null;
@@ -95,30 +95,30 @@ export const SeriesEngine: React.FC = () => {
         players: Player[],
         action: GameAction
     ) => {
-        if (showSetEndModal || showSeriesEndModal) return;
+        if (showSetEndModal || showSeriesEndModal || isActionPending) return;
 
         if (!trackPlayers) {
-            if (action.type === 'score') {
-                addScore(teamId, action.points, undefined);
-            } else {
-                addFoul(teamId, undefined);
-            }
+            void executeGameAction(teamId, action, undefined, { expectedPeriod: currentSet });
             return;
         }
 
-        setCurrentAction({ teamId, teamSide, teamName, players, action });
+        setCurrentAction({ teamId, teamSide, teamName, players, action, expectedPeriod: currentSet });
     };
 
     const confirmAction = async (playerId: number | null, overrideAction?: GameAction) => {
         if (!currentAction) return;
         const finalAction = overrideAction || currentAction.action;
         const targetTeamId = currentAction.teamId;
-        if (finalAction.type === 'score') {
-            await addScore(targetTeamId, finalAction.points, playerId ?? undefined);
-        } else {
-            await addFoul(targetTeamId, playerId ?? undefined);
+        const result = await executeGameAction(
+            targetTeamId,
+            finalAction,
+            playerId ?? undefined,
+            { expectedPeriod: currentAction.expectedPeriod, notifyError: false }
+        );
+        if (result.success) {
+            setCurrentAction(null);
         }
-        setCurrentAction(null);
+        return result;
     };
 
     const handleShareLiveResult = async () => {
@@ -300,7 +300,7 @@ export const SeriesEngine: React.FC = () => {
                                     type: 'foul'
                                 })
                             }
-                            disabled={showSetEndModal || showSeriesEndModal}
+                            disabled={showSetEndModal || showSeriesEndModal || isActionPending}
                         />
                     </div>
 
@@ -320,7 +320,7 @@ export const SeriesEngine: React.FC = () => {
                                     type: 'foul'
                                 })
                             }
-                            disabled={showSetEndModal || showSeriesEndModal}
+                            disabled={showSetEndModal || showSeriesEndModal || isActionPending}
                         />
                     </div>
                 </div>

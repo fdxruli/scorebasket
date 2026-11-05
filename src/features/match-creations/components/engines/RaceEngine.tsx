@@ -17,25 +17,23 @@ import type { Player } from '../../../../db/models';
 export const RaceEngine: React.FC = () => {
     const navigate = useNavigate();
     const { match, localTeam, visitorTeam } = useLiveMatch();
-    const { addScore, addFoul, undoLastAction } = useGameActions();
+    const { executeGameAction, undoLastAction, isActionPending } = useGameActions();
 
     const hasAnyPlayers = Boolean(
         (localTeam?.players && localTeam.players.length > 0) ||
         (visitorTeam?.players && visitorTeam.players.length > 0)
     );
     const [trackPlayers, setTrackPlayers] = useState<boolean>(hasAnyPlayers);
-    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
-    const [isSharingCard, setIsSharingCard] = useState(false);
-
-    // Solo activa el rastreo al pasar de 0 jugadores a >= 1 (o en la carga inicial);
-    // si el usuario lo apaga manualmente, no se vuelve a forzar a ON.
-    const prevHasAnyPlayersRef = useRef(false);
-    useEffect(() => {
-        if (hasAnyPlayers && !prevHasAnyPlayersRef.current) {
+    const [prevHasAnyPlayers, setPrevHasAnyPlayers] = useState<boolean>(hasAnyPlayers);
+    if (hasAnyPlayers !== prevHasAnyPlayers) {
+        setPrevHasAnyPlayers(hasAnyPlayers);
+        if (hasAnyPlayers) {
             setTrackPlayers(true);
         }
-        prevHasAnyPlayersRef.current = hasAnyPlayers;
-    }, [hasAnyPlayers]);
+    }
+
+    const [showEarlyFinishConfirm, setShowEarlyFinishConfirm] = useState(false);
+    const [isSharingCard, setIsSharingCard] = useState(false);
 
     // Hooks incondicionales al nivel superior del componente (Rules of Hooks)
     const {
@@ -61,21 +59,27 @@ export const RaceEngine: React.FC = () => {
         teamName: string;
         players: Player[];
         action: GameAction;
+        expectedPeriod: number;
     } | null>(null);
 
-    // Limpieza de estado local si cambia el identificador del partido
+    // Limpieza de estado local si cambia de un partido a otro distinto
     const currentMatchIdRef = useRef<number | undefined>(match?.id);
     useEffect(() => {
-        if (currentMatchIdRef.current !== match?.id) {
-            currentMatchIdRef.current = match?.id;
+        if (match?.id === undefined) return;
+        if (currentMatchIdRef.current !== undefined && currentMatchIdRef.current !== match.id) {
             setCurrentAction(null);
             setShowEarlyFinishConfirm(false);
         }
+        currentMatchIdRef.current = match.id;
     }, [match?.id]);
 
     if (!match || !localTeam || !visitorTeam) return null;
 
     const scoringOptions: (1 | 2 | 3)[] = scoringSystem === 'street' ? [1, 2] : [1, 2, 3];
+    const gameHistory = match.gameHistory || [];
+    const localGamesWon = gameHistory.filter(g => g.winner === 'local').length;
+    const visitorGamesWon = gameHistory.filter(g => g.winner === 'visitor').length;
+    const currentGameNum = match.config?.race?.currentGame || 1;
 
     const requestAction = (
         teamId: number,
@@ -84,30 +88,30 @@ export const RaceEngine: React.FC = () => {
         players: Player[],
         action: GameAction
     ) => {
-        if (showMatchEndModal) return;
+        if (showMatchEndModal || isActionPending) return;
 
         if (!trackPlayers) {
-            if (action.type === 'score') {
-                addScore(teamId, action.points, undefined);
-            } else {
-                addFoul(teamId, undefined);
-            }
+            void executeGameAction(teamId, action, undefined, { expectedPeriod: currentGameNum });
             return;
         }
 
-        setCurrentAction({ teamId, teamSide, teamName, players, action });
+        setCurrentAction({ teamId, teamSide, teamName, players, action, expectedPeriod: currentGameNum });
     };
 
     const confirmAction = async (playerId: number | null, overrideAction?: GameAction) => {
         if (!currentAction) return;
         const finalAction = overrideAction || currentAction.action;
         const targetTeamId = currentAction.teamId;
-        if (finalAction.type === 'score') {
-            await addScore(targetTeamId, finalAction.points, playerId ?? undefined);
-        } else {
-            await addFoul(targetTeamId, playerId ?? undefined);
+        const result = await executeGameAction(
+            targetTeamId,
+            finalAction,
+            playerId ?? undefined,
+            { expectedPeriod: currentAction.expectedPeriod, notifyError: false }
+        );
+        if (result.success) {
+            setCurrentAction(null);
         }
-        setCurrentAction(null);
+        return result;
     };
 
     const handleShareLiveResult = async () => {
@@ -125,11 +129,6 @@ export const RaceEngine: React.FC = () => {
             setIsSharingCard(false);
         }
     };
-
-    const gameHistory = match.gameHistory || [];
-    const localGamesWon = gameHistory.filter(g => g.winner === 'local').length;
-    const visitorGamesWon = gameHistory.filter(g => g.winner === 'visitor').length;
-    const currentGameNum = match.config?.race?.currentGame || 1;
 
     return (
         <div className="live-layout">
@@ -190,7 +189,7 @@ export const RaceEngine: React.FC = () => {
                                     type: 'foul'
                                 })
                             }
-                            disabled={showMatchEndModal}
+                            disabled={showMatchEndModal || isActionPending}
                         />
                     </div>
 
@@ -211,7 +210,7 @@ export const RaceEngine: React.FC = () => {
                                     type: 'foul'
                                 })
                             }
-                            disabled={showMatchEndModal}
+                            disabled={showMatchEndModal || isActionPending}
                         />
                     </div>
                 </div>

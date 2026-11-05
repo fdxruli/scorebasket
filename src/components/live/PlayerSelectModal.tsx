@@ -5,6 +5,7 @@ import { db } from '../../db/db';
 import type { Player } from '../../db/models';
 import { PlayersRepository } from '../../db/players.repository';
 import { LiveMatchContext } from '../../features/match-creations/components/context/LiveMatchContext';
+import type { ActionExecutionResult } from '../../features/match-creations/hooks/useGameActions';
 import { ModalLiveStatusPill } from './ModalLiveStatusPill';
 import { Trophy, AlertCircle, UserX, Shirt, Plus, X, Check, UserPlus } from 'lucide-react';
 
@@ -19,7 +20,7 @@ interface PlayerSelectModalProps {
     players: Player[];
     action: GameAction;
     scoringOptions?: (1 | 2 | 3)[];
-    onSelect: (playerId: number | null, overrideAction?: GameAction) => void;
+    onSelect: (playerId: number | null, overrideAction?: GameAction) => void | Promise<void | ActionExecutionResult>;
     onCancel: () => void;
     /** Partido actual: permite mostrar puntos y faltas acumuladas de cada jugador */
     matchId?: number;
@@ -54,6 +55,9 @@ export function PlayerSelectModal({
     const [newName, setNewName] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const submittingRef = useRef(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
     const isFoul = activeAction.type === 'foul';
@@ -84,12 +88,36 @@ export function PlayerSelectModal({
 
     const resolvedTeamId = teamId ?? players[0]?.teamId;
 
+    const handleSelectAction = async (playerId: number | null, overrideAction?: GameAction) => {
+        if (submittingRef.current || isAdding) return;
+        submittingRef.current = true;
+        setIsSubmitting(true);
+        setActionError(null);
+
+        try {
+            const result = await onSelect(playerId, overrideAction ?? activeAction);
+            if (result && typeof result === 'object' && 'success' in result && !result.success) {
+                if (!result.inFlight) {
+                    setActionError(result.error || 'No se pudo registrar la acción. Intenta nuevamente.');
+                }
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'No se pudo registrar la acción. Intenta nuevamente.';
+            setActionError(msg);
+        } finally {
+            submittingRef.current = false;
+            setIsSubmitting(false);
+        }
+    };
+
     const handleQuickAddPlayer = async (assignImmediately: boolean) => {
         const trimmedName = newName.trim();
-        if (!trimmedName || !resolvedTeamId || isAdding) return;
+        if (!trimmedName || !resolvedTeamId || isAdding || submittingRef.current) return;
 
         setIsAdding(true);
         setAddError(null);
+        setActionError(null);
+        let createdPlayerId: number | undefined;
         try {
             const newId = await PlayersRepository.create({
                 teamId: resolvedTeamId,
@@ -102,13 +130,17 @@ export function PlayerSelectModal({
             setShowQuickAdd(false);
 
             if (assignImmediately && typeof newId === 'number') {
-                onSelect(newId, activeAction);
+                createdPlayerId = newId;
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Error al agregar jugador rápido.';
             setAddError(msg);
         } finally {
             setIsAdding(false);
+        }
+
+        if (createdPlayerId !== undefined) {
+            await handleSelectAction(createdPlayerId, activeAction);
         }
     };
 
@@ -164,7 +196,11 @@ export function PlayerSelectModal({
                                 <button
                                     key={pts}
                                     type="button"
-                                    onClick={() => setActiveAction({ type: 'score', points: pts })}
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        setActionError(null);
+                                        setActiveAction({ type: 'score', points: pts });
+                                    }}
                                     className={`pm-switch-pill ${isSelected ? 'active-score' : ''}`}
                                 >
                                     +{pts} PTS
@@ -173,13 +209,41 @@ export function PlayerSelectModal({
                         })}
                         <button
                             type="button"
-                            onClick={() => setActiveAction({ type: 'foul' })}
+                            disabled={isSubmitting}
+                            onClick={() => {
+                                setActionError(null);
+                                setActiveAction({ type: 'foul' });
+                            }}
                             className={`pm-switch-pill ${isFoul ? 'active-foul' : ''}`}
                         >
                             <AlertCircle size={13} />
                             FALTA
                         </button>
                     </div>
+
+                    {actionError && (
+                        <div
+                            role="alert"
+                            data-testid="player-select-error"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                marginTop: '0.6rem',
+                                padding: '0.55rem 0.75rem',
+                                borderRadius: 'var(--radius-sm)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                                border: '1px solid var(--danger)',
+                                color: '#fecaca',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                textAlign: 'left'
+                            }}
+                        >
+                            <AlertCircle size={16} style={{ flexShrink: 0, color: 'var(--danger)' }} />
+                            <span>{actionError}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* GRID GRANDE DE JUGADORES */}
@@ -194,9 +258,11 @@ export function PlayerSelectModal({
                             <button
                                 key={p.id}
                                 type="button"
-                                disabled={isExpelled}
+                                disabled={isExpelled || isSubmitting}
                                 onClick={() => {
-                                    if (!isExpelled) onSelect(p.id!, activeAction);
+                                    if (!isExpelled) {
+                                        void handleSelectAction(p.id!, activeAction);
+                                    }
                                 }}
                                 className={`pm-player-btn ${isExpelled ? 'is-expelled' : ''} ${isFoulTrouble ? 'is-warning' : ''}`}
                             >
@@ -241,6 +307,7 @@ export function PlayerSelectModal({
                     {resolvedTeamId && !showQuickAdd && (
                         <button
                             type="button"
+                            disabled={isSubmitting}
                             onClick={() => {
                                 setShowQuickAdd(true);
                                 setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -296,14 +363,14 @@ export function PlayerSelectModal({
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleQuickAddPlayer(true);
+                                    if (e.key === 'Enter') void handleQuickAddPlayer(true);
                                 }}
                                 className="input pm-input-name"
                             />
                             <button
                                 type="button"
-                                disabled={!newName.trim() || isAdding}
-                                onClick={() => handleQuickAddPlayer(true)}
+                                disabled={!newName.trim() || isAdding || isSubmitting}
+                                onClick={() => void handleQuickAddPlayer(true)}
                                 className="btn btn-primary pm-quick-save-btn"
                                 title="Guardar jugador y asignarle esta acción"
                             >
@@ -323,7 +390,8 @@ export function PlayerSelectModal({
                 <div className="variant-game-footer pm-footer-actions">
                     <button
                         type="button"
-                        onClick={() => onSelect(null, activeAction)}
+                        disabled={isSubmitting}
+                        onClick={() => void handleSelectAction(null, activeAction)}
                         className="btn pm-unassigned-btn"
                     >
                         {isFoul ? <Shirt size={18} /> : <UserX size={18} />}

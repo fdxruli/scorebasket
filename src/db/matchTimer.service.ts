@@ -25,6 +25,23 @@ export interface TimerOperationResult {
   epoch?: number;
   precisionSource?: TimePrecisionSource;
   confidence?: TimeConfidence;
+  shotClockExpired?: boolean;
+}
+
+export interface ShotClockProjection {
+  enabled: boolean;
+  timeLeft: number;
+  isRunning: boolean;
+  expired: boolean;
+}
+
+export interface ShotClockOperationResult {
+  status: TimerOperationStatus;
+  matchId: number;
+  shotClockSecondsRemaining: number;
+  isRunning: boolean;
+  reason?: string;
+  epoch?: number;
 }
 
 export interface TimerSnapshot {
@@ -157,6 +174,77 @@ function calculateMonotonicElapsed(
 }
 
 /**
+ * Almacenamiento en memoria para medición monotónica de posesión (shot clock) (DEPORT-04).
+ */
+const sessionShotClockMonotonicStarts = new Map<number, { perfStart: number; wallStartMs: number }>();
+
+export function formatShotClock(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  return s.toString().padStart(2, '0');
+}
+
+function calculateShotClockMonotonicElapsed(
+  matchId: number,
+  lastStartMs: number,
+  nowMs: number,
+  options?: TimerServiceOptions
+): MonotonicElapsedResult {
+  const localSession = sessionShotClockMonotonicStarts.get(matchId);
+
+  if (localSession && localSession.wallStartMs === lastStartMs) {
+    let perfElapsed: number | null = null;
+
+    if (options?.simulatedPerfNowMs !== undefined) {
+      perfElapsed = Math.max(0, (options.simulatedPerfNowMs - localSession.perfStart) / 1000);
+    } else if (options?.nowMs === undefined && typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      perfElapsed = Math.max(0, (performance.now() - localSession.perfStart) / 1000);
+    }
+
+    if (perfElapsed !== null) {
+      const wallElapsed = (nowMs - lastStartMs) / 1000;
+      const isShift = Math.abs(wallElapsed - perfElapsed) > 10 || nowMs < lastStartMs;
+      return {
+        elapsedSeconds: perfElapsed,
+        source: 'monotonic_session',
+        isClockShiftDetected: isShift,
+        clockShiftSeverity: isShift ? (nowMs < lastStartMs || wallElapsed < perfElapsed ? 'backward' : 'forward_jump') : 'none',
+        confidence: 'high'
+      };
+    }
+  }
+
+  if (nowMs < lastStartMs) {
+    return {
+      elapsedSeconds: 0,
+      source: 'anomalous_clamp',
+      isClockShiftDetected: true,
+      clockShiftSeverity: 'backward',
+      confidence: 'uncertain'
+    };
+  }
+
+  const wallElapsed = (nowMs - lastStartMs) / 1000;
+  const isSuspiciousJump = wallElapsed > 86400;
+  if (isSuspiciousJump) {
+    return {
+      elapsedSeconds: 0,
+      source: 'anomalous_clamp',
+      isClockShiftDetected: true,
+      clockShiftSeverity: 'forward_jump',
+      confidence: 'uncertain'
+    };
+  }
+
+  return {
+    elapsedSeconds: wallElapsed,
+    source: 'wall_clock_recovered',
+    isClockShiftDetected: false,
+    clockShiftSeverity: 'none',
+    confidence: 'approximate'
+  };
+}
+
+/**
  * Servicio Central de Autoridad y Dominio del Cronómetro (Fase 2C).
  */
 export const MatchTimerService = {
@@ -227,6 +315,71 @@ export const MatchTimerService = {
       clockShiftSeverity: res.clockShiftSeverity,
       confidence: res.confidence,
       precisionSource: res.source
+    };
+  },
+
+  /**
+   * Proyección temporal pura del reloj de posesión (DEPORT-04).
+   */
+  projectShotClock(
+    match: Match | undefined,
+    nowMs: number = Date.now(),
+    options?: TimerServiceOptions
+  ): ShotClockProjection {
+    if (!match || !match.shotClock || !match.shotClock.enabled) {
+      return {
+        enabled: false,
+        timeLeft: 24,
+        isRunning: false,
+        expired: false
+      };
+    }
+
+    const baseRemaining = Math.max(0, match.shotClock.secondsRemaining ?? 24);
+    const isRunning = Boolean(match.shotClock.lastStart && match.timerLastStart);
+    const isRecoveryRequired = match.timerRecoveryState === 'recovery_required';
+
+    if (!isRunning || !match.shotClock.lastStart) {
+      return {
+        enabled: true,
+        timeLeft: baseRemaining,
+        isRunning: false,
+        expired: match.status !== 'finished' && baseRemaining <= 0
+      };
+    }
+
+    if (isRecoveryRequired) {
+      return {
+        enabled: true,
+        timeLeft: baseRemaining,
+        isRunning: true,
+        expired: false
+      };
+    }
+
+    const isCustomNow = options?.nowMs !== undefined || Math.abs(nowMs - Date.now()) > 1000;
+    const res = calculateShotClockMonotonicElapsed(
+      match.id!,
+      match.shotClock.lastStart.getTime(),
+      nowMs,
+      options ?? (isCustomNow ? { nowMs } : undefined)
+    );
+
+    if (res.confidence === 'uncertain') {
+      return {
+        enabled: true,
+        timeLeft: baseRemaining,
+        isRunning: true,
+        expired: false
+      };
+    }
+
+    const effective = Math.max(0, baseRemaining - res.elapsedSeconds);
+    return {
+      enabled: true,
+      timeLeft: effective,
+      isRunning: effective > 0,
+      expired: effective <= 0
     };
   },
 
@@ -573,12 +726,35 @@ export const MatchTimerService = {
       }
 
       const startDate = new Date(nowMs);
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         timerLastStart: startDate,
         status: 'playing',
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId
-      });
+      };
+
+      if (match!.shotClock?.enabled) {
+        if (match!.shotClock.secondsRemaining > 0) {
+          updateData.shotClock = {
+            ...match!.shotClock,
+            lastStart: startDate
+          };
+          sessionShotClockMonotonicStarts.set(matchId, {
+            perfStart:
+              options?.simulatedPerfNowMs ??
+              (typeof performance !== 'undefined' ? performance.now() : 0),
+            wallStartMs: nowMs
+          });
+        } else {
+          updateData.shotClock = {
+            ...match!.shotClock,
+            lastStart: undefined
+          };
+          sessionShotClockMonotonicStarts.delete(matchId);
+        }
+      }
+
+      await db.matches.update(matchId, updateData);
 
       // Medición monotónica de hardware en la sesión actual
       sessionMonotonicStarts.set(matchId, {
@@ -681,6 +857,27 @@ export const MatchTimerService = {
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId
       };
+
+      if (match!.shotClock?.enabled && match!.shotClock.lastStart) {
+        const shotLastStartMs = match!.shotClock.lastStart.getTime();
+        const { elapsedSeconds: shotElapsed, confidence: shotConfidence } = calculateShotClockMonotonicElapsed(
+          matchId,
+          shotLastStartMs,
+          nowMs,
+          options
+        );
+        const currentShotRemaining = Math.max(0, match!.shotClock.secondsRemaining ?? 24);
+        const newShotRemaining = (shotConfidence === 'uncertain' || confidence === 'uncertain')
+          ? currentShotRemaining
+          : Math.max(0, currentShotRemaining - shotElapsed);
+
+        updateData.shotClock = {
+          ...match!.shotClock,
+          secondsRemaining: newShotRemaining,
+          lastStart: undefined
+        };
+        sessionShotClockMonotonicStarts.delete(matchId);
+      }
 
       if (confidence === 'uncertain') {
         updateData.timerRecoveryState = 'recovery_required';
@@ -809,6 +1006,15 @@ export const MatchTimerService = {
       if (match!.timerRecoveryState === 'recovery_required') {
         updateData.timerRecoveryState = 'normal';
         updateData.timerRecoveryReason = undefined;
+      }
+
+      if (match!.shotClock?.enabled) {
+        updateData.shotClock = {
+          enabled: true,
+          secondsRemaining: 24,
+          lastStart: undefined
+        };
+        sessionShotClockMonotonicStarts.delete(matchId);
       }
 
       if (this._testPreCommitHook) {
@@ -1146,12 +1352,25 @@ export const MatchTimerService = {
         }
 
         sessionMonotonicStarts.delete(matchId);
-        await db.matches.update(matchId, {
+        sessionShotClockMonotonicStarts.delete(matchId);
+        const updateData: Partial<Match> = {
           timerLastStart: undefined,
           timerSecondsRemaining: 0,
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
-        });
+        };
+
+        if (match.shotClock?.enabled && match.shotClock.lastStart) {
+          const shotElapsed = calculateShotClockMonotonicElapsed(matchId, match.shotClock.lastStart.getTime(), nowMs, options).elapsedSeconds;
+          const currentShot = Math.max(0, match.shotClock.secondsRemaining ?? 24);
+          updateData.shotClock = {
+            ...match.shotClock,
+            secondsRemaining: Math.max(0, currentShot - shotElapsed),
+            lastStart: undefined
+          };
+        }
+
+        await db.matches.update(matchId, updateData);
 
         return {
           status: 'applied',
@@ -1168,6 +1387,34 @@ export const MatchTimerService = {
         const coord = options?.coordinator ?? timerAuthorityCoordinator;
         const currentAuth = coord.getAuthorityState(matchId);
         const isOwner = currentAuth.hasAuthority && (options?.epoch === undefined || options.epoch === currentAuth.epoch);
+
+        let shotClockExpired = false;
+        if (match.shotClock?.enabled && match.shotClock.lastStart) {
+          const { elapsedSeconds: shotElapsed, confidence: shotConf } = calculateShotClockMonotonicElapsed(
+            matchId,
+            match.shotClock.lastStart.getTime(),
+            nowMs,
+            options
+          );
+          if (shotConf !== 'uncertain') {
+            const currentShot = Math.max(0, match.shotClock.secondsRemaining ?? 24);
+            const shotLeft = Math.max(0, currentShot - shotElapsed);
+            if (shotLeft <= 0) {
+              shotClockExpired = true;
+              if (isOwner) {
+                await db.matches.update(matchId, {
+                  shotClock: {
+                    ...match.shotClock,
+                    secondsRemaining: 0,
+                    lastStart: undefined
+                  }
+                });
+                sessionShotClockMonotonicStarts.delete(matchId);
+              }
+            }
+          }
+        }
+
         return {
           status: isOwner ? 'applied' : 'already_applied',
           matchId,
@@ -1177,6 +1424,7 @@ export const MatchTimerService = {
           epoch: currentAuth.epoch,
           precisionSource: source,
           confidence,
+          shotClockExpired,
           reason: isOwner ? undefined : 'Reconciliación en modo observador (solo lectura, sin mutación en BD).'
         };
       }
@@ -1258,12 +1506,13 @@ export const MatchTimerService = {
       const targetSeconds = minutesPerQuarter * 60;
 
       sessionMonotonicStarts.delete(matchId);
+      sessionShotClockMonotonicStarts.delete(matchId);
 
       if (this._testPreCommitHook) {
         await this._testPreCommitHook(matchId);
       }
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         currentQuarter: nextQ,
         timerSecondsRemaining: targetSeconds,
         timerLastStart: undefined,
@@ -1272,7 +1521,17 @@ export const MatchTimerService = {
         timerEpoch: authCheck.callerEpoch,
         timerOwnerTabId: authCheck.callerTabId,
         ...(isNewHalf ? { localTimeouts: 0, visitorTimeouts: 0 } : {})
-      });
+      };
+
+      if (match!.shotClock?.enabled) {
+        updateData.shotClock = {
+          enabled: true,
+          secondsRemaining: 24,
+          lastStart: undefined
+        };
+      }
+
+      await db.matches.update(matchId, updateData);
 
       return {
         status: 'applied',
@@ -1326,12 +1585,13 @@ export const MatchTimerService = {
       const targetSeconds = overtimeMinutes * 60;
 
       sessionMonotonicStarts.delete(matchId);
+      sessionShotClockMonotonicStarts.delete(matchId);
 
       if (this._testPreCommitHook) {
         await this._testPreCommitHook(matchId);
       }
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         currentQuarter: nextQ,
         timerSecondsRemaining: targetSeconds,
         timerLastStart: undefined,
@@ -1341,7 +1601,17 @@ export const MatchTimerService = {
         timerOwnerTabId: authCheck.callerTabId,
         localTimeouts: 0,
         visitorTimeouts: 0
-      });
+      };
+
+      if (match!.shotClock?.enabled) {
+        updateData.shotClock = {
+          enabled: true,
+          secondsRemaining: 24,
+          lastStart: undefined
+        };
+      }
+
+      await db.matches.update(matchId, updateData);
 
       return {
         status: 'applied',
@@ -1434,6 +1704,7 @@ export const MatchTimerService = {
       }
 
       sessionMonotonicStarts.delete(matchId);
+      sessionShotClockMonotonicStarts.delete(matchId);
 
       const nextEpoch = authCheck.callerEpoch + 1;
 
@@ -1441,7 +1712,7 @@ export const MatchTimerService = {
         await this._testPreCommitHook(matchId);
       }
 
-      await db.matches.update(matchId, {
+      const updateData: Partial<Match> = {
         status: 'finished',
         finishedAt: new Date(nowMs),
         timerSecondsRemaining: effectiveRemaining,
@@ -1451,7 +1722,29 @@ export const MatchTimerService = {
         timerEpoch: nextEpoch,
         timerOwnerTabId: authCheck.callerTabId,
         timerLeaseExpiresAt: 0
-      });
+      };
+
+      if (match!.shotClock?.enabled) {
+        let effectiveShotRemaining = Math.max(0, match!.shotClock.secondsRemaining ?? 24);
+        if (match!.shotClock.lastStart) {
+          const { elapsedSeconds: shotElapsed, confidence: shotConfidence } = calculateShotClockMonotonicElapsed(
+            matchId,
+            match!.shotClock.lastStart.getTime(),
+            nowMs,
+            options
+          );
+          if (shotConfidence !== 'uncertain') {
+            effectiveShotRemaining = Math.max(0, effectiveShotRemaining - shotElapsed);
+          }
+        }
+        updateData.shotClock = {
+          enabled: true,
+          secondsRemaining: effectiveShotRemaining,
+          lastStart: undefined
+        };
+      }
+
+      await db.matches.update(matchId, updateData);
 
       return {
         status: 'applied',
@@ -1463,6 +1756,299 @@ export const MatchTimerService = {
     });
 
     return await opPromise;
+    });
+  },
+
+  /**
+   * Activa o desactiva el reloj de posesión de forma atómica y transaccional (DEPORT-04).
+   * Solo está permitido con el cronómetro principal detenido y con autoridad válida.
+   */
+  setShotClockEnabled(
+    matchId: number,
+    enabled: boolean,
+    options?: TimerServiceOptions
+  ): Promise<ShotClockOperationResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return {
+          status: 'rejected',
+          matchId,
+          shotClockSecondsRemaining: 24,
+          isRunning: false,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          isRunning: false,
+          reason: 'El partido ya ha finalizado. No se puede modificar el reloj de posesión.'
+        };
+      }
+
+      if (matchBefore.timerLastStart) {
+        return {
+          status: 'rejected',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          isRunning: true,
+          reason: 'El reloj de posesión solo puede activarse o desactivarse con el cronómetro principal detenido.'
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          isRunning: false,
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+
+      const opPromise = db.transaction('rw', db.matches, async (): Promise<ShotClockOperationResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match?.shotClock?.secondsRemaining ?? 24),
+            isRunning: false,
+            reason: authCheck.reason,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        if (match!.timerLastStart) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            isRunning: true,
+            reason: 'El reloj de posesión solo puede activarse o desactivarse con el cronómetro principal detenido.'
+          };
+        }
+
+        const updateData: Partial<Match> = {
+          shotClock: {
+            enabled,
+            secondsRemaining: enabled ? (match!.shotClock?.secondsRemaining ?? 24) : 24,
+            lastStart: undefined
+          },
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        };
+
+        sessionShotClockMonotonicStarts.delete(matchId);
+
+        if (this._testPreCommitHook) {
+          await this._testPreCommitHook(matchId);
+        }
+
+        await db.matches.update(matchId, updateData);
+
+        return {
+          status: 'applied',
+          matchId,
+          shotClockSecondsRemaining: updateData.shotClock!.secondsRemaining,
+          isRunning: false,
+          epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Reinicia rápidamente la posesión a 24 o 14 segundos (DEPORT-04).
+   * - Si el cronómetro principal está corriendo, el conteo continúa inmediatamente.
+   * - Si el cronómetro principal está pausado, permanece detenido.
+   * - Operación atómica, segura e idempotente ante pulsaciones repetidas.
+   */
+  resetShotClock(
+    matchId: number,
+    seconds: 24 | 14,
+    options?: TimerServiceOptions
+  ): Promise<ShotClockOperationResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return {
+          status: 'rejected',
+          matchId,
+          shotClockSecondsRemaining: seconds,
+          isRunning: false,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? seconds),
+          isRunning: false,
+          reason: 'El partido ya ha finalizado. No se puede reiniciar el reloj de posesión.'
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? seconds),
+          isRunning: Boolean(matchBefore.timerLastStart && matchBefore.shotClock?.lastStart),
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+
+      const opPromise = db.transaction('rw', db.matches, async (): Promise<ShotClockOperationResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match?.shotClock?.secondsRemaining ?? seconds),
+            isRunning: Boolean(match?.timerLastStart && match?.shotClock?.lastStart),
+            reason: authCheck.reason,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        const isMainRunning = Boolean(match!.timerLastStart);
+        const startDate = isMainRunning ? new Date(nowMs) : undefined;
+
+        const updateData: Partial<Match> = {
+          shotClock: {
+            enabled: true,
+            secondsRemaining: seconds,
+            lastStart: startDate
+          },
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        };
+
+        if (isMainRunning) {
+          sessionShotClockMonotonicStarts.set(matchId, {
+            perfStart:
+              options?.simulatedPerfNowMs ??
+              (typeof performance !== 'undefined' ? performance.now() : 0),
+            wallStartMs: nowMs
+          });
+        } else {
+          sessionShotClockMonotonicStarts.delete(matchId);
+        }
+
+        if (this._testPreCommitHook) {
+          await this._testPreCommitHook(matchId);
+        }
+
+        await db.matches.update(matchId, updateData);
+
+        return {
+          status: 'applied',
+          matchId,
+          shotClockSecondsRemaining: seconds,
+          isRunning: isMainRunning,
+          epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Persiste la expiración del reloj de posesión en 00 y lo detiene hasta nuevo reinicio (DEPORT-04).
+   * No altera el cronómetro principal, el marcador ni la posesión.
+   */
+  expireShotClock(
+    matchId: number,
+    options?: TimerServiceOptions
+  ): Promise<ShotClockOperationResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore || !matchBefore.shotClock?.enabled) {
+        return {
+          status: 'already_applied',
+          matchId,
+          shotClockSecondsRemaining: 0,
+          isRunning: false
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          shotClockSecondsRemaining: 0,
+          isRunning: false
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 0),
+          isRunning: Boolean(matchBefore.timerLastStart && matchBefore.shotClock?.lastStart),
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+
+      const opPromise = db.transaction('rw', db.matches, async (): Promise<ShotClockOperationResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            shotClockSecondsRemaining: 0,
+            isRunning: false,
+            reason: authCheck.reason,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        sessionShotClockMonotonicStarts.delete(matchId);
+
+        await db.matches.update(matchId, {
+          shotClock: {
+            ...match!.shotClock,
+            enabled: true,
+            secondsRemaining: 0,
+            lastStart: undefined
+          },
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        });
+
+        return {
+          status: 'applied',
+          matchId,
+          shotClockSecondsRemaining: 0,
+          isRunning: false,
+          epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
     });
   }
 };

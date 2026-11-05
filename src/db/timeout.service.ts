@@ -107,6 +107,16 @@ export const TimeoutService = {
         nextSecondsRemaining = Math.max(0, (match.timerSecondsRemaining ?? 0) - elapsed);
         updates.timerLastStart = undefined;
         updates.timerSecondsRemaining = nextSecondsRemaining;
+
+        if (match.shotClock?.enabled && match.shotClock.lastStart) {
+          const shotElapsed = Math.max(0, (nowMs - match.shotClock.lastStart.getTime()) / 1000);
+          const nextShotRemaining = Math.max(0, (match.shotClock.secondsRemaining ?? 24) - shotElapsed);
+          (updates as Record<string, unknown>).shotClock = {
+            ...match.shotClock,
+            secondsRemaining: nextShotRemaining,
+            lastStart: undefined
+          };
+        }
       }
 
       await db.matches.update(matchId, updates);

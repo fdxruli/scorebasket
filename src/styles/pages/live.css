@@ -1531,6 +1531,141 @@
 
 .btn-transport.is-secondary { color: var(--text-secondary); font-size: 0.8rem; }
 
+/* 1b. Reloj de Posesión (Shot Clock) - DEPORT-04 */
+.shot-clock-bar {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0.15rem 0 0.1rem;
+}
+
+.shot-clock-display {
+  height: 3.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #151928 0%, #080a10 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.15rem 0.35rem;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.shot-clock-display.is-running {
+  border-color: rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.22);
+}
+
+.shot-clock-display.is-expired {
+  border-color: rgba(239, 68, 68, 0.9);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.22) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.35);
+}
+
+.shot-clock-label {
+  font-family: var(--font-sans);
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.shot-clock-display.is-running .shot-clock-label {
+  color: #fbbf24;
+}
+
+.shot-clock-display.is-expired .shot-clock-label {
+  color: #f87171;
+}
+
+.shot-clock-digits {
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+}
+
+.shot-clock-display.is-running .shot-clock-digits {
+  color: #fef08a;
+  text-shadow: 0 0 8px rgba(250, 204, 21, 0.45);
+}
+
+.shot-clock-display.is-expired .shot-clock-digits {
+  color: #fca5a5;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.65);
+}
+
+.shot-clock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  grid-column: span 2;
+}
+
+.btn-shot-reset {
+  height: 3.1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-shot-reset:active {
+  transform: scale(0.96);
+}
+
+.btn-shot-24 {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.16) 0%, rgba(2, 132, 199, 0.08) 100%);
+  color: var(--secondary-light);
+}
+
+.btn-shot-24:hover {
+  border-color: rgba(56, 189, 248, 0.7);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.25) 0%, rgba(2, 132, 199, 0.14) 100%);
+}
+
+.btn-shot-14 {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.08) 100%);
+  color: #fbbf24;
+}
+
+.btn-shot-14:hover {
+  border-color: rgba(245, 158, 11, 0.7);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.14) 100%);
+}
+
+.shot-btn-num {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.shot-btn-sub {
+  font-family: var(--font-sans);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
 /* 2. Botón de Posesión Fluido y Visible (en medio de las zonas de juego) */
 .possession-hub-container {
   width: 100%;
@@ -2076,6 +2211,44 @@
   .btn-transport.is-secondary {
     height: 2.7rem !important;
     font-size: 0.72rem !important;
+  }
+
+  /* Reloj de Posesión en Landscape (DEPORT-04) */
+  .shot-clock-bar {
+    grid-column: 2 !important;
+    grid-row: 5 !important;
+    max-width: 220px !important;
+    margin: 0 auto 0.15rem !important;
+    gap: 0.25rem !important;
+  }
+
+  .shot-clock-display {
+    height: 2.2rem !important;
+    padding: 0.1rem 0.25rem !important;
+  }
+
+  .shot-clock-label {
+    font-size: 0.48rem !important;
+  }
+
+  .shot-clock-digits {
+    font-size: 1.1rem !important;
+  }
+
+  .shot-clock-actions {
+    gap: 0.25rem !important;
+  }
+
+  .btn-shot-reset {
+    height: 2.2rem !important;
+  }
+
+  .shot-btn-num {
+    font-size: 0.95rem !important;
+  }
+
+  .shot-btn-sub {
+    font-size: 0.48rem !important;
   }
 
   /* Fila 5 Centro: Botón de Posesión Fluido y Visible (en medio de faltas/puntos) */

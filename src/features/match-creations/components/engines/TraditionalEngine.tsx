@@ -97,7 +97,13 @@ export const TraditionalEngine: React.FC = () => {
     confidence,
     isClockShiftDetected,
     resolveRecovery,
-    timerRecoveryState
+    timerRecoveryState,
+    shotClockTimeLeft,
+    isShotClockRunning,
+    isShotClockExpired,
+    isShotClockEnabled,
+    resetShotClock,
+    setShotClockEnabled
   } = useTraditionalLogic({ match, isActionModalOpen: isOverlayBlocking });
 
   useEffect(() => {
@@ -277,6 +283,12 @@ export const TraditionalEngine: React.FC = () => {
         showBuzzer
         onManageLineups={() => setShowLineupModal(true)}
         lineupsEnabled={lineupsActive}
+        onToggleShotClock={async () => {
+          if (isTimerRunning) return;
+          await setShotClockEnabled(!isShotClockEnabled);
+        }}
+        shotClockEnabled={isShotClockEnabled}
+        isTimerRunning={isTimerRunning}
       />
 
       {!hasAuthority && (
@@ -388,6 +400,15 @@ export const TraditionalEngine: React.FC = () => {
         onNextQuarter={handleNextQuarterClick}
         nextPeriodLabel={nextPeriodBtnLabel}
         onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}
+        showShotClock={true}
+        shotClockEnabled={isShotClockEnabled}
+        shotClockTimeLeft={shotClockTimeLeft}
+        isShotClockRunning={isShotClockRunning}
+        isShotClockExpired={isShotClockExpired}
+        onResetShotClock={async (seconds) => {
+          if (match.status === 'finished') return;
+          await resetShotClock(seconds);
+        }}
       />
 
       {playerModal.isOpen && (

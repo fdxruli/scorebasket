@@ -24,6 +24,14 @@ export interface UseMatchTimerReturn {
   isClockShiftDetected: boolean;
   resolveRecovery: (validatedSeconds?: number) => Promise<void>;
   timerRecoveryState: 'normal' | 'recovery_required';
+
+  // Reloj de posesión opcional (DEPORT-04)
+  shotClockTimeLeft: number;
+  isShotClockRunning: boolean;
+  isShotClockExpired: boolean;
+  isShotClockEnabled: boolean;
+  resetShotClock: (seconds: 24 | 14) => Promise<void>;
+  setShotClockEnabled: (enabled: boolean) => Promise<void>;
 }
 
 /**
@@ -89,6 +97,7 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   const matchIdRef = useRef<number | undefined>(undefined);
   const prevMatchIdRef = useRef<number | undefined>(match?.id);
   const buzzerPlayedRef = useRef<number | null>(null);
+  const shotClockBuzzerPlayedRef = useRef<boolean>(false);
   const [lastOperationResult, setLastOperationResult] = useState<TimerOperationResult | null>(null);
 
   const [authorityState, setAuthorityState] = useState<AuthorityState>(() =>
@@ -179,6 +188,10 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
             buzzerPlayedRef.current = match?.currentQuarter ?? null;
             playBuzzer();
           }
+          if (res.shotClockExpired && !shotClockBuzzerPlayedRef.current) {
+            shotClockBuzzerPlayedRef.current = true;
+            playBuzzer();
+          }
         }).catch(() => {});
       }
     };
@@ -212,6 +225,13 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   const isClockShiftDetected = projection.isClockShiftDetected;
   const confidence = projection.confidence;
 
+  // Proyección temporal del reloj de posesión (DEPORT-04)
+  const shotClockProj = MatchTimerService.projectShotClock(match, currentNowMs);
+  const shotClockTimeLeft = shotClockProj.timeLeft;
+  const isShotClockRunning = shotClockProj.isRunning;
+  const isShotClockExpired = shotClockProj.expired;
+  const isShotClockEnabled = shotClockProj.enabled;
+
   // Reiniciar registro de chicharra cuando el tiempo vuelve a ser > 0 o cambia de periodo
   useEffect(() => {
     if (timeLeft > 0) {
@@ -219,12 +239,19 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     }
   }, [timeLeft, match?.currentQuarter]);
 
+  useEffect(() => {
+    if (shotClockTimeLeft > 0) {
+      shotClockBuzzerPlayedRef.current = false;
+    }
+  }, [shotClockTimeLeft, match?.currentQuarter]);
+
   // 5. Intervalo reactivo garantizado sincronizado con el reloj del sistema (C-31)
   useEffect(() => {
-    if (!isRunning || timeLeft <= 0) return;
+    const isAnyClockRunning = isRunning || isShotClockRunning;
+    if (!isAnyClockRunning || (timeLeft <= 0 && shotClockTimeLeft <= 0)) return;
     const interval = setInterval(() => setCurrentNowMs(Date.now()), 500);
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft, match?.timerLastStart]);
+  }, [isRunning, timeLeft, isShotClockRunning, shotClockTimeLeft, match?.timerLastStart, match?.shotClock?.lastStart]);
 
   // 6. Auto-pause y chicharra única cuando llega a 00:00 legítimamente (C-12, C-26)
   useEffect(() => {
@@ -245,6 +272,39 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     projection.expired,
     projection.confidence,
     isRunning,
+    match?.id,
+    match?.currentQuarter,
+    enableAutoPause,
+    authorityState.hasAuthority,
+    authorityState.epoch,
+    authorityState.tabId
+  ]);
+
+  // 6b. Auto-expiración y chicharra única para reloj de posesión en 00 (DEPORT-04)
+  useEffect(() => {
+    if (
+      isShotClockEnabled &&
+      shotClockProj.expired &&
+      isShotClockRunning &&
+      match?.id &&
+      !shotClockBuzzerPlayedRef.current
+    ) {
+      shotClockBuzzerPlayedRef.current = true;
+      if (enableAutoPause) {
+        playBuzzer();
+      }
+      if (authorityState.hasAuthority) {
+        MatchTimerService.expireShotClock(match.id, {
+          epoch: authorityState.epoch,
+          expectedQuarter: match.currentQuarter,
+          tabId: authorityState.tabId
+        }).catch(() => {});
+      }
+    }
+  }, [
+    isShotClockEnabled,
+    shotClockProj.expired,
+    isShotClockRunning,
     match?.id,
     match?.currentQuarter,
     enableAutoPause,
@@ -278,51 +338,63 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   }, []);
 
   // 8. Operaciones del cronómetro con verificación de autoridad y fencing epoch
+  const getActiveAuth = useCallback((matchId: number) => {
+    const current = timerAuthorityCoordinator.getAuthorityState(matchId);
+    return {
+      epoch: current.hasAuthority ? current.epoch : authorityState.epoch,
+      tabId: current.tabId
+    };
+  }, [authorityState.epoch]);
+
   const toggleTimer = useCallback(async () => {
     if (!match?.id) return;
     unlockAudioContext();
 
+    const auth = getActiveAuth(match.id);
     const result = await MatchTimerService.toggle(match.id, {
-      epoch: authorityState.epoch,
+      epoch: auth.epoch,
       expectedQuarter: match.currentQuarter,
-      tabId: authorityState.tabId
+      tabId: auth.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch, authorityState.tabId]);
+  }, [match, getActiveAuth]);
 
   const pauseTimer = useCallback(async () => {
     if (!match?.id) return;
     cancelPendingUnmountPause(match.id);
 
+    const auth = getActiveAuth(match.id);
     const result = await MatchTimerService.pause(match.id, {
-      epoch: authorityState.epoch,
+      epoch: auth.epoch,
       expectedQuarter: match.currentQuarter,
-      tabId: authorityState.tabId
+      tabId: auth.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch, authorityState.tabId]);
+  }, [match, getActiveAuth]);
 
   const resetTimer = useCallback(async () => {
     if (!match?.id) return;
 
+    const auth = getActiveAuth(match.id);
     const result = await MatchTimerService.reset(match.id, {
-      epoch: authorityState.epoch,
+      epoch: auth.epoch,
       expectedQuarter: match.currentQuarter,
-      tabId: authorityState.tabId
+      tabId: auth.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch, authorityState.tabId]);
+  }, [match, getActiveAuth]);
 
   const adjustTime = useCallback(async (deltaSeconds: number) => {
     if (!match?.id) return;
 
+    const auth = getActiveAuth(match.id);
     const result = await MatchTimerService.adjust(match.id, deltaSeconds, {
-      epoch: authorityState.epoch,
+      epoch: auth.epoch,
       expectedQuarter: match.currentQuarter,
-      tabId: authorityState.tabId
+      tabId: auth.tabId
     });
     setLastOperationResult(result);
-  }, [match, authorityState.epoch, authorityState.tabId]);
+  }, [match, getActiveAuth]);
 
   const requestAuthorityTransfer = useCallback(async (): Promise<boolean> => {
     if (!match?.id) return false;
@@ -340,22 +412,47 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
   const resolveRecovery = useCallback(async (validatedSeconds?: number) => {
     if (!match?.id) return;
     const target = validatedSeconds ?? timeLeft;
-    const currentCoordAuth = timerAuthorityCoordinator.getAuthorityState(match.id);
+    const auth = getActiveAuth(match.id);
     const result = await MatchTimerService.resolveRecovery(match.id, target, {
-      epoch: currentCoordAuth.hasAuthority ? currentCoordAuth.epoch : authorityState.epoch,
+      epoch: auth.epoch,
       expectedQuarter: match.currentQuarter,
-      tabId: currentCoordAuth.tabId
+      tabId: auth.tabId
     });
     setLastOperationResult(result);
-  }, [match, timeLeft, authorityState.epoch]);
+  }, [match, timeLeft, getActiveAuth]);
+
+  const resetShotClock = useCallback(async (seconds: 24 | 14) => {
+    if (!match?.id) return;
+    unlockAudioContext();
+    shotClockBuzzerPlayedRef.current = false;
+    const auth = getActiveAuth(match.id);
+    const result = await MatchTimerService.resetShotClock(match.id, seconds, {
+      epoch: auth.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: auth.tabId
+    });
+    setLastOperationResult(result as unknown as TimerOperationResult);
+  }, [match, getActiveAuth]);
+
+  const setShotClockEnabled = useCallback(async (enabled: boolean) => {
+    if (!match?.id) return;
+    unlockAudioContext();
+    const auth = getActiveAuth(match.id);
+    const result = await MatchTimerService.setShotClockEnabled(match.id, enabled, {
+      epoch: auth.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: auth.tabId
+    });
+    setLastOperationResult(result as unknown as TimerOperationResult);
+  }, [match, getActiveAuth]);
 
   return {
     timeLeft,
     isRunning,
-    hasAuthority: authorityState.hasAuthority,
-    isOwner: authorityState.isOwner,
-    ownerTabId: authorityState.ownerTabId,
-    epoch: authorityState.epoch,
+    hasAuthority: authorityState.hasAuthority || (match?.id ? timerAuthorityCoordinator.getAuthorityState(match.id).hasAuthority : false),
+    isOwner: authorityState.isOwner || (match?.id ? timerAuthorityCoordinator.getAuthorityState(match.id).isOwner : false),
+    ownerTabId: authorityState.ownerTabId ?? (match?.id ? timerAuthorityCoordinator.getAuthorityState(match.id).ownerTabId : null),
+    epoch: authorityState.epoch || (match?.id ? timerAuthorityCoordinator.getAuthorityState(match.id).epoch : 0),
     requestAuthorityTransfer,
     lastOperationResult,
     toggleTimer,
@@ -366,6 +463,12 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     confidence,
     isClockShiftDetected,
     resolveRecovery,
-    timerRecoveryState
+    timerRecoveryState,
+    shotClockTimeLeft,
+    isShotClockRunning,
+    isShotClockExpired,
+    isShotClockEnabled,
+    resetShotClock,
+    setShotClockEnabled
   };
 }

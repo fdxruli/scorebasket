@@ -6,6 +6,7 @@ export * from './players.repository';
 export * from './matches.repository';
 export * from './gameActions.repository';
 export * from './timeout.service';
+export * from './lineups.service';
 export * from './series.service';
 export * from './scoreIntegrity.service';
 export * from './localBackup.service';

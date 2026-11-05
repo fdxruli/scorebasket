@@ -1895,3 +1895,353 @@
     font-size: 0.78rem !important;
   }
 }
+
+
+/* =========================================
+   DEPORT-03: ALINEACIONES Y SUSTITUCIONES OPCIONALES (5 vs 5)
+   ========================================= */
+.lineup-clock-warning-banner,
+.lineup-incomplete-banner {
+  margin: 0.6rem 1.15rem 0;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.lineup-missing-players-card {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+}
+
+.lineup-missing-players-card strong {
+  display: block;
+  color: #fff;
+  margin-bottom: 0.2rem;
+}
+
+.lineup-missing-players-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.lineup-selection-counter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+}
+
+.lineup-counter-pill {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.lineup-counter-pill.is-ready {
+  color: #34d399;
+}
+
+.lineup-counter-sub {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.lineup-selectable-card {
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.lineup-selectable-card:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--border-strong);
+}
+
+.lineup-selectable-card.is-starter-selected {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.55);
+}
+
+.lineup-selectable-card.is-bench-preview {
+  opacity: 0.78;
+}
+
+.lineup-check-indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #34d399;
+  flex-shrink: 0;
+}
+
+.lineup-selectable-card.is-starter-selected .lineup-check-indicator {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #34d399;
+}
+
+.lineup-role-badge {
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lineup-role-badge.on-court {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #34d399;
+}
+
+.lineup-role-badge.bench {
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.lineup-role-badge.neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.lineup-preview-summary {
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.lineup-preview-row strong {
+  color: #34d399;
+}
+
+.lineup-preview-row.is-bench strong {
+  color: #cbd5e1;
+}
+
+.lineup-group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lineup-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lineup-group-header.on-court {
+  background: rgba(16, 185, 129, 0.14);
+  border-left: 3px solid var(--success);
+  color: #34d399;
+}
+
+.lineup-group-header.bench {
+  background: rgba(148, 163, 184, 0.1);
+  border-left: 3px solid #64748b;
+  color: #cbd5e1;
+}
+
+.lineup-group-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.lineup-sub-action-box {
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lineup-sub-slots {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.lineup-sub-slot {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.lineup-sub-slot.out.is-filled {
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.lineup-sub-slot.in.is-filled {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.lineup-sub-slot .slot-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.lineup-sub-slot .slot-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lineup-sub-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.lineup-confirm-sub-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.lineup-player-row {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lineup-player-row.is-sub-out-selected {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.65);
+}
+
+.lineup-player-row.is-sub-in-selected {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.65);
+}
+
+.btn-lineup-sub {
+  padding: 0.38rem 0.7rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  flex-shrink: 0;
+}
+
+.btn-lineup-sub.out.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #fbbf24;
+  color: #fef08a;
+}
+
+.btn-lineup-sub.in.active {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #34d399;
+  color: #a7f3d0;
+}
+
+.lineup-bench-empty {
+  padding: 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* PlayerSelectModal con quinteto activo */
+.pm-lineup-sections {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pm-lineup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.variant-game .player-grid.is-nested {
+  overflow: visible;
+  padding: 0;
+  flex: initial;
+}
+
+.pm-player-btn.is-on-court-player {
+  border-color: rgba(16, 185, 129, 0.38);
+}
+
+.pm-player-btn.is-bench-player {
+  background: linear-gradient(160deg, rgba(18, 22, 34, 0.82) 0%, rgba(11, 13, 20, 0.88) 100%);
+  border-style: dashed;
+  opacity: 0.86;
+}

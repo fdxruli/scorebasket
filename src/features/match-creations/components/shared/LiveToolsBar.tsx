@@ -1,6 +1,6 @@
 // src/features/match-creations/components/shared/LiveToolsBar.tsx
 import React, { useState } from 'react';
-import { Users, Bell, Volume2, VolumeX, Flag } from 'lucide-react';
+import { Users, Shirt, Bell, Volume2, VolumeX, Flag } from 'lucide-react';
 import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 
 interface Props {
@@ -10,6 +10,9 @@ interface Props {
   /** Chicharra manual: solo tiene sentido en partidos con reloj */
   showBuzzer?: boolean;
   endLabel?: string;
+  /** Gestión opcional de quintetos en cancha (solo partidos Traditional) */
+  onManageLineups?: () => void;
+  lineupsEnabled?: boolean;
 }
 
 /**
@@ -21,7 +24,9 @@ export const LiveToolsBar: React.FC<Props> = ({
   onToggleTrackPlayers,
   onEndMatch,
   showBuzzer = false,
-  endLabel = 'Finalizar'
+  endLabel = 'Finalizar',
+  onManageLineups,
+  lineupsEnabled = false
 }) => {
   const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
 
@@ -46,6 +51,21 @@ export const LiveToolsBar: React.FC<Props> = ({
           <span>Jugadores</span>
           <span className="tool-chip-state">{trackPlayers ? 'ON' : 'OFF'}</span>
         </button>
+
+        {onManageLineups && (
+          <button
+            type="button"
+            onClick={onManageLineups}
+            className={`tool-chip ${lineupsEnabled ? 'is-on' : ''}`}
+            aria-pressed={lineupsEnabled}
+            title="Gestionar jugadores en cancha"
+            data-testid="btn-manage-lineups"
+          >
+            <Shirt size={16} />
+            <span>Gestionar jugadores en cancha</span>
+            {lineupsEnabled && <span className="tool-chip-state">5v5</span>}
+          </button>
+        )}
 
         <button
           type="button"

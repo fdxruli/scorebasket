@@ -2,12 +2,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import type { Player } from '../../db/models';
 import { PlayersRepository } from '../../db/players.repository';
+import {
+  isLineupActive,
+  getTeamOnCourtIds,
+  partitionTeamPlayersByLineup
+} from '../../db/lineups.service';
 import { renameTeamSafely } from '../../utils/matchHelpers';
 import { useLiveMatch, type TeamWithPlayers } from '../../features/match-creations/components/context/LiveMatchContext';
 import { useGameActions } from '../../features/match-creations/hooks/useGameActions';
 import { ModalLiveStatusPill } from './ModalLiveStatusPill';
-import { X, Users, UserPlus, AlertCircle, Check, Pencil } from 'lucide-react';
+import { LineupModal } from './LineupModal';
+import { X, Users, UserPlus, AlertCircle, Check, Pencil, Shirt } from 'lucide-react';
 
 interface LivePlayersModalProps {
   onClose: () => void;
@@ -45,6 +52,7 @@ export function LivePlayersModal({
   const [teamNameDraft, setTeamNameDraft] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showLineupManager, setShowLineupManager] = useState(false);
 
   const matchId = match?.id;
 
@@ -73,6 +81,19 @@ export function LivePlayersModal({
   }, [matchId]) ?? { foulsMap: new Map<number, number>(), pointsMap: new Map<number, number>() };
 
   if (!match || !localTeam || !visitorTeam) return null;
+
+  if (showLineupManager) {
+    return (
+      <LineupModal
+        onClose={() => setShowLineupManager(false)}
+        isTimerRunning={Boolean(match.timerLastStart)}
+        foulLimit={foulLimit}
+      />
+    );
+  }
+
+  const isTraditional = (match.config?.mode || 'traditional') === 'traditional';
+  const lineupsEnabled = isLineupActive(match);
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -158,11 +179,88 @@ export function LivePlayersModal({
     showToast('Nombre de equipo actualizado');
   };
 
+  const renderPlayerCard = (
+    player: Player,
+    teamId: number,
+    side: 'local' | 'visitor',
+    roleBadge?: 'on-court' | 'bench'
+  ) => {
+    const pts = statsData.pointsMap.get(player.id!) || 0;
+    const fouls = statsData.foulsMap.get(player.id!) || 0;
+    const isExpelled = foulLimit !== undefined && fouls >= foulLimit;
+    const isWarning = !isExpelled && foulLimit !== undefined && fouls === foulLimit - 1;
+
+    return (
+      <div
+        key={player.id}
+        className={`live-roster-player-card ${side} ${isExpelled ? 'is-expelled' : ''}`}
+      >
+        <div className="live-roster-player-main">
+          <div className={`live-roster-jersey ${side}`}>
+            <span>#{player.number !== undefined ? player.number : '—'}</span>
+          </div>
+
+          <div className="live-roster-player-info">
+            <span className="live-roster-player-name">{player.name}</span>
+            <div className="live-roster-player-badges">
+              {roleBadge && (
+                <span className={`lineup-role-badge ${roleBadge}`}>
+                  {roleBadge === 'on-court' ? 'EN CANCHA' : 'SUPLENTE'}
+                </span>
+              )}
+              <span className={`pm-stat-chip pts ${pts > 0 ? 'has-pts' : ''}`}>
+                {pts} PTS
+              </span>
+              <span
+                className={`pm-stat-chip fouls ${
+                  isExpelled ? 'expelled' : isWarning ? 'warning' : fouls > 0 ? 'has-fouls' : ''
+                }`}
+              >
+                {isExpelled ? `${fouls} FAL (EXP)` : `${fouls} FAL`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Acciones rápidas en 1 toque directamente sobre el jugador */}
+        <div className="live-roster-quick-actions">
+          {scoringOptions.map(pt => (
+            <button
+              key={pt}
+              type="button"
+              disabled={isExpelled || isActionPending}
+              onClick={() => handleQuickScore(teamId, player.id!, player.name, pt)}
+              className={`roster-quick-btn score-${side}`}
+              title={`Sumar +${pt} a ${player.name}`}
+            >
+              +{pt}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={isExpelled || isActionPending}
+            onClick={() => handleQuickFoul(teamId, player.id!, player.name)}
+            className="roster-quick-btn foul"
+            title={`Registrar falta a ${player.name}`}
+          >
+            <AlertCircle size={13} />
+            FAL
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderTeamRoster = (team: TeamWithPlayers, side: 'local' | 'visitor') => {
     const isLocal = side === 'local';
     const accentColor = isLocal ? 'var(--secondary-light)' : 'var(--primary-light)';
     const isAddingHere = addingForTeamId === team.id;
     const isEditingName = editingTeamId === team.id;
+
+    const onCourtIds = getTeamOnCourtIds(match, side);
+    const { onCourt, bench } = lineupsEnabled
+      ? partitionTeamPlayersByLineup(team.players, onCourtIds)
+      : { onCourt: team.players, bench: [] };
 
     return (
       <div className={`live-roster-column ${side}`}>
@@ -272,69 +370,23 @@ export function LivePlayersModal({
               Agregar primer jugador
             </button>
           </div>
+        ) : lineupsEnabled ? (
+          <div className="live-roster-cards">
+            <div className="lineup-group-header on-court">
+              <span>EN CANCHA</span>
+              <span className="lineup-group-count">{onCourt.length} titulares</span>
+            </div>
+            {onCourt.map(player => renderPlayerCard(player, team.id!, side, 'on-court'))}
+
+            <div className="lineup-group-header bench" style={{ marginTop: '0.5rem' }}>
+              <span>BANCA</span>
+              <span className="lineup-group-count">{bench.length} suplentes</span>
+            </div>
+            {bench.map(player => renderPlayerCard(player, team.id!, side, 'bench'))}
+          </div>
         ) : (
           <div className="live-roster-cards">
-            {team.players.map(player => {
-              const pts = statsData.pointsMap.get(player.id!) || 0;
-              const fouls = statsData.foulsMap.get(player.id!) || 0;
-              const isExpelled = foulLimit !== undefined && fouls >= foulLimit;
-              const isWarning = !isExpelled && foulLimit !== undefined && fouls === foulLimit - 1;
-
-              return (
-                <div
-                  key={player.id}
-                  className={`live-roster-player-card ${side} ${isExpelled ? 'is-expelled' : ''}`}
-                >
-                  <div className="live-roster-player-main">
-                    <div className={`live-roster-jersey ${side}`}>
-                      <span>#{player.number !== undefined ? player.number : '—'}</span>
-                    </div>
-
-                    <div className="live-roster-player-info">
-                      <span className="live-roster-player-name">{player.name}</span>
-                      <div className="live-roster-player-badges">
-                        <span className={`pm-stat-chip pts ${pts > 0 ? 'has-pts' : ''}`}>
-                          {pts} PTS
-                        </span>
-                        <span
-                          className={`pm-stat-chip fouls ${
-                            isExpelled ? 'expelled' : isWarning ? 'warning' : fouls > 0 ? 'has-fouls' : ''
-                          }`}
-                        >
-                          {isExpelled ? `${fouls} FAL (EXP)` : `${fouls} FAL`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Acciones rápidas en 1 toque directamente sobre el jugador */}
-                  <div className="live-roster-quick-actions">
-                    {scoringOptions.map(pt => (
-                      <button
-                        key={pt}
-                        type="button"
-                        disabled={isExpelled || isActionPending}
-                        onClick={() => handleQuickScore(team.id!, player.id!, player.name, pt)}
-                        className={`roster-quick-btn score-${side}`}
-                        title={`Sumar +${pt} a ${player.name}`}
-                      >
-                        +{pt}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      disabled={isExpelled || isActionPending}
-                      onClick={() => handleQuickFoul(team.id!, player.id!, player.name)}
-                      className="roster-quick-btn foul"
-                      title={`Registrar falta a ${player.name}`}
-                    >
-                      <AlertCircle size={13} />
-                      FAL
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {team.players.map(player => renderPlayerCard(player, team.id!, side))}
           </div>
         )}
       </div>
@@ -359,9 +411,22 @@ export function LivePlayersModal({
                 Anota directo por jugador, revisa faltas/puntos o agrega jugadores al partido.
               </p>
             </div>
-            <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
-              <X size={22} />
-            </button>
+            <div className="flex-gap" style={{ gap: '0.45rem' }}>
+              {isTraditional && (
+                <button
+                  type="button"
+                  onClick={() => setShowLineupManager(true)}
+                  className="btn btn-xs btn-secondary"
+                  title="Gestionar jugadores en cancha"
+                >
+                  <Shirt size={14} />
+                  <span>Gestionar jugadores en cancha</span>
+                </button>
+              )}
+              <button type="button" onClick={onClose} className="btn-icon" aria-label="Cerrar">
+                <X size={22} />
+              </button>
+            </div>
           </div>
           <ModalLiveStatusPill />
         </div>

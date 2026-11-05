@@ -2,9 +2,27 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { X, Calendar, BarChart2, Users, Target, Layers, Trash2, Share2, Download, CheckCircle2 } from 'lucide-react';
-import { formatPeriodLabel, deleteMatchCascade } from '../../utils/matchHelpers';
-import { buildRaceReportProjection } from '../../utils/raceLogicHelpers';
+import {
+    X,
+    Calendar,
+    BarChart2,
+    Users,
+    Target,
+    Layers,
+    Trash2,
+    Share2,
+    Download,
+    CheckCircle2,
+    Trophy,
+    ShieldAlert,
+    Activity
+} from 'lucide-react';
+import {
+    deleteMatchCascade,
+    computeMatchReportStats,
+    type TeamReportStats,
+    type ReportStatAvailability
+} from '../../utils/matchHelpers';
 import {
     shareOrDownloadMatchCard,
     downloadMatchCardPng,
@@ -16,14 +34,6 @@ interface MatchHistoryModalProps {
     onClose: () => void;
 }
 
-interface PlayerStat {
-    id: number;
-    name: string;
-    number?: number;
-    points: number;
-    fouls: number;
-}
-
 export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -33,7 +43,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         const match = await db.matches.get(matchId);
         if (!match) return null;
 
-        const [localTeam, visitorTeam, scores, fouls, players] = await Promise.all([
+        const [localTeam, visitorTeam, scores, fouls, teamPlayers] = await Promise.all([
             db.teams.get(match.localTeamId),
             db.teams.get(match.visitorTeamId),
             db.scores.where({ matchId }).toArray(),
@@ -41,13 +51,34 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
             db.players.where('teamId').anyOf([match.localTeamId, match.visitorTeamId]).toArray()
         ]);
 
+        const safeScores = scores || [];
+        const safeFouls = fouls || [];
+        const safeTeamPlayers = teamPlayers || [];
+
+        const knownIds = new Set(
+            safeTeamPlayers.map(p => p.id).filter((id): id is number => id !== undefined)
+        );
+        const missingPlayerIds = Array.from(
+            new Set([
+                ...safeScores.map(s => s.playerId).filter((id): id is number => id !== undefined && !knownIds.has(id)),
+                ...safeFouls.map(f => f.playerId).filter((id): id is number => id !== undefined && !knownIds.has(id))
+            ])
+        );
+
+        const extraPlayers =
+            missingPlayerIds.length > 0
+                ? (await db.players.bulkGet(missingPlayerIds)).filter(
+                      (p): p is NonNullable<typeof p> => Boolean(p)
+                  )
+                : [];
+
         return {
             match,
             localTeam,
             visitorTeam,
-            scores: scores || [],
-            fouls: fouls || [],
-            players: players || []
+            scores: safeScores,
+            fouls: safeFouls,
+            players: [...safeTeamPlayers, ...extraPlayers]
         };
     }, [matchId]);
 
@@ -62,198 +93,35 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
         }
     };
 
-    // --- 2. CÁLCULOS Y LÓGICA DE MODO ---
+    // --- 2. CÁLCULOS CENTRALIZADOS Y LÓGICA DE MODALIDADES ---
     const stats = useMemo(() => {
         if (!data) return null;
-        const { match, scores, fouls, players } = data;
-        const mode = match.config?.mode || 'traditional';
-
-        const safeScores = scores || [];
-        const safeFouls = fouls || [];
-
-        // A. Totales de Puntos (Siempre útil para stats de jugador)
-        const localPointsTotal = safeScores
-            .filter(s => s.teamId === match.localTeamId)
-            .reduce((a, b) => a + b.points, 0);
-        const visitorPointsTotal = safeScores
-            .filter(s => s.teamId === match.visitorTeamId)
-            .reduce((a, b) => a + b.points, 0);
-
-        // B. Lógica de Marcador Principal (Big Score)
-        let mainLocalScore = localPointsTotal || match.localScore || 0;
-        let mainVisitorScore = visitorPointsTotal || match.visitorScore || 0;
-
-        // C. Lógica de la Tabla (Cuartos / Sets)
-        const quartersSet = new Set([
-            ...safeScores.map(s => s.quarter),
-            ...safeFouls.map(f => f.quarter)
-        ]);
-        const maxDataQuarter = Math.max(...Array.from(quartersSet), 0);
-
-        const totalQuarters = match.config?.traditional?.totalQuarters || match.totalQuarters || 4;
-        const maxDisplayPeriod =
-            mode === 'traditional' ? Math.max(maxDataQuarter, totalQuarters) : maxDataQuarter;
-
-        let periodStats: { period: number; local: number; visitor: number }[] = [];
-        for (let q = 1; q <= maxDisplayPeriod; q++) {
-            periodStats.push({
-                period: q,
-                local: safeScores
-                    .filter(s => s.teamId === match.localTeamId && s.quarter === q)
-                    .reduce((a, b) => a + b.points, 0),
-                visitor: safeScores
-                    .filter(s => s.teamId === match.visitorTeamId && s.quarter === q)
-                    .reduce((a, b) => a + b.points, 0)
-            });
-        }
-
-        // C2. Reta (Race): Usar proyección centralizada sin empates ni finishedAt ficticios (C-03)
-        let isRaceWithGames = false;
-        let localTotalCell: number = mainLocalScore;
-        let visitorTotalCell: number = mainVisitorScore;
-        let totalHeader = 'Total';
-
-        if (mode === 'race') {
-            const raceProjection = buildRaceReportProjection(match, safeScores);
-            mainLocalScore = raceProjection.mainLocalScore;
-            mainVisitorScore = raceProjection.mainVisitorScore;
-            localTotalCell = raceProjection.localTotalCell;
-            visitorTotalCell = raceProjection.visitorTotalCell;
-            totalHeader = raceProjection.totalHeader;
-            isRaceWithGames = raceProjection.isRaceWithGames;
-            periodStats = raceProjection.periodStats.map(p => ({
-                period: p.period,
-                local: p.local,
-                visitor: p.visitor
-            }));
-        }
-
-        // C3. Series (best-of-series): Priorizar gameHistory combinado con safeScores por Set
-        if (mode === 'best-of-series') {
-            const storedSets = [...(match.gameHistory || [])];
-            const historyBySet = new Map<number, { local: number; visitor: number }>();
-            for (const g of storedSets) {
-                historyBySet.set(g.gameNumber, { local: g.localScore, visitor: g.visitorScore });
-            }
-
-            const currentSetNum = match.currentQuarter || match.config?.bestOf?.currentGame || 1;
-            const hasLiveSetScore = (match.localScore || 0) > 0 || (match.visitorScore || 0) > 0;
-            const maxSetNum = Math.max(
-                maxDataQuarter,
-                ...storedSets.map(g => g.gameNumber),
-                hasLiveSetScore ? currentSetNum : 0
-            );
-
-            const mergedSets: { period: number; local: number; visitor: number }[] = [];
-            for (let sNum = 1; sNum <= maxSetNum; sNum++) {
-                const fromHist = historyBySet.get(sNum);
-                const fromScoresLocal = safeScores
-                    .filter(s => s.teamId === match.localTeamId && s.quarter === sNum)
-                    .reduce((a, b) => a + b.points, 0);
-                const fromScoresVisitor = safeScores
-                    .filter(s => s.teamId === match.visitorTeamId && s.quarter === sNum)
-                    .reduce((a, b) => a + b.points, 0);
-
-                let setLocal = fromHist ? fromHist.local : fromScoresLocal;
-                let setVisitor = fromHist ? fromHist.visitor : fromScoresVisitor;
-
-                if (setLocal === 0 && setVisitor === 0 && (fromScoresLocal > 0 || fromScoresVisitor > 0)) {
-                    setLocal = fromScoresLocal;
-                    setVisitor = fromScoresVisitor;
-                }
-
-                if (
-                    sNum === currentSetNum &&
-                    !fromHist &&
-                    setLocal === 0 &&
-                    setVisitor === 0 &&
-                    hasLiveSetScore
-                ) {
-                    setLocal = match.localScore || 0;
-                    setVisitor = match.visitorScore || 0;
-                }
-
-                if (setLocal > 0 || setVisitor > 0 || fromHist) {
-                    mergedSets.push({
-                        period: sNum,
-                        local: setLocal,
-                        visitor: setVisitor
-                    });
-                }
-            }
-
-            periodStats = mergedSets;
-            const histLocalWins = storedSets.filter(g => g.winner === 'local').length;
-            const histVisitorWins = storedSets.filter(g => g.winner === 'visitor').length;
-            mainLocalScore = Math.max(match.config.bestOf?.wins?.local || 0, histLocalWins);
-            mainVisitorScore = Math.max(match.config.bestOf?.wins?.visitor || 0, histVisitorWins);
-            totalHeader = 'Sets';
-            localTotalCell = mainLocalScore;
-            visitorTotalCell = mainVisitorScore;
-        }
-
-        // D. Estadísticas por Jugador
-        const processTeamStats = (teamId: number): PlayerStat[] => {
-            if (!players) return [];
-            const teamPlayers = players.filter(p => p.teamId === teamId);
-
-            return teamPlayers.map(p => {
-                const pPoints = safeScores
-                    .filter(s => s.playerId === p.id)
-                    .reduce((acc, curr) => acc + curr.points, 0);
-
-                const pFouls = safeFouls
-                    .filter(f => f.playerId === p.id)
-                    .length;
-
-                return {
-                    id: p.id!,
-                    name: p.name,
-                    number: p.number,
-                    points: pPoints,
-                    fouls: pFouls
-                };
-            })
-                .filter(p => p.points > 0 || p.fouls > 0)
-                .sort((a, b) => b.points - a.points);
-        };
-
-        return {
-            mainLocalScore,
-            mainVisitorScore,
-            localPointsTotal,
-            visitorPointsTotal,
-            localTotalCell,
-            visitorTotalCell,
-            totalHeader,
-            isRaceWithGames,
-            totalQuarters,
-            periodStats,
-            localStats: processTeamStats(match.localTeamId),
-            visitorStats: processTeamStats(match.visitorTeamId),
-            mode
-        };
+        return computeMatchReportStats({
+            match: data.match,
+            scores: data.scores,
+            fouls: data.fouls,
+            players: data.players
+        });
     }, [data]);
 
     if (!data || !stats) return null;
     const { match, localTeam, visitorTeam } = data;
 
-    const isFinished = match.status === 'finished';
-    const localWon = isFinished && stats.mainLocalScore > stats.mainVisitorScore;
-    const visitorWon = isFinished && stats.mainVisitorScore > stats.mainLocalScore;
+    const localName = localTeam?.name || 'Local';
+    const visitorName = visitorTeam?.name || 'Visita';
 
     const formatDate = (date: Date) => {
         try {
             return new Intl.DateTimeFormat('es-MX', {
-                weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+                weekday: 'short',
+                day: 'numeric',
+                month: 'long',
+                hour: '2-digit',
+                minute: '2-digit'
             }).format(date);
-        } catch { return ""; }
-    };
-
-    const getPeriodLabel = (p: number) => {
-        if (stats.mode === 'best-of-series') return `Set ${p}`;
-        if (stats.mode === 'race') return `Juego ${p}`;
-        return formatPeriodLabel(p, stats.totalQuarters);
+        } catch {
+            return '';
+        }
     };
 
     const getModeIcon = () => {
@@ -264,51 +132,90 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
 
     const getModeTitle = () => {
         if (stats.mode === 'best-of-series') return 'Desglose por Sets';
-        if (stats.mode === 'race') return stats.isRaceWithGames ? 'Desglose por Juegos' : 'Puntuación Final';
+        if (stats.mode === 'race') {
+            return stats.isRaceWithGames ? 'Desglose por Juegos' : 'Puntuación por Juego';
+        }
         return 'Desglose por Periodos';
     };
 
-    const scoreUnitLabel =
-        stats.mode === 'best-of-series'
-            ? 'SETS'
-            : stats.isRaceWithGames
-              ? 'JUEGOS'
-              : isFinished
-                ? 'FINAL'
-                : 'EN CURSO';
+    const getWinnerSummaryText = () => {
+        if (!stats.isFinished) return 'En curso';
+        if (stats.localWon) return `Ganador: ${localName}`;
+        if (stats.visitorWon) return `Ganador: ${visitorName}`;
+        return 'Resultado: Empate';
+    };
+
+    const formatFoulsSummaryValue = (teamStats: TeamReportStats) => {
+        if (teamStats.fouls === null) return 'No disponible';
+        return String(teamStats.fouls);
+    };
+
+    const formatTeamPointsCell = (teamStats: TeamReportStats) => {
+        if (teamStats.officialPoints === null) return 'No disponible';
+        if (teamStats.scoreAvailability === 'partial') {
+            return `${teamStats.officialPoints} (${teamStats.eventPoints} reg.)`;
+        }
+        return String(teamStats.officialPoints);
+    };
+
+    const formatTeamBasketCell = (
+        value: number | null,
+        availability: ReportStatAvailability,
+        partialValue: number
+    ) => {
+        if (availability === 'confirmed' && value !== null) {
+            return String(value);
+        }
+        if (availability === 'partial' && partialValue > 0) {
+            return `No disponible (${partialValue} reg.)`;
+        }
+        return 'No disponible';
+    };
 
     const buildCardPayload = (): ShareMatchCardInput => {
         const mappedPeriods = stats.periodStats.map(qs => ({
-            label: getPeriodLabel(qs.period),
-            local: qs.local,
-            visitor: qs.visitor
+            label: qs.label,
+            local: qs.local ?? 0,
+            visitor: qs.visitor ?? 0
         }));
 
         return {
             mode: stats.mode,
-            isFinished,
+            isFinished: stats.isFinished,
             dateStr: formatDate(match.createdAt),
-            localName: localTeam?.name || 'Local',
-            visitorName: visitorTeam?.name || 'Visita',
+            localName,
+            visitorName,
             mainLocalScore: stats.mainLocalScore,
             mainVisitorScore: stats.mainVisitorScore,
-            scoreUnitLabel,
+            scoreUnitLabel: stats.scoreUnitLabel,
             periodHeaders: mappedPeriods.map(p => p.label),
             periodStats: mappedPeriods,
             totalHeader: stats.totalHeader,
             localTotalCell: stats.localTotalCell,
             visitorTotalCell: stats.visitorTotalCell,
+            localPointsScored: stats.localTeamStats.officialPoints,
+            visitorPointsScored: stats.visitorTeamStats.officialPoints,
+            localFoulsTotal: stats.localTeamStats.fouls,
+            visitorFoulsTotal: stats.visitorTeamStats.fouls,
             localPlayers: stats.localStats.map(p => ({
                 name: p.name,
                 number: p.number,
                 points: p.points,
-                fouls: p.fouls
+                fouls: p.fouls,
+                baskets1: p.baskets1,
+                baskets2: p.baskets2,
+                baskets3: p.baskets3,
+                totalBaskets: p.totalBaskets
             })),
             visitorPlayers: stats.visitorStats.map(p => ({
                 name: p.name,
                 number: p.number,
                 points: p.points,
-                fouls: p.fouls
+                fouls: p.fouls,
+                baskets1: p.baskets1,
+                baskets2: p.baskets2,
+                baskets3: p.baskets3,
+                totalBaskets: p.totalBaskets
             }))
         };
     };
@@ -387,7 +294,7 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                             <Trash2 size={14} />
                             Eliminar
                         </button>
-                        <button onClick={onClose} className="btn-icon">
+                        <button onClick={onClose} className="btn-icon" aria-label="Cerrar reporte">
                             <X size={20} />
                         </button>
                     </div>
@@ -406,20 +313,54 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                     </div>
                 )}
 
-                {/* 2. MARCADOR PRINCIPAL */}
+                {/* 2. RESUMEN GENERAL Y MARCADOR PRINCIPAL */}
                 <div className="report-score-panel">
-                    <div className={`report-team ${localWon ? 'is-winner' : ''}`}>
-                        <span className="report-team-name">{localTeam?.name || 'Local'}</span>
-                        <span className="report-score-big">{stats.mainLocalScore}</span>
+                    <div className={`report-team ${stats.localWon ? 'is-winner' : ''}`}>
+                        <span className="report-team-name">{localName}</span>
+                        <span className="report-score-big" data-testid="report-main-local-score">
+                            {stats.mainLocalScore}
+                        </span>
                     </div>
 
                     <div className="report-vs">
-                        {scoreUnitLabel}
+                        {stats.scoreUnitLabel}
                     </div>
 
-                    <div className={`report-team ${visitorWon ? 'is-winner' : ''}`}>
-                        <span className="report-team-name">{visitorTeam?.name || 'Visita'}</span>
-                        <span className="report-score-big">{stats.mainVisitorScore}</span>
+                    <div className={`report-team ${stats.visitorWon ? 'is-winner' : ''}`}>
+                        <span className="report-team-name">{visitorName}</span>
+                        <span className="report-score-big" data-testid="report-main-visitor-score">
+                            {stats.mainVisitorScore}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="report-summary-strip" data-testid="report-general-summary">
+                    <div className="report-summary-pill mode">
+                        {getModeIcon()}
+                        <span>{stats.modeLabel}</span>
+                        <span className="report-summary-sep">·</span>
+                        <span className="report-summary-muted">{stats.modeRuleSummary}</span>
+                    </div>
+
+                    <div
+                        className={`report-summary-pill outcome ${
+                            stats.localWon || stats.visitorWon
+                                ? 'has-winner'
+                                : stats.isTie
+                                  ? 'is-tie'
+                                  : ''
+                        }`}
+                        data-testid="report-winner-summary"
+                    >
+                        <Trophy size={13} />
+                        <span>{getWinnerSummaryText()}</span>
+                    </div>
+
+                    <div className="report-summary-pill fouls" data-testid="report-fouls-summary">
+                        <span>
+                            Faltas: {formatFoulsSummaryValue(stats.localTeamStats)} -{' '}
+                            {formatFoulsSummaryValue(stats.visitorTeamStats)}
+                        </span>
                     </div>
                 </div>
 
@@ -427,60 +368,234 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                 <div className="modal-body" style={{ padding: 0 }}>
                     <div className="report-section">
 
-                        {/* TABLA DINÁMICA DE PERIODOS / SETS */}
+                        {stats.integrityNotice && (
+                            <div className="report-integrity-banner" data-testid="report-integrity-notice">
+                                <ShieldAlert size={16} />
+                                <span>{stats.integrityNotice}</span>
+                            </div>
+                        )}
+
+                        {/* A. DESGLOSE POR PERIODO / JUEGO / SET */}
                         {stats.periodStats.length > 0 && (
                             <>
-                                <div className="report-subtitle">
-                                    {getModeIcon()} {getModeTitle()}
+                                <div className="report-subtitle-row">
+                                    <div className="report-subtitle" style={{ margin: 0 }}>
+                                        {getModeIcon()} {getModeTitle()}
+                                    </div>
+                                    {stats.periodAvailability === 'unavailable' && (
+                                        <span className="report-availability-tag">
+                                            No disponible por periodo
+                                        </span>
+                                    )}
+                                    {stats.periodAvailability === 'partial' && (
+                                        <span className="report-availability-tag is-partial">
+                                            Eventos parciales
+                                        </span>
+                                    )}
                                 </div>
 
                                 <div style={{ overflowX: 'auto', paddingBottom: '0.5rem' }}>
                                     <div
                                         className="report-quarters-grid"
+                                        data-testid="report-periods-table"
                                         style={{
-                                            gridTemplateColumns: `minmax(130px, 1.8fr) repeat(${stats.periodStats.length}, minmax(44px, 1fr)) minmax(68px, 0.8fr)`
+                                            gridTemplateColumns: `minmax(120px, 1.7fr) repeat(${stats.periodStats.length}, minmax(44px, 1fr)) minmax(64px, 0.85fr)`
                                         }}
                                     >
-                                        <div className="q-cell head" style={{ textAlign: 'left', paddingLeft: '0.75rem' }}>Equipo</div>
-                                        {stats.periodStats.map(qs => (
-                                            <div key={qs.period} className="q-cell head">
-                                                {getPeriodLabel(qs.period)}
-                                            </div>
-                                        ))}
+                                        <div
+                                            className="q-cell head"
+                                            style={{ textAlign: 'left', paddingLeft: '0.75rem' }}
+                                        >
+                                            Equipo
+                                        </div>
+                                        {stats.periodStats.map(qs => {
+                                            const isOt =
+                                                stats.mode === 'traditional' &&
+                                                qs.period > stats.totalQuarters;
+                                            return (
+                                                <div
+                                                    key={qs.period}
+                                                    className={`q-cell head ${isOt ? 'is-ot' : ''}`}
+                                                >
+                                                    {qs.label}
+                                                </div>
+                                            );
+                                        })}
                                         <div className="q-cell head">{stats.totalHeader}</div>
 
-                                        <div className="q-cell team-name local">
-                                            {localTeam?.name || 'Local'}
-                                        </div>
-                                        {stats.periodStats.map(qs => (
-                                            <div key={`l-${qs.period}`} className="q-cell score-val">
-                                                {qs.local}
-                                            </div>
-                                        ))}
+                                        <div className="q-cell team-name local">{localName}</div>
+                                        {stats.periodStats.map(qs => {
+                                            const isOt =
+                                                stats.mode === 'traditional' &&
+                                                qs.period > stats.totalQuarters;
+                                            const isLeader =
+                                                qs.available &&
+                                                qs.local !== null &&
+                                                qs.visitor !== null &&
+                                                qs.local > qs.visitor;
+                                            return (
+                                                <div
+                                                    key={`l-${qs.period}`}
+                                                    className={`q-cell score-val ${isOt ? 'is-ot' : ''} ${
+                                                        isLeader ? 'is-leader-local' : ''
+                                                    }`}
+                                                >
+                                                    {qs.available && qs.local !== null ? qs.local : '—'}
+                                                </div>
+                                            );
+                                        })}
                                         <div className="q-cell total-val">{stats.localTotalCell}</div>
 
-                                        <div className="q-cell team-name visitor">
-                                            {visitorTeam?.name || 'Visita'}
-                                        </div>
-                                        {stats.periodStats.map(qs => (
-                                            <div key={`v-${qs.period}`} className="q-cell score-val">
-                                                {qs.visitor}
-                                            </div>
-                                        ))}
+                                        <div className="q-cell team-name visitor">{visitorName}</div>
+                                        {stats.periodStats.map(qs => {
+                                            const isOt =
+                                                stats.mode === 'traditional' &&
+                                                qs.period > stats.totalQuarters;
+                                            const isLeader =
+                                                qs.available &&
+                                                qs.local !== null &&
+                                                qs.visitor !== null &&
+                                                qs.visitor > qs.local;
+                                            return (
+                                                <div
+                                                    key={`v-${qs.period}`}
+                                                    className={`q-cell score-val ${isOt ? 'is-ot' : ''} ${
+                                                        isLeader ? 'is-leader-visitor' : ''
+                                                    }`}
+                                                >
+                                                    {qs.available && qs.visitor !== null ? qs.visitor : '—'}
+                                                </div>
+                                            );
+                                        })}
                                         <div className="q-cell total-val">{stats.visitorTotalCell}</div>
                                     </div>
                                 </div>
                             </>
                         )}
 
-                        {/* ESTADÍSTICAS JUGADORES (BOX SCORE) */}
-                        <div className="report-subtitle" style={{ marginTop: '1.75rem' }}>
-                            <Users size={15} /> Box Score de Jugadores
+                        {/* B. ESTADÍSTICAS POR EQUIPO */}
+                        <div className="report-subtitle" style={{ marginTop: '1.5rem' }}>
+                            <Activity size={15} /> Estadísticas por Equipo
+                        </div>
+
+                        <div className="report-team-stats-card" data-testid="report-team-stats">
+                            <div className="report-team-stats-row is-header">
+                                <span className="rts-label">Métrica</span>
+                                <span className="rts-val local">{localName}</span>
+                                <span className="rts-val visitor">{visitorName}</span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-points">
+                                <span className="rts-label">Puntos anotados</span>
+                                <span className="rts-val is-strong">
+                                    {formatTeamPointsCell(stats.localTeamStats)}
+                                </span>
+                                <span className="rts-val is-strong">
+                                    {formatTeamPointsCell(stats.visitorTeamStats)}
+                                </span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-baskets1">
+                                <span className="rts-label">Canastas de 1 pto (+1)</span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.localTeamStats.baskets1,
+                                        stats.localTeamStats.scoreAvailability,
+                                        stats.localTeamStats.partialBaskets.baskets1
+                                    )}
+                                </span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.visitorTeamStats.baskets1,
+                                        stats.visitorTeamStats.scoreAvailability,
+                                        stats.visitorTeamStats.partialBaskets.baskets1
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-baskets2">
+                                <span className="rts-label">Canastas de 2 pts (+2)</span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.localTeamStats.baskets2,
+                                        stats.localTeamStats.scoreAvailability,
+                                        stats.localTeamStats.partialBaskets.baskets2
+                                    )}
+                                </span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.visitorTeamStats.baskets2,
+                                        stats.visitorTeamStats.scoreAvailability,
+                                        stats.visitorTeamStats.partialBaskets.baskets2
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-baskets3">
+                                <span className="rts-label">Canastas de 3 pts (+3)</span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.localTeamStats.baskets3,
+                                        stats.localTeamStats.scoreAvailability,
+                                        stats.localTeamStats.partialBaskets.baskets3
+                                    )}
+                                </span>
+                                <span className="rts-val">
+                                    {formatTeamBasketCell(
+                                        stats.visitorTeamStats.baskets3,
+                                        stats.visitorTeamStats.scoreAvailability,
+                                        stats.visitorTeamStats.partialBaskets.baskets3
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-total-baskets">
+                                <span className="rts-label">Total de anotaciones</span>
+                                <span className="rts-val is-strong">
+                                    {formatTeamBasketCell(
+                                        stats.localTeamStats.totalBaskets,
+                                        stats.localTeamStats.scoreAvailability,
+                                        stats.localTeamStats.partialBaskets.totalBaskets
+                                    )}
+                                </span>
+                                <span className="rts-val is-strong">
+                                    {formatTeamBasketCell(
+                                        stats.visitorTeamStats.totalBaskets,
+                                        stats.visitorTeamStats.scoreAvailability,
+                                        stats.visitorTeamStats.partialBaskets.totalBaskets
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="report-team-stats-row" data-testid="team-stat-fouls">
+                                <span className="rts-label">Faltas registradas</span>
+                                <span className="rts-val">
+                                    {formatFoulsSummaryValue(stats.localTeamStats)}
+                                </span>
+                                <span className="rts-val">
+                                    {formatFoulsSummaryValue(stats.visitorTeamStats)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* C. ESTADÍSTICAS POR JUGADOR (BOX SCORE) */}
+                        <div className="report-subtitle" style={{ marginTop: '1.5rem' }}>
+                            <Users size={15} /> Estadísticas por Jugador
                         </div>
 
                         <div className="report-boxscore-columns">
-                            <TeamStatsGroup teamName={localTeam?.name} stats={stats.localStats} color="var(--secondary)" />
-                            <TeamStatsGroup teamName={visitorTeam?.name} stats={stats.visitorStats} color="var(--primary)" />
+                            <TeamStatsGroup
+                                side="local"
+                                teamName={localName}
+                                teamStats={stats.localTeamStats}
+                                color="var(--secondary)"
+                            />
+                            <TeamStatsGroup
+                                side="visitor"
+                                teamName={visitorName}
+                                teamStats={stats.visitorTeamStats}
+                                color="var(--primary)"
+                            />
                         </div>
 
                     </div>
@@ -531,48 +646,121 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
     );
 }
 
-const TeamStatsGroup = ({ teamName, stats, color }: { teamName?: string, stats: PlayerStat[], color: string }) => (
-    <div className="stats-group">
-        <h4
-            style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.05rem',
-                fontWeight: 800,
-                color: color,
-                borderBottom: `1px solid ${color}33`,
-                paddingBottom: '0.4rem',
-                marginBottom: '0.5rem'
-            }}
-        >
-            {teamName}
-        </h4>
-        <div className="stats-header-row">
-            <span>Jugador</span>
-            <div className="flex-gap" style={{ gap: '1rem' }}>
-                <span className="text-center" style={{ width: '42px' }}>FAL</span>
-                <span className="text-center" style={{ width: '42px' }}>PTS</span>
+const TeamStatsGroup = ({
+    side,
+    teamName,
+    teamStats,
+    color
+}: {
+    side: 'local' | 'visitor';
+    teamName: string;
+    teamStats: TeamReportStats;
+    color: string;
+}) => {
+    const { players, unassigned, scoreAvailability, officialPoints, fouls } = teamStats;
+    const hasRows = players.length > 0 || unassigned.hasData;
+    const isConfirmedZero =
+        scoreAvailability === 'confirmed' &&
+        (officialPoints ?? 0) === 0 &&
+        (fouls ?? 0) === 0;
+
+    return (
+        <div className="stats-group" data-testid={`player-boxscore-${side}`}>
+            <div className="stats-group-header" style={{ borderBottomColor: `${color}33` }}>
+                <h4
+                    style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: '1.05rem',
+                        fontWeight: 800,
+                        color: color,
+                        margin: 0
+                    }}
+                >
+                    {teamName}
+                </h4>
+                <span className="stats-group-summary">
+                    {officialPoints !== null ? `${officialPoints} PTS` : 'PTS N/D'} ·{' '}
+                    {fouls !== null ? `${fouls} FAL` : 'FAL N/D'}
+                </span>
             </div>
-        </div>
-        {stats.length === 0 ? (
-            <p className="text-muted" style={{ fontSize: '0.8rem', padding: '0.75rem 0.5rem', fontStyle: 'italic' }}>
-                Sin estadísticas individuales registradas.
-            </p>
-        ) : stats.map(p => (
-            <div key={p.id} className="stat-player-row">
-                <div className="player-info">
-                    <span className="player-num">{p.number ?? '-'}</span>
-                    <span className="player-name">{p.name}</span>
-                </div>
+
+            <div className="stats-header-row">
+                <span className="stats-col-player">Jugador</span>
                 <div className="stat-numbers">
-                    <span className="stat-col fls" style={{
-                        color: p.fouls >= 5 ? 'var(--danger)' : 'inherit',
-                        fontWeight: p.fouls >= 5 ? 700 : 400
-                    }}>
-                        {p.fouls > 0 ? '●'.repeat(p.fouls) : '-'}
-                    </span>
-                    <span className="stat-col pts">{p.points}</span>
+                    <span className="stat-col bsk" title="Canastas de 1 punto">+1</span>
+                    <span className="stat-col bsk" title="Canastas de 2 puntos">+2</span>
+                    <span className="stat-col bsk" title="Canastas de 3 puntos">+3</span>
+                    <span className="stat-col fls" title="Faltas personales">FAL</span>
+                    <span className="stat-col pts" title="Puntos totales">PTS</span>
                 </div>
             </div>
-        ))}
-    </div>
-);
+
+            {!hasRows ? (
+                <p
+                    className="text-muted"
+                    style={{ fontSize: '0.8rem', padding: '0.75rem 0.5rem', fontStyle: 'italic' }}
+                >
+                    {isConfirmedZero
+                        ? 'Sin anotaciones ni faltas registradas (0 pts).'
+                        : 'No disponible — Sin jugadas individuales registradas.'}
+                </p>
+            ) : (
+                <>
+                    {players.map(p => (
+                        <div
+                            key={p.id}
+                            className="stat-player-row"
+                            data-testid={`player-row-${p.id}`}
+                        >
+                            <div className="player-info">
+                                <span className="player-num">{p.number ?? '-'}</span>
+                                <span className="player-name">{p.name}</span>
+                            </div>
+                            <div className="stat-numbers">
+                                <span className="stat-col bsk">{p.baskets1}</span>
+                                <span className="stat-col bsk">{p.baskets2}</span>
+                                <span className="stat-col bsk">{p.baskets3}</span>
+                                <span
+                                    className="stat-col fls"
+                                    style={{
+                                        color:
+                                            p.fouls >= 5
+                                                ? 'var(--danger)'
+                                                : p.fouls > 0
+                                                  ? 'var(--text-secondary)'
+                                                  : 'var(--text-muted)',
+                                        fontWeight: p.fouls >= 5 ? 800 : 600
+                                    }}
+                                >
+                                    {p.fouls}
+                                </span>
+                                <span className="stat-col pts">{p.points}</span>
+                            </div>
+                        </div>
+                    ))}
+
+                    {unassigned.hasData && (
+                        <div
+                            className="stat-player-row is-unassigned"
+                            data-testid={`unassigned-row-${side}`}
+                        >
+                            <div className="player-info">
+                                <span className="player-num is-unassigned" title="Sin dorsal">—</span>
+                                <span className="player-name is-unassigned">
+                                    Sin jugador asignado
+                                </span>
+                            </div>
+                            <div className="stat-numbers">
+                                <span className="stat-col bsk">{unassigned.baskets1}</span>
+                                <span className="stat-col bsk">{unassigned.baskets2}</span>
+                                <span className="stat-col bsk">{unassigned.baskets3}</span>
+                                <span className="stat-col fls">{unassigned.fouls}</span>
+                                <span className="stat-col pts">{unassigned.points}</span>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+};

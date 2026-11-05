@@ -4,6 +4,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { Player } from '../../db/models';
 import { PlayersRepository } from '../../db/players.repository';
+import {
+    isLineupActive,
+    getTeamOnCourtIds,
+    partitionTeamPlayersByLineup
+} from '../../db/lineups.service';
 import { LiveMatchContext } from '../../features/match-creations/components/context/LiveMatchContext';
 import type { ActionExecutionResult } from '../../features/match-creations/hooks/useGameActions';
 import { ModalLiveStatusPill } from './ModalLiveStatusPill';
@@ -42,6 +47,7 @@ export function PlayerSelectModal({
 }: PlayerSelectModalProps) {
     const liveContext = useContext(LiveMatchContext);
     const registerOpenModal = liveContext?.registerOpenModal;
+    const match = liveContext?.match;
 
     useEffect(() => {
         if (!registerOpenModal) return;
@@ -87,6 +93,11 @@ export function PlayerSelectModal({
     }, [matchId]) ?? { foulsMap: new Map<number, number>(), pointsMap: new Map<number, number>() };
 
     const resolvedTeamId = teamId ?? players[0]?.teamId;
+    const lineupsEnabled = isLineupActive(match);
+    const onCourtIds = getTeamOnCourtIds(match, teamSide);
+    const { onCourt: onCourtPlayers, bench: benchPlayers } = lineupsEnabled
+        ? partitionTeamPlayersByLineup(players, onCourtIds)
+        : { onCourt: players, bench: [] };
 
     const handleSelectAction = async (playerId: number | null, overrideAction?: GameAction) => {
         if (submittingRef.current || isAdding) return;
@@ -148,6 +159,101 @@ export function PlayerSelectModal({
         if (pts === 1) return '+1 Libre';
         if (pts === 2) return '+2 Doble';
         return '+3 Triple';
+    };
+
+    const renderPlayerButton = (p: Player, roleBadge?: 'on-court' | 'bench') => {
+        const fouls = playerStats.foulsMap.get(p.id!) || 0;
+        const points = playerStats.pointsMap.get(p.id!) || 0;
+        const isExpelled = foulLimit !== undefined && fouls >= foulLimit;
+        const isFoulTrouble = !isExpelled && foulLimit !== undefined && fouls === foulLimit - 1;
+
+        return (
+            <button
+                key={p.id}
+                type="button"
+                disabled={isExpelled || isSubmitting}
+                onClick={() => {
+                    if (!isExpelled) {
+                        void handleSelectAction(p.id!, activeAction);
+                    }
+                }}
+                data-testid={
+                    roleBadge
+                        ? `player-select-${roleBadge}-item-${p.id}`
+                        : `player-select-item-${p.id}`
+                }
+                className={`pm-player-btn ${isExpelled ? 'is-expelled' : ''} ${
+                    isFoulTrouble ? 'is-warning' : ''
+                } ${roleBadge === 'bench' ? 'is-bench-player' : ''} ${
+                    roleBadge === 'on-court' ? 'is-on-court-player' : ''
+                }`}
+            >
+                {roleBadge && (
+                    <span className={`lineup-role-badge ${roleBadge}`}>
+                        {roleBadge === 'on-court' ? 'EN CANCHA' : 'SUPLENTE'}
+                    </span>
+                )}
+
+                {/* Dorsal Grande y Claro */}
+                <div className="pm-jersey-badge">
+                    <span className="pm-jersey-hash">#</span>
+                    <span className="player-jersey-num">
+                        {p.number !== undefined ? p.number : '—'}
+                    </span>
+                </div>
+
+                {/* Nombre Grande del Jugador */}
+                <span className="player-name-label">
+                    {p.name}
+                </span>
+
+                {/* Fila de Estadísticas en Vivo del Jugador (PTS y FAL) */}
+                <div className="pm-player-stats-row">
+                    <span className={`pm-stat-chip pts ${points > 0 ? 'has-pts' : ''}`}>
+                        {points} PTS
+                    </span>
+
+                    <span
+                        className={`pm-stat-chip fouls ${
+                            isExpelled
+                                ? 'expelled'
+                                : isFoulTrouble
+                                    ? 'warning'
+                                    : fouls > 0
+                                        ? 'has-fouls'
+                                        : ''
+                        }`}
+                    >
+                        {isExpelled ? `${fouls} FAL • EXP` : `${fouls} FAL`}
+                    </span>
+                </div>
+            </button>
+        );
+    };
+
+    const renderAddPlayerCard = () => {
+        if (!resolvedTeamId || showQuickAdd) return null;
+        return (
+            <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => {
+                    setShowQuickAdd(true);
+                    setTimeout(() => nameInputRef.current?.focus(), 50);
+                }}
+                className="pm-player-btn pm-add-player-card"
+            >
+                <div className="pm-add-icon-circle">
+                    <UserPlus size={26} />
+                </div>
+                <span className="player-name-label" style={{ color: 'var(--text-secondary)' }}>
+                    + Nuevo Jugador
+                </span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Agregar a {teamName}
+                </span>
+            </button>
+        );
     };
 
     return (
@@ -246,86 +352,36 @@ export function PlayerSelectModal({
                     )}
                 </div>
 
-                {/* GRID GRANDE DE JUGADORES */}
-                <div className="player-grid">
-                    {players.map(p => {
-                        const fouls = playerStats.foulsMap.get(p.id!) || 0;
-                        const points = playerStats.pointsMap.get(p.id!) || 0;
-                        const isExpelled = foulLimit !== undefined && fouls >= foulLimit;
-                        const isFoulTrouble = !isExpelled && foulLimit !== undefined && fouls === foulLimit - 1;
-
-                        return (
-                            <button
-                                key={p.id}
-                                type="button"
-                                disabled={isExpelled || isSubmitting}
-                                onClick={() => {
-                                    if (!isExpelled) {
-                                        void handleSelectAction(p.id!, activeAction);
-                                    }
-                                }}
-                                className={`pm-player-btn ${isExpelled ? 'is-expelled' : ''} ${isFoulTrouble ? 'is-warning' : ''}`}
-                            >
-                                {/* Dorsal Grande y Claro */}
-                                <div className="pm-jersey-badge">
-                                    <span className="pm-jersey-hash">#</span>
-                                    <span className="player-jersey-num">
-                                        {p.number !== undefined ? p.number : '—'}
-                                    </span>
-                                </div>
-
-                                {/* Nombre Grande del Jugador */}
-                                <span className="player-name-label">
-                                    {p.name}
-                                </span>
-
-                                {/* Fila de Estadísticas en Vivo del Jugador (PTS y FAL) */}
-                                <div className="pm-player-stats-row">
-                                    <span className={`pm-stat-chip pts ${points > 0 ? 'has-pts' : ''}`}>
-                                        {points} PTS
-                                    </span>
-
-                                    <span
-                                        className={`pm-stat-chip fouls ${
-                                            isExpelled
-                                                ? 'expelled'
-                                                : isFoulTrouble
-                                                    ? 'warning'
-                                                    : fouls > 0
-                                                        ? 'has-fouls'
-                                                        : ''
-                                        }`}
-                                    >
-                                        {isExpelled ? `${fouls} FAL • EXP` : `${fouls} FAL`}
-                                    </span>
-                                </div>
-                            </button>
-                        );
-                    })}
-
-                    {/* TARJETA PARA AGREGAR JUGADOR AL VUELO */}
-                    {resolvedTeamId && !showQuickAdd && (
-                        <button
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => {
-                                setShowQuickAdd(true);
-                                setTimeout(() => nameInputRef.current?.focus(), 50);
-                            }}
-                            className="pm-player-btn pm-add-player-card"
-                        >
-                            <div className="pm-add-icon-circle">
-                                <UserPlus size={26} />
+                {/* GRID DE JUGADORES: AGRUPADO EN CANCHA / BANCA SI HAY QUINTETO ACTIVO */}
+                {lineupsEnabled ? (
+                    <div className="pm-lineup-sections">
+                        <div className="pm-lineup-group" data-testid="player-select-on-court">
+                            <div className="lineup-group-header on-court">
+                                <span>EN CANCHA</span>
+                                <span className="lineup-group-count">{onCourtPlayers.length} titulares</span>
                             </div>
-                            <span className="player-name-label" style={{ color: 'var(--text-secondary)' }}>
-                                + Nuevo Jugador
-                            </span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                Agregar a {teamName}
-                            </span>
-                        </button>
-                    )}
-                </div>
+                            <div className="player-grid is-nested">
+                                {onCourtPlayers.map(p => renderPlayerButton(p, 'on-court'))}
+                            </div>
+                        </div>
+
+                        <div className="pm-lineup-group bench" data-testid="player-select-bench">
+                            <div className="lineup-group-header bench">
+                                <span>BANCA • SUPLENTES</span>
+                                <span className="lineup-group-count">{benchPlayers.length} suplentes</span>
+                            </div>
+                            <div className="player-grid is-nested">
+                                {benchPlayers.map(p => renderPlayerButton(p, 'bench'))}
+                                {renderAddPlayerCard()}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="player-grid">
+                        {players.map(p => renderPlayerButton(p))}
+                        {renderAddPlayerCard()}
+                    </div>
+                )}
 
                 {/* FORMULARIO RÁPIDO PARA AGREGAR JUGADOR EN PLENO PARTIDO */}
                 {showQuickAdd && resolvedTeamId && (

@@ -6,6 +6,7 @@ import { useLiveMatch } from '../context/LiveMatchContext';
 import { useGameActions } from '../../hooks/useGameActions';
 import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
+import { isLineupActive } from '../../../../db/lineups.service';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
 import { Trophy, Clock, RotateCcw, X, Flag, FastForward, Share2 } from 'lucide-react';
@@ -14,6 +15,7 @@ import { Trophy, Clock, RotateCcw, X, Flag, FastForward, Share2 } from 'lucide-r
 import { Scoreboard } from '../../../../components/live/Scoreboard';
 import { MatchControls } from '../../../../components/live/MatchControls';
 import { PlayerSelectModal, type GameAction } from '../../../../components/live/PlayerSelectModal';
+import { LineupModal } from '../../../../components/live/LineupModal';
 import { ModalLiveStatusPill } from '../../../../components/live/ModalLiveStatusPill';
 
 // Components compartidos
@@ -39,6 +41,7 @@ export const TraditionalEngine: React.FC = () => {
   }
 
   const [showTimerModal, setShowTimerModal] = useState(false);
+  const [showLineupModal, setShowLineupModal] = useState(false);
   const [customMinutes, setCustomMinutes] = useState('10');
   const [customSeconds, setCustomSeconds] = useState('00');
   const [confirmDialog, setConfirmDialog] = useState<'end-match' | 'next-quarter' | null>(null);
@@ -58,10 +61,10 @@ export const TraditionalEngine: React.FC = () => {
   }, [playerModal.isOpen, setActionModalOpen]);
 
   useEffect(() => {
-    const hasDialog = showTimerModal || confirmDialog !== null;
+    const hasDialog = showTimerModal || showLineupModal || confirmDialog !== null;
     setActionModalOpen('engine-dialog-modal', hasDialog);
     return () => setActionModalOpen('engine-dialog-modal', false);
-  }, [showTimerModal, confirmDialog, setActionModalOpen]);
+  }, [showTimerModal, showLineupModal, confirmDialog, setActionModalOpen]);
 
   useEffect(() => {
     if (match?.status === 'finished') {
@@ -71,7 +74,7 @@ export const TraditionalEngine: React.FC = () => {
 
   // Hooks incondicionales al nivel superior del componente (Rules of Hooks)
   const isOverlayBlocking =
-    isActionModalOpen || playerModal.isOpen || showTimerModal || confirmDialog !== null;
+    isActionModalOpen || playerModal.isOpen || showTimerModal || showLineupModal || confirmDialog !== null;
 
   const {
     timeLeft,
@@ -127,6 +130,7 @@ export const TraditionalEngine: React.FC = () => {
     if (currentMatchIdRef.current !== undefined && currentMatchIdRef.current !== match.id) {
       setPlayerModal(prev => ({ ...prev, isOpen: false }));
       setShowTimerModal(false);
+      setShowLineupModal(false);
       setConfirmDialog(null);
     }
     currentMatchIdRef.current = match.id;
@@ -259,6 +263,7 @@ export const TraditionalEngine: React.FC = () => {
   };
 
   const isLocalModal = playerModal.teamId === localTeam.id;
+  const lineupsActive = isLineupActive(match);
 
   return (
     <div className="live-layout">
@@ -270,6 +275,8 @@ export const TraditionalEngine: React.FC = () => {
         onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
         onEndMatch={() => setConfirmDialog('end-match')}
         showBuzzer
+        onManageLineups={() => setShowLineupModal(true)}
+        lineupsEnabled={lineupsActive}
       />
 
       {!hasAuthority && (
@@ -395,6 +402,15 @@ export const TraditionalEngine: React.FC = () => {
           scoringOptions={[1, 2, 3]}
           onSelect={handlePlayerSelect}
           onCancel={() => setPlayerModal({ ...playerModal, isOpen: false })}
+        />
+      )}
+
+      {showLineupModal && (
+        <LineupModal
+          onClose={() => setShowLineupModal(false)}
+          isTimerRunning={isTimerRunning}
+          onLineupsActivated={() => setTrackPlayers(true)}
+          foulLimit={5}
         />
       )}
 

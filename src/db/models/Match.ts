@@ -4,6 +4,13 @@ import type { MatchConfig, GameResult } from './MatchConfig';
 export type MatchStatus = 'created' | 'playing' | 'paused' | 'finished';
 export type MatchEventsProvenance = 'live_session' | 'unverified';
 
+export interface MatchLineups {
+  enabled: boolean;
+  localOnCourt: number[];
+  visitorOnCourt: number[];
+  version: number;
+}
+
 export interface Match {
   id?: number;
   
@@ -37,6 +44,7 @@ export interface Match {
   possession?: 'local' | 'visitor' | null;
   localTimeouts?: number;
   visitorTimeouts?: number;
+  lineups?: MatchLineups;
 
   // Fencing y autoridad transaccional del cronómetro (Fase 2C R1.1 - C-11/C-14)
   timerEpoch?: number;

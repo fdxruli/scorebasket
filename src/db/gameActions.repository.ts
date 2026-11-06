@@ -39,8 +39,10 @@ export const GameActionsRepository = {
     actionId: number;
     type: 'score' | 'foul';
     _faultInjection?: 'post-delete';
+    hasAuthority?: boolean;
+    callerEpoch?: number;
   }): Promise<DeleteActionResult> {
-    const { matchId, actionId, type, _faultInjection } = params;
+    const { matchId, actionId, type, _faultInjection, hasAuthority, callerEpoch } = params;
 
     return db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
       // 1. Consultar el partido actual
@@ -143,33 +145,49 @@ export const GameActionsRepository = {
           throw new Error('Invariante violado: el marcador resultante contiene valores negativos.');
         }
 
-        await db.matches.update(matchId, {
-          localScore: newLocal,
-          visitorScore: newVisitor
-        });
-
-        // 13. Fallo controlado para pruebas de rollback transaccional (R1.5)
-        if (_faultInjection === 'post-delete') {
-          throw new Error('Fallo transaccional deliberado provocado después de la escritura parcial.');
-        }
-
-        // Asistente de posesión: comprobar reversibilidad o emitir aviso para revisión manual (ASIST-01)
+        // Asistente de posesión: reversión conservadora con demostración fehaciente (ASIST-01)
         let possessionNotice: string | undefined = undefined;
+        let shouldRestorePossession = false;
+        const scoringTeamSide: 'local' | 'visitor' = isLocal ? 'local' : 'visitor';
+
         if (match.possessionAssistant?.enabled) {
-          const scoringTeamSide: 'local' | 'visitor' = isLocal ? 'local' : 'visitor';
           const rivalTeamSide: 'local' | 'visitor' = isLocal ? 'visitor' : 'local';
 
           const isPaused = !match.timerLastStart;
           const isShotClockAt24 = (match.shotClock?.secondsRemaining === 24 || match.shotClock?.secondsRemaining === undefined) && !match.shotClock?.lastStart;
           const isCurrentPossessionRival = match.possession === rivalTeamSide;
+          const isProvenLastAssisted = match.possessionAssistant?.lastAssistedScoreId === actionId;
+          const hasValidAuthority = hasAuthority !== false;
+          const isEpochMatching = callerEpoch === undefined || match.timerEpoch === undefined || callerEpoch === match.timerEpoch;
 
-          if (isPaused && isShotClockAt24 && isCurrentPossessionRival) {
-            await db.matches.update(matchId, {
-              possession: scoringTeamSide
-            });
+          // Demostración fehaciente de seguridad:
+          // 1. Debe estar demostrado que esta acción exacta fue la última anotación asistida sin acciones posteriores.
+          // 2. El cronómetro principal no ha corrido (está en pausa).
+          // 3. El reloj de posesión permanece en 24s sin tiempo consumido.
+          // 4. La posesión actual sigue siendo la del rival.
+          // 5. La pestaña cuenta con autoridad válida y epoch vigente.
+          if (isProvenLastAssisted && isPaused && isShotClockAt24 && isCurrentPossessionRival && hasValidAuthority && isEpochMatching) {
+            shouldRestorePossession = true;
           } else {
             possessionNotice = 'Anotación revertida. Revisa la posesión y el reloj de posesión si necesitas ajustarlos.';
           }
+        }
+
+        await db.matches.update(matchId, {
+          localScore: newLocal,
+          visitorScore: newVisitor,
+          ...(shouldRestorePossession ? { possession: scoringTeamSide } : {}),
+          ...(match.possessionAssistant ? {
+            possessionAssistant: {
+              ...match.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {})
+        });
+
+        // 13. Fallo controlado para pruebas de rollback transaccional (R1.5)
+        if (_faultInjection === 'post-delete') {
+          throw new Error('Fallo transaccional deliberado provocado después de la escritura parcial.');
         }
 
         // 14. Verificación de consistencia posterior dentro de la misma transacción antes de confirmar
@@ -212,7 +230,13 @@ export const GameActionsRepository = {
 
         await db.matches.update(matchId, {
           localFouls: newLocalFouls,
-          visitorFouls: newVisitorFouls
+          visitorFouls: newVisitorFouls,
+          ...(match.possessionAssistant?.lastAssistedScoreId ? {
+            possessionAssistant: {
+              ...match.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {})
         });
 
         if (_faultInjection === 'post-delete') {
@@ -241,7 +265,11 @@ export const GameActionsRepository = {
    * Deshace la última acción registrada en el periodo/juego/set actual
    * usando la misma transacción y validaciones de integridad atómica.
    */
-  async undoLastAction(matchId: number, expectedPeriod?: number): Promise<DeleteActionResult> {
+  async undoLastAction(
+    matchId: number,
+    expectedPeriod?: number,
+    options?: { hasAuthority?: boolean; callerEpoch?: number }
+  ): Promise<DeleteActionResult> {
     return db.transaction('rw', db.matches, db.scores, db.fouls, async () => {
       const currentMatch = await db.matches.get(matchId);
       if (!currentMatch) {
@@ -291,7 +319,9 @@ export const GameActionsRepository = {
         return this.deleteActionSafely({
           matchId,
           actionId: lastScore.id!,
-          type: 'score'
+          type: 'score',
+          hasAuthority: options?.hasAuthority,
+          callerEpoch: options?.callerEpoch
         });
       }
 
@@ -299,7 +329,9 @@ export const GameActionsRepository = {
         return this.deleteActionSafely({
           matchId,
           actionId: lastFoul.id!,
-          type: 'foul'
+          type: 'foul',
+          hasAuthority: options?.hasAuthority,
+          callerEpoch: options?.callerEpoch
         });
       }
 

@@ -1966,6 +1966,12 @@ export const MatchTimerService = {
             secondsRemaining: seconds,
             lastStart: startDate
           },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
         };
@@ -2213,7 +2219,7 @@ export const MatchTimerService = {
           quarter: currentPeriod,
           createdAt: new Date(nowMs)
         };
-        await db.scores.add(newScore as Score);
+        const scoreId = await db.scores.add(newScore as Score);
 
         // Posesión siguiente asignada al rival
         const nextPossession: 'local' | 'visitor' = isLocal ? 'visitor' : 'local';
@@ -2242,6 +2248,13 @@ export const MatchTimerService = {
             secondsRemaining: 24,
             lastStart: startDate
           },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              enabled: true,
+              lastAssistedScoreId: Number(scoreId)
+            }
+          } : {}),
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
         };
@@ -2363,6 +2376,12 @@ export const MatchTimerService = {
             secondsRemaining: 24,
             lastStart: startDate
           },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
         };
@@ -2430,6 +2449,12 @@ export const MatchTimerService = {
 
         await db.matches.update(matchId, {
           possession,
+          ...(match?.possessionAssistant ? {
+            possessionAssistant: {
+              ...match.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
         });
@@ -2520,7 +2545,8 @@ export const MatchTimerService = {
         await db.matches.update(matchId, {
           possessionAssistant: {
             enabled,
-            hapticsEnabled
+            hapticsEnabled,
+            lastAssistedScoreId: undefined
           },
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId

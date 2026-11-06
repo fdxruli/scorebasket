@@ -20,6 +20,7 @@ export interface MatchShotClock {
 export interface MatchPossessionAssistant {
   enabled: boolean;
   hapticsEnabled?: boolean;
+  lastAssistedScoreId?: number;
 }
 
 export interface Match {

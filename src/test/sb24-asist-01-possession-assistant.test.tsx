@@ -462,12 +462,16 @@ describe('ASIST-01: Asistente automático de posesión y reloj de ataque', () =>
   });
 
   // =========================================================================
-  // 10. DESHACER (UNDO): REVERSIÓN COHERENTE O PRESERVACIÓN CON AVISO
+  // 10. VERIFICACIÓN FINAL DE DESHACER (CASOS OBLIGATORIOS 1 A 5)
   // =========================================================================
-  it('10. Deshacer: revierte la anotación atómicamente y restaura la posesión si el estado previo está intacto', async () => {
-    await db.matches.update(sampleMatchId, { possession: 'local' });
+  it('10.1 Caso 1: Canasta asistida y Deshacer inmediato sin acciones intermedias (restaura posesión a quien anotó)', async () => {
+    await db.matches.update(sampleMatchId, {
+      possession: 'local',
+      localScore: 0,
+      visitorScore: 0,
+      shotClock: { enabled: true, secondsRemaining: 24, lastStart: undefined }
+    });
 
-    // Anotar canasta de 2
     const res = await MatchTimerService.recordFieldGoalWithAssistant(
       sampleMatchId,
       { scoringTeamId: localTeamId, points: 2 }
@@ -477,15 +481,164 @@ describe('ASIST-01: Asistente automático de posesión y reloj de ataque', () =>
     let m = await db.matches.get(sampleMatchId);
     expect(m?.localScore).toBe(2);
     expect(m?.possession).toBe('visitor');
+    expect(m?.possessionAssistant?.lastAssistedScoreId).toBeDefined();
 
-    // Deshacer inmediatamente mientras sigue pausado y a 24s
+    // Deshacer inmediato: no hubo eventos intermedios, está pausado y a 24s
     const undoRes = await GameActionsRepository.undoLastAction(sampleMatchId, 1);
     expect(undoRes.success).toBe(true);
+    expect(undoRes.notice).toBeUndefined(); // Sin aviso porque la reversión fue 100% segura y automática
 
     m = await db.matches.get(sampleMatchId);
     expect(m?.localScore).toBe(0);
-    // Debe haber restaurado la posesión al equipo que anotó
+    expect(m?.possession).toBe('local'); // Posesión restaurada limpiamente a local
+    expect(m?.possessionAssistant?.lastAssistedScoreId).toBeUndefined();
+  });
+
+  it('10.2 Caso 2: Canasta asistida, Cambio / Robo y después Deshacer la canasta (conserva posesión posterior)', async () => {
+    await db.matches.update(sampleMatchId, {
+      possession: 'local',
+      localScore: 0,
+      visitorScore: 0,
+      shotClock: { enabled: true, secondsRemaining: 24, lastStart: undefined }
+    });
+
+    // 1. Canasta asistida de Local (+2 -> posesión a visitante)
+    await MatchTimerService.recordFieldGoalWithAssistant(
+      sampleMatchId,
+      { scoringTeamId: localTeamId, points: 2 }
+    );
+
+    // 2. Acción intermedia legítima: "Cambio / Robo" (Turnover legal)
+    // El balón pasa legalmente a Local y se reinicia a 24s
+    const turnoverRes = await MatchTimerService.applyPossessionTurnover(sampleMatchId);
+    expect(turnoverRes.status).toBe('applied');
+    expect(turnoverRes.nextPossession).toBe('local');
+
+    let m = await db.matches.get(sampleMatchId);
     expect(m?.possession).toBe('local');
+    // El turnover debe haber invalidado lastAssistedScoreId
+    expect(m?.possessionAssistant?.lastAssistedScoreId).toBeUndefined();
+
+    // 3. Deshacer la canasta inicial
+    const undoRes = await GameActionsRepository.undoLastAction(sampleMatchId, 1);
+    expect(undoRes.success).toBe(true);
+    // Debe emitir aviso para revisión manual y NO alterar la posesión ganada por el robo
+    expect(undoRes.notice).toContain('Revisa la posesión y el reloj');
+
+    m = await db.matches.get(sampleMatchId);
+    expect(m?.localScore).toBe(0); // Puntos revertidos correctamente
+    expect(m?.possession).toBe('local'); // Posesión legítima del robo conservada intacta
+  });
+
+  it('10.3 Caso 3: Canasta asistida, reinicio manual 14/24 y después Deshacer (conserva posesión y reloj)', async () => {
+    await db.matches.update(sampleMatchId, {
+      possession: 'local',
+      localScore: 0,
+      visitorScore: 0,
+      shotClock: { enabled: true, secondsRemaining: 24, lastStart: undefined }
+    });
+
+    // Canasta asistida (+2 -> posesión visitante, 24s)
+    await MatchTimerService.recordFieldGoalWithAssistant(
+      sampleMatchId,
+      { scoringTeamId: localTeamId, points: 2 }
+    );
+
+    // Operador presiona manualmente reinicio a 14s (rebote ofensivo)
+    const resetRes = await MatchTimerService.resetShotClock(sampleMatchId, 14);
+    expect(resetRes.status).toBe('applied');
+
+    let m = await db.matches.get(sampleMatchId);
+    expect(m?.shotClock?.secondsRemaining).toBe(14);
+    expect(m?.possessionAssistant?.lastAssistedScoreId).toBeUndefined();
+
+    // Deshacer la canasta
+    const undoRes = await GameActionsRepository.undoLastAction(sampleMatchId, 1);
+    expect(undoRes.success).toBe(true);
+    expect(undoRes.notice).toContain('Revisa la posesión y el reloj');
+
+    m = await db.matches.get(sampleMatchId);
+    expect(m?.localScore).toBe(0);
+    expect(m?.possession).toBe('visitor'); // No se sobrescribe
+    expect(m?.shotClock?.secondsRemaining).toBe(14); // No se inventan segundos
+  });
+
+  it('10.4 Caso 4: Canasta asistida, otra acción intermedia y después Deshacer (no sobrescribe posesión)', async () => {
+    await db.matches.update(sampleMatchId, {
+      possession: 'local',
+      localScore: 0,
+      visitorScore: 0,
+      shotClock: { enabled: true, secondsRemaining: 24, lastStart: undefined }
+    });
+
+    // 1. Canasta de local (+2 -> posesión visitante)
+    await MatchTimerService.recordFieldGoalWithAssistant(
+      sampleMatchId,
+      { scoringTeamId: localTeamId, points: 2 }
+    );
+
+    // 2. Cambio manual de posesión o falta intermedia
+    await MatchTimerService.setPossession(sampleMatchId, 'visitor');
+
+    let m = await db.matches.get(sampleMatchId);
+    expect(m?.possessionAssistant?.lastAssistedScoreId).toBeUndefined();
+
+    // 3. Deshacer la canasta
+    const undoRes = await GameActionsRepository.undoLastAction(sampleMatchId, 1);
+    expect(undoRes.success).toBe(true);
+    expect(undoRes.notice).toContain('Revisa la posesión y el reloj');
+
+    m = await db.matches.get(sampleMatchId);
+    expect(m?.localScore).toBe(0);
+    expect(m?.possession).toBe('visitor');
+  });
+
+  it('10.5 Caso 5: Deshacer desde condición de autoridad obsoleta o tras cambiar de periodo', async () => {
+    await db.matches.update(sampleMatchId, {
+      possession: 'local',
+      localScore: 0,
+      visitorScore: 0,
+      currentQuarter: 1,
+      shotClock: { enabled: true, secondsRemaining: 24, lastStart: undefined }
+    });
+
+    // 1. Canasta de local en Q1
+    await MatchTimerService.recordFieldGoalWithAssistant(
+      sampleMatchId,
+      { scoringTeamId: localTeamId, points: 2 }
+    );
+
+    // Subcaso 5A: Deshacer con autoridad obsoleta o modo observador (hasAuthority: false)
+    const undoObserver = await GameActionsRepository.undoLastAction(sampleMatchId, 1, {
+      hasAuthority: false
+    });
+    expect(undoObserver.success).toBe(true);
+    // Revierte puntos pero no puede alterar posesión/reloj; emite aviso de revisión manual
+    expect(undoObserver.notice).toContain('Revisa la posesión y el reloj');
+
+    let m = await db.matches.get(sampleMatchId);
+    expect(m?.localScore).toBe(0);
+    expect(m?.possession).toBe('visitor');
+
+    // Subcaso 5B: Intentar deshacer tras cambiar de periodo
+    // Anotamos en Q1 nuevamente
+    await MatchTimerService.recordFieldGoalWithAssistant(
+      sampleMatchId,
+      { scoringTeamId: localTeamId, points: 2 }
+    );
+    // Avanzamos periodo a Q2
+    await MatchTimerService.advanceQuarter(sampleMatchId);
+    m = await db.matches.get(sampleMatchId);
+    expect(m?.currentQuarter).toBe(2);
+
+    // Intentar deshacer con expectedPeriod: 1 cuando el partido ya está en Q2
+    await expect(
+      GameActionsRepository.undoLastAction(sampleMatchId, 1)
+    ).rejects.toThrow(/cerrado o cuando el periodo ha cambiado/);
+
+    // Verificar que el marcador y la posesión no sufrieron modificaciones espurias
+    m = await db.matches.get(sampleMatchId);
+    expect(m?.localScore).toBe(2);
   });
 
   // =========================================================================

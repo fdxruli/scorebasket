@@ -291,41 +291,20 @@ export const TraditionalEngine: React.FC = () => {
         isTimerRunning={isTimerRunning}
       />
 
-      {!hasAuthority && (
-        <div
-          className="observer-notice-pill"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0.5rem 1rem',
-            margin: '0.25rem 0',
-            backgroundColor: 'rgba(234, 179, 8, 0.15)',
-            border: '1px solid rgba(234, 179, 8, 0.4)',
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-            color: '#fef08a'
-          }}
-        >
-          <span>Modo observador: Otra pestaña controla el tiempo.</span>
-          <button
-            type="button"
-            onClick={() => { requestAuthorityTransfer(); }}
-            style={{
-              padding: '0.25rem 0.75rem',
-              backgroundColor: '#eab308',
-              color: '#000',
-              border: 'none',
-              borderRadius: '4px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.8rem'
-            }}
-          >
-            Reclamar control
-          </button>
-        </div>
-      )}
+      {/* Zona de avisos: ubicación responsive definida (no empuja ni cubre el marcador) */}
+      <div className="live-notices">
+        {!hasAuthority && (
+          <div className="observer-notice-pill" role="status" data-testid="observer-notice">
+            <span className="observer-notice-text">Modo observador: Otra pestaña controla el tiempo.</span>
+            <button
+              type="button"
+              className="observer-notice-btn"
+              onClick={() => { requestAuthorityTransfer(); }}
+            >
+              Reclamar control
+            </button>
+          </div>
+        )}
 
       {(confidence === 'uncertain' || timerRecoveryState === 'recovery_required') && (
         <div
@@ -370,6 +349,7 @@ export const TraditionalEngine: React.FC = () => {
           )}
         </div>
       )}
+      </div>
 
       <Scoreboard
         localName={localTeam.name}

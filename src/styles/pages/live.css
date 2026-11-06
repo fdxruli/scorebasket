@@ -11,7 +11,6 @@
   justify-content: space-between;
   min-height: 100vh;
   min-height: 100dvh;
-  height: 100dvh;
   background-color: #06070b;
   background-image:
     radial-gradient(circle at 20% 20%, rgba(14, 165, 233, 0.14) 0%, transparent 45%),
@@ -20,7 +19,7 @@
     linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 100% 100%, 40px 40px, 40px 40px;
-  overflow: hidden;
+  overflow-x: hidden;
   color: var(--text-main);
 }
 
@@ -39,6 +38,8 @@
 }
 
 .live-header-center {
+  flex: 1 1 auto;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1139,6 +1140,7 @@
   }
 
   .scoreboard-container {
+    max-height: none;
     gap: 1.5rem;
     padding: 0.65rem 0;
   }
@@ -1836,12 +1838,57 @@
   margin-top: 0.25rem;
 }
 
-/* Herramientas Secundarias (en vertical: arriba de los marcadores; en horizontal: columna central) */
-.tools-bar {
+/* Zona de avisos del partido (observador / anomalÃ­as de reloj).
+   Vertical: flujo normal, una sola lÃ­nea compacta. Horizontal: fila propia en el grid. */
+.live-notices {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 0.85rem;
+  min-width: 0;
+}
+
+.live-notices:empty { display: none; }
+
+.observer-notice-pill {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-width: 0;
+  padding: 0.3rem 0.5rem 0.3rem 0.75rem;
+  margin: 0.25rem 0;
+  background-color: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: #fef08a;
+}
+
+.observer-notice-text { min-width: 0; flex: 1 1 auto; }
+
+.observer-notice-btn {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  background-color: #eab308;
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Herramientas Secundarias (en vertical: arriba de los marcadores; en horizontal: columna central) */
+.tools-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.5rem;
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;
@@ -1853,10 +1900,12 @@
   z-index: 12;
 }
 
-.tools-bar-group { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
+.tools-bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; min-width: 0; flex: 1 1 auto; }
+.tools-bar > .tool-chip.is-danger { margin-left: auto; }
 
 .tool-chip {
-  height: 2.6rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
   padding: 0 0.7rem;
   border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.05);
@@ -1875,7 +1924,8 @@
 }
 
 .tool-chip:active { transform: scale(0.95); }
-.tool-chip.icon-only { width: 2.6rem; padding: 0; }
+.tool-chip.icon-only { width: 2.75rem; padding: 0; }
+.tool-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .tool-chip-state {
   font-family: var(--font-mono);
@@ -1909,6 +1959,9 @@
 }
 
 @media (max-width: 360px) {
+  .live-header { gap: 0.35rem; padding-left: 0.6rem; padding-right: 0.6rem; }
+  .live-header-actions { gap: 0.3rem; }
+  .live-badge { padding: 0.3rem 0.55rem; font-size: 0.72rem; letter-spacing: 0.03em; }
   .tool-chip span:not(.tool-chip-state) { font-size: 0.68rem; }
   .btn-action.btn-score .btn-score-sub { display: none; }
 }
@@ -1936,13 +1989,15 @@
 @media (orientation: landscape) and (max-height: 550px) {
   .live-layout {
     display: grid !important;
-    grid-template-columns: 1fr minmax(180px, 220px) 1fr !important;
-    grid-template-rows: auto auto 1fr auto !important;
-    gap: 0.35rem 0.6rem !important;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px) minmax(0, 1fr) !important;
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto !important;
+    gap: 0 0.6rem !important;
     padding: 0.25rem max(0.65rem, env(safe-area-inset-right, 0px)) calc(0.25rem + env(safe-area-inset-bottom, 0px)) max(0.65rem, env(safe-area-inset-left, 0px)) !important;
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    overflow: hidden !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
     align-items: stretch !important;
   }
 
@@ -1971,9 +2026,27 @@
     font-size: 0.75rem !important;
   }
 
+  .live-notices {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0;
+  }
+
+  .observer-notice-pill {
+    margin: 0 0 0.2rem;
+    padding: 0.15rem 0.4rem 0.15rem 0.6rem;
+    font-size: 0.72rem;
+  }
+
+  .observer-notice-btn {
+    min-height: 1.9rem;
+    padding: 0 0.6rem;
+    font-size: 0.72rem;
+  }
+
   .live-last-play-bar {
     grid-column: 1 / -1 !important;
-    grid-row: 2 !important;
+    grid-row: 3 !important;
     padding: 0.15rem 0.55rem !important;
     margin: 0 0 0.1rem !important;
     font-size: 0.74rem !important;
@@ -1996,8 +2069,8 @@
   /* 3. Columna 1: LOCAL (Marcador y acciones bajo el pulgar izquierdo) */
   .score-card.local {
     grid-column: 1 !important;
-    grid-row: 3 / 5 !important;
-    height: 100% !important;
+    grid-row: 4 / 6 !important;
+    height: calc(100% - 0.3rem) !important;
     min-height: 0 !important;
     max-height: 175px !important;
     padding: 0.45rem 0.55rem !important;
@@ -2010,7 +2083,7 @@
 
   .action-grid > .team-column:first-child {
     grid-column: 1 !important;
-    grid-row: 5 !important;
+    grid-row: 6 / 8 !important;
     width: 100% !important;
     min-width: 0 !important;
   }
@@ -2018,8 +2091,8 @@
   /* 4. Columna 3: VISITANTE (Marcador y acciones bajo el pulgar derecho) */
   .score-card.visitor {
     grid-column: 3 !important;
-    grid-row: 3 / 5 !important;
-    height: 100% !important;
+    grid-row: 4 / 6 !important;
+    height: calc(100% - 0.3rem) !important;
     min-height: 0 !important;
     max-height: 175px !important;
     padding: 0.45rem 0.55rem !important;
@@ -2032,7 +2105,7 @@
 
   .action-grid > .team-column:last-child {
     grid-column: 3 !important;
-    grid-row: 5 !important;
+    grid-row: 6 / 8 !important;
     width: 100% !important;
     min-width: 0 !important;
   }
@@ -2141,54 +2214,68 @@
   /* Fila 3 Centro: Herramientas secundarias (Finalizar arriba, Jugadores/Sonido/Campana abajo) */
   .tools-bar {
     grid-column: 2 !important;
-    grid-row: 3 !important;
+    grid-row: 4 !important;
     display: flex !important;
     flex-direction: column-reverse !important; /* Finalizar queda arriba, bajo "EN CANCHA - Q1" */
-    gap: 0.35rem !important;
+    flex-wrap: nowrap !important;
+    gap: 0.3rem !important;
     width: 100% !important;
     max-width: 215px !important;
     margin: 0 auto !important;
     border: none !important;
     background: transparent !important;
     padding: 0 !important;
+    margin-bottom: 0.3rem !important;
     align-self: center !important;
   }
 
+  /* Chips en rejilla de 4 columnas: los de texto ocupan 2, los de icono 1 (sin recortes ni solapes) */
   .tools-bar-group {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.35rem !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.3rem !important;
     width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+
+  .tools-bar-group > .tool-chip:not(.icon-only) {
+    grid-column: span 2;
+  }
+
+  .tools-bar-group > .tool-chip:not(.icon-only) svg {
+    display: none;
   }
 
   .tool-chip {
     height: 2.1rem !important;
+    min-width: 0 !important;
     font-size: 0.7rem !important;
-    padding: 0 0.5rem !important;
+    padding: 0 0.3rem !important;
+    gap: 0.25rem !important;
   }
 
   .tool-chip.icon-only {
-    width: 2.1rem !important;
+    width: 100% !important;
     height: 2.1rem !important;
   }
 
   .tool-chip.is-danger {
     width: 100% !important;
     height: 2.1rem !important;
+    margin-left: 0 !important;
     justify-content: center !important;
   }
 
   /* Fila 4 Centro: Reloj + Iniciar/Pausar + Ir a Q (Unificados juntos) */
   .transport-bar {
     grid-column: 2 !important;
-    grid-row: 4 !important;
+    grid-row: 5 !important;
     display: grid !important;
     grid-template-columns: 1fr 1.25fr 0.95fr !important;
     gap: 0.35rem !important;
     width: 100% !important;
     max-width: 220px !important;
-    margin: 0 auto !important;
+    margin: 0 auto 0.3rem !important;
     align-self: center !important;
   }
 
@@ -2216,9 +2303,10 @@
   /* Reloj de Posesión en Landscape (DEPORT-04) */
   .shot-clock-bar {
     grid-column: 2 !important;
-    grid-row: 5 !important;
+    grid-row: 6 !important;
+    width: 100% !important;
     max-width: 220px !important;
-    margin: 0 auto 0.15rem !important;
+    margin: 0 auto 0.3rem !important;
     gap: 0.25rem !important;
   }
 
@@ -2254,14 +2342,14 @@
   /* Fila 5 Centro: Botón de Posesión Fluido y Visible (en medio de faltas/puntos) */
   .possession-hub-container {
     grid-column: 2 !important;
-    grid-row: 5 !important;
+    grid-row: 7 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     width: 100% !important;
     max-width: 220px !important;
     margin: 0 auto !important;
-    align-self: center !important;
+    align-self: start !important;
   }
 
   .btn-possession-fluid {
@@ -2282,7 +2370,7 @@
   /* Banners de meta (Modo Reta / Series en Landscape) */
   .race-stage-banner {
     grid-column: 2 !important;
-    grid-row: 4 / 6 !important;
+    grid-row: 5 / 8 !important;
     align-self: center !important;
     justify-self: center !important;
     width: 100% !important;

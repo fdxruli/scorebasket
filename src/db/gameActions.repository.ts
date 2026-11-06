@@ -11,6 +11,7 @@ export interface DeleteActionResult {
   newScore?: { local: number; visitor: number };
   previousFouls?: { local: number; visitor: number };
   newFouls?: { local: number; visitor: number };
+  notice?: string;
 }
 
 export function getCurrentActionPeriod(match: Match): number {
@@ -152,6 +153,25 @@ export const GameActionsRepository = {
           throw new Error('Fallo transaccional deliberado provocado después de la escritura parcial.');
         }
 
+        // Asistente de posesión: comprobar reversibilidad o emitir aviso para revisión manual (ASIST-01)
+        let possessionNotice: string | undefined = undefined;
+        if (match.possessionAssistant?.enabled) {
+          const scoringTeamSide: 'local' | 'visitor' = isLocal ? 'local' : 'visitor';
+          const rivalTeamSide: 'local' | 'visitor' = isLocal ? 'visitor' : 'local';
+
+          const isPaused = !match.timerLastStart;
+          const isShotClockAt24 = (match.shotClock?.secondsRemaining === 24 || match.shotClock?.secondsRemaining === undefined) && !match.shotClock?.lastStart;
+          const isCurrentPossessionRival = match.possession === rivalTeamSide;
+
+          if (isPaused && isShotClockAt24 && isCurrentPossessionRival) {
+            await db.matches.update(matchId, {
+              possession: scoringTeamSide
+            });
+          } else {
+            possessionNotice = 'Anotación revertida. Revisa la posesión y el reloj de posesión si necesitas ajustarlos.';
+          }
+        }
+
         // 14. Verificación de consistencia posterior dentro de la misma transacción antes de confirmar
         const updatedMatch = await db.matches.get(matchId);
         if (!updatedMatch) {
@@ -168,7 +188,8 @@ export const GameActionsRepository = {
           success: true,
           deleted: true,
           previousScore: { local: currentLocal, visitor: currentVisitor },
-          newScore: { local: newLocal, visitor: newVisitor }
+          newScore: { local: newLocal, visitor: newVisitor },
+          ...(possessionNotice ? { notice: possessionNotice } : {})
         };
       } else {
         // Manejo de Faltas

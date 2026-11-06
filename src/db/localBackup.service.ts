@@ -491,6 +491,15 @@ export function validateAndNormalizeBackup(
       };
     }
 
+    let possessionAssistant: Match['possessionAssistant'] = undefined;
+    if (row.possessionAssistant && typeof row.possessionAssistant === 'object') {
+      const rawAssist = row.possessionAssistant as Record<string, unknown>;
+      possessionAssistant = {
+        enabled: Boolean(rawAssist.enabled),
+        hapticsEnabled: rawAssist.hapticsEnabled !== false
+      };
+    }
+
     const match: Match = {
       ...(row as unknown as Match),
       createdAt,
@@ -499,6 +508,7 @@ export function validateAndNormalizeBackup(
       config,
       ...(gameHistory !== undefined ? { gameHistory } : {}),
       ...(shotClock !== undefined ? { shotClock } : {}),
+      ...(possessionAssistant !== undefined ? { possessionAssistant } : {}),
       localScore: localScore ?? 0,
       visitorScore: visitorScore ?? 0,
       localFouls: localFouls ?? 0,

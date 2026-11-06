@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db/db';
 import type { Match } from '../db/models/Match';
 import { unlockAudioContext, playBuzzer } from '../utils/soundEffects';
+import { triggerHaptic } from '../utils/haptics';
 import { MatchTimerService, type TimerOperationResult, type TimerServiceOptions, type TimeConfidence } from '../db/matchTimer.service';
 import { timerAuthorityCoordinator, type AuthorityState } from '../services/timerAuthority.coordinator';
 
@@ -32,6 +33,13 @@ export interface UseMatchTimerReturn {
   isShotClockEnabled: boolean;
   resetShotClock: (seconds: 24 | 14) => Promise<void>;
   setShotClockEnabled: (enabled: boolean) => Promise<void>;
+
+  // Asistente automático de posesión y reloj (ASIST-01)
+  isPossessionAssistantEnabled: boolean;
+  possessionAssistantHaptics: boolean;
+  setPossessionAssistantEnabled: (enabled: boolean, hapticsEnabled?: boolean) => Promise<void>;
+  applyPossessionTurnover: () => Promise<void>;
+  setPossession: (possession: 'local' | 'visitor' | null) => Promise<void>;
 }
 
 /**
@@ -294,6 +302,9 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
         playBuzzer();
       }
       if (authorityState.hasAuthority) {
+        if (match?.possessionAssistant?.enabled) {
+          triggerHaptic('shot_clock_expired', match.possessionAssistant.hapticsEnabled !== false);
+        }
         MatchTimerService.expireShotClock(match.id, {
           epoch: authorityState.epoch,
           expectedQuarter: match.currentQuarter,
@@ -307,6 +318,8 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     isShotClockRunning,
     match?.id,
     match?.currentQuarter,
+    match?.possessionAssistant?.enabled,
+    match?.possessionAssistant?.hapticsEnabled,
     enableAutoPause,
     authorityState.hasAuthority,
     authorityState.epoch,
@@ -446,6 +459,48 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     setLastOperationResult(result as unknown as TimerOperationResult);
   }, [match, getActiveAuth]);
 
+  const isPossessionAssistantEnabled = Boolean(match?.possessionAssistant?.enabled);
+  const possessionAssistantHaptics = match?.possessionAssistant?.hapticsEnabled !== false;
+
+  const setPossessionAssistantEnabled = useCallback(async (enabled: boolean, hapticsEnabled: boolean = true) => {
+    if (!match?.id) return;
+    unlockAudioContext();
+    const auth = getActiveAuth(match.id);
+    const result = await MatchTimerService.setPossessionAssistantEnabled(match.id, enabled, hapticsEnabled, {
+      epoch: auth.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: auth.tabId
+    });
+    setLastOperationResult(result as unknown as TimerOperationResult);
+  }, [match, getActiveAuth]);
+
+  const applyPossessionTurnover = useCallback(async () => {
+    if (!match?.id) return;
+    unlockAudioContext();
+    shotClockBuzzerPlayedRef.current = false;
+    const auth = getActiveAuth(match.id);
+    const result = await MatchTimerService.applyPossessionTurnover(match.id, {
+      epoch: auth.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: auth.tabId
+    });
+    if (result.status === 'applied') {
+      triggerHaptic('turnover', match.possessionAssistant?.hapticsEnabled !== false);
+    }
+    setLastOperationResult(result as unknown as TimerOperationResult);
+  }, [match, getActiveAuth]);
+
+  const setPossession = useCallback(async (possession: 'local' | 'visitor' | null) => {
+    if (!match?.id) return;
+    const auth = getActiveAuth(match.id);
+    const result = await MatchTimerService.setPossession(match.id, possession, {
+      epoch: auth.epoch,
+      expectedQuarter: match.currentQuarter,
+      tabId: auth.tabId
+    });
+    setLastOperationResult(result as unknown as TimerOperationResult);
+  }, [match, getActiveAuth]);
+
   return {
     timeLeft,
     isRunning,
@@ -469,6 +524,11 @@ export function useMatchTimer(match: Match | undefined, enableAutoPause = true):
     isShotClockExpired,
     isShotClockEnabled,
     resetShotClock,
-    setShotClockEnabled
+    setShotClockEnabled,
+    isPossessionAssistantEnabled,
+    possessionAssistantHaptics,
+    setPossessionAssistantEnabled,
+    applyPossessionTurnover,
+    setPossession
   };
 }

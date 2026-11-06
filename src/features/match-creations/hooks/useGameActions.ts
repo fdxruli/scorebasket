@@ -4,6 +4,9 @@ import { useCallback, useRef, useState } from 'react';
 import { db } from '../../../db/db';
 import { useLiveMatch } from '../components/context/LiveMatchContext';
 import { GameActionsRepository, type DeleteActionResult } from '../../../db/gameActions.repository';
+import { MatchTimerService } from '../../../db/matchTimer.service';
+import { timerAuthorityCoordinator } from '../../../services/timerAuthority.coordinator';
+import { triggerHaptic } from '../../../utils/haptics';
 import { unlockAudioContext, playScorePop, playWhistle } from '../../../utils/soundEffects';
 import type { Score, Foul } from '../../../db/models';
 import type { Match } from '../../../db/models/Match';
@@ -113,6 +116,7 @@ export const useGameActions = () => {
   const { match, localTeam, visitorTeam } = useLiveMatch();
   const inFlightRef = useRef(false);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [undoNotice, setUndoNotice] = useState<string | null>(null);
 
   // Helper para identificar si el equipo es local desde el render actual.
   // Las escrituras usan el partido fresco dentro de cada transacción.
@@ -148,6 +152,29 @@ export const useGameActions = () => {
       const normalizedPoints = normalizePoints(points);
       const renderPeriod = match ? getCurrentActionPeriod(match) : undefined;
       const expectedPeriod = options?.expectedPeriod ?? renderPeriod;
+
+      const isAssistantActive = Boolean(match.possessionAssistant?.enabled);
+      if (isAssistantActive && (normalizedPoints === 2 || normalizedPoints === 3)) {
+        const auth = timerAuthorityCoordinator.getAuthorityState(match.id);
+        const result = await MatchTimerService.recordFieldGoalWithAssistant(
+          match.id,
+          { scoringTeamId: teamId, points: normalizedPoints, playerId },
+          {
+            epoch: auth.epoch,
+            tabId: auth.tabId,
+            expectedQuarter: expectedPeriod
+          }
+        );
+
+        if (result.status !== 'applied') {
+          throw new Error(result.reason || 'No se pudieron registrar los puntos con el asistente de posesión.');
+        }
+
+        unlockAudioContext();
+        playScorePop(normalizedPoints);
+        triggerHaptic('score', match.possessionAssistant?.hapticsEnabled !== false);
+        return { success: true };
+      }
 
       await db.transaction('rw', db.matches, db.scores, async () => {
         const currentMatch = await db.matches.get(match.id!);
@@ -347,6 +374,9 @@ export const useGameActions = () => {
       if (!result.success) {
         throw new Error(result.error || 'No se pudo deshacer la última acción.');
       }
+      if (result.notice) {
+        setUndoNotice(result.notice);
+      }
       return result;
     } catch (error) {
       if (parsedOptions?.notifyError !== false) {
@@ -371,6 +401,8 @@ export const useGameActions = () => {
     isActionPending,
     isLocal,
     localTeam,
-    visitorTeam
+    visitorTeam,
+    undoNotice,
+    clearUndoNotice: () => setUndoNotice(null)
   };
 };

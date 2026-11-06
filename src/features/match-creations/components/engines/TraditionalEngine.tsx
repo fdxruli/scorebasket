@@ -8,6 +8,7 @@ import { useTraditionalLogic } from '../../hooks/useTraditionalLogic';
 import { db } from '../../../../db/db';
 import { isLineupActive } from '../../../../db/lineups.service';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
+import { triggerHaptic } from '../../../../utils/haptics';
 import { buildShareMatchCardInputFromDb, shareOrDownloadMatchCard } from '../../../../utils/shareCardGenerator';
 import { Trophy, Clock, RotateCcw, X, Flag, FastForward, Share2 } from 'lucide-react';
 
@@ -25,7 +26,7 @@ import { LiveToolsBar } from '../shared/LiveToolsBar';
 export const TraditionalEngine: React.FC = () => {
   const navigate = useNavigate();
   const { match, localTeam, visitorTeam, isActionModalOpen, setActionModalOpen } = useLiveMatch();
-  const { executeGameAction, undoLastAction, isActionPending } = useGameActions();
+  const { executeGameAction, undoLastAction, isActionPending, undoNotice } = useGameActions();
 
   const hasAnyPlayers = Boolean(
     (localTeam?.players && localTeam.players.length > 0) ||
@@ -103,7 +104,12 @@ export const TraditionalEngine: React.FC = () => {
     isShotClockExpired,
     isShotClockEnabled,
     resetShotClock,
-    setShotClockEnabled
+    setShotClockEnabled,
+    isPossessionAssistantEnabled,
+    possessionAssistantHaptics,
+    setPossessionAssistantEnabled,
+    applyPossessionTurnover,
+    setPossession
   } = useTraditionalLogic({ match, isActionModalOpen: isOverlayBlocking });
 
   useEffect(() => {
@@ -260,8 +266,18 @@ export const TraditionalEngine: React.FC = () => {
     await db.matches.update(match.id, { possession: nextPossession });
   };
 
+  const showInitialPossessionPrompt = Boolean(
+    isPossessionAssistantEnabled &&
+    match &&
+    !match.possession &&
+    match.status !== 'finished'
+  );
+
   const handleToggleTimer = async () => {
     if (hasAuthority) {
+      if (!isTimerRunning && showInitialPossessionPrompt) {
+        triggerHaptic('initial_prompt', possessionAssistantHaptics);
+      }
       await toggleTimer();
     } else {
       await requestAuthorityTransfer();
@@ -289,10 +305,28 @@ export const TraditionalEngine: React.FC = () => {
         }}
         shotClockEnabled={isShotClockEnabled}
         isTimerRunning={isTimerRunning}
+        onToggleAssistant={async () => {
+          if (isTimerRunning) return;
+          if (!hasAuthority) {
+            await requestAuthorityTransfer();
+            return;
+          }
+          if (!isShotClockEnabled && !isPossessionAssistantEnabled) {
+            window.alert('Para activar el asistente automático debes activar primero el reloj de posesión (Reloj 24/14).');
+            return;
+          }
+          await setPossessionAssistantEnabled(!isPossessionAssistantEnabled);
+        }}
+        assistantEnabled={isPossessionAssistantEnabled}
       />
 
       {/* Zona de avisos: ubicación responsive definida (no empuja ni cubre el marcador) */}
       <div className="live-notices">
+        {undoNotice && (
+          <div className="undo-notice-pill" role="status" data-testid="undo-notice">
+            <span>{undoNotice}</span>
+          </div>
+        )}
         {!hasAuthority && (
           <div className="observer-notice-pill" role="status" data-testid="observer-notice">
             <span className="observer-notice-text">Modo observador: Otra pestaña controla el tiempo.</span>
@@ -389,6 +423,24 @@ export const TraditionalEngine: React.FC = () => {
           if (match.status === 'finished') return;
           await resetShotClock(seconds);
         }}
+        assistantEnabled={isPossessionAssistantEnabled}
+        onTurnover={async () => {
+          if (match.status === 'finished') return;
+          if (hasAuthority) {
+            await applyPossessionTurnover();
+          } else {
+            await requestAuthorityTransfer();
+          }
+        }}
+        onSelectPossession={async (team) => {
+          if (match.status === 'finished') return;
+          if (hasAuthority) {
+            await setPossession(team);
+          } else {
+            await requestAuthorityTransfer();
+          }
+        }}
+        showInitialPrompt={showInitialPossessionPrompt}
       />
 
       {playerModal.isOpen && (

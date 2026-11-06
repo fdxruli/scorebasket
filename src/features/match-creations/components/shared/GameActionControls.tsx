@@ -43,6 +43,7 @@ export const GameActionControls: React.FC<Props> = ({
             onClick={() => onScore(pts)}
             className={`btn-action btn-score btn-${variant}-score ${pts === 3 ? 'is-three' : ''}`}
             aria-label={`Sumar ${pts} punto${pts > 1 ? 's' : ''} a ${teamName ?? variant}`}
+            data-testid={`score-btn-${variant}-${pts}`}
           >
             <span className="btn-score-num">+{pts}</span>
             <span className="btn-score-sub">{SCORE_LABELS[pts]}</span>
@@ -56,6 +57,7 @@ export const GameActionControls: React.FC<Props> = ({
         onClick={onFoul}
         className={`btn-action btn-${variant}-foul`}
         aria-label={`Falta de ${teamName ?? variant}`}
+        data-testid={`foul-btn-${variant}`}
       >
         <AlertCircle size={16} />
         <span>FALTA</span>

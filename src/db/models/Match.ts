@@ -17,6 +17,11 @@ export interface MatchShotClock {
   lastStart?: Date;
 }
 
+export interface MatchPossessionAssistant {
+  enabled: boolean;
+  hapticsEnabled?: boolean;
+}
+
 export interface Match {
   id?: number;
   
@@ -52,6 +57,7 @@ export interface Match {
   visitorTimeouts?: number;
   lineups?: MatchLineups;
   shotClock?: MatchShotClock;
+  possessionAssistant?: MatchPossessionAssistant;
 
   // Fencing y autoridad transaccional del cronómetro (Fase 2C R1.1 - C-11/C-14)
   timerEpoch?: number;

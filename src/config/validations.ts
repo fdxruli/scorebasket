@@ -70,7 +70,7 @@ export function validateMatchConfig(config: unknown): {
         break;
       }
 
-      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam } = cfg.traditional;
+      const { totalQuarters, minutesPerQuarter, timeoutsPerTeam, shotClockEnabled, possessionAssistantEnabled } = cfg.traditional;
       const rules = VALIDATION_RULES.traditional;
 
       if (!isStrictInteger(totalQuarters, rules.minQuarters, rules.maxQuarters)) {
@@ -92,6 +92,10 @@ export function validateMatchConfig(config: unknown): {
         errors.push(
           `Los tiempos fuera deben ser un número entero entre ${rules.minTimeouts} y ${rules.maxTimeouts}`
         );
+      }
+
+      if (possessionAssistantEnabled && !shotClockEnabled) {
+        errors.push('El asistente automático de posesión requiere tener habilitado el reloj de posesión.');
       }
       break;
     }
@@ -156,7 +160,10 @@ export function getDefaultConfig(mode: MatchConfig['mode']): MatchConfig {
         traditional: {
           totalQuarters: VALIDATION_RULES.traditional.minQuarters * 4,
           minutesPerQuarter: 10,
-          timeoutsPerTeam: 3
+          timeoutsPerTeam: 3,
+          shotClockEnabled: false,
+          possessionAssistantEnabled: false,
+          possessionAssistantHaptics: true
         }
       };
     

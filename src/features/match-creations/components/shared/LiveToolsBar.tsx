@@ -45,7 +45,7 @@ export const LiveToolsBar: React.FC<Props> = ({
   };
 
   return (
-    <div className="tools-bar">
+    <div className="tools-bar" role="toolbar" aria-label="Herramientas del partido">
       <div className="tools-bar-group">
         <button
           type="button"
@@ -55,7 +55,7 @@ export const LiveToolsBar: React.FC<Props> = ({
           title="Elegir jugador al anotar"
         >
           <Users size={16} />
-          <span>Jugadores</span>
+          <span className="tool-chip-label">Jugadores</span>
           <span className="tool-chip-state">{trackPlayers ? 'ON' : 'OFF'}</span>
         </button>
 
@@ -66,10 +66,11 @@ export const LiveToolsBar: React.FC<Props> = ({
             className={`tool-chip ${lineupsEnabled ? 'is-on' : ''}`}
             aria-pressed={lineupsEnabled}
             title="Gestionar jugadores en cancha"
+            aria-label="Gestionar jugadores en cancha"
             data-testid="btn-manage-lineups"
           >
             <Shirt size={16} />
-            <span>Gestionar jugadores en cancha</span>
+            <span className="tool-chip-label">Quinteto</span>
             {lineupsEnabled && <span className="tool-chip-state">5v5</span>}
           </button>
         )}
@@ -86,10 +87,11 @@ export const LiveToolsBar: React.FC<Props> = ({
                 ? 'Pausa el cronómetro para configurar el reloj de posesión'
                 : 'Reloj de posesión (24s / 14s)'
             }
+            aria-label="Reloj de posesión"
             data-testid="btn-toggle-shot-clock"
           >
             <Timer size={16} />
-            <span>Reloj de posesión</span>
+            <span className="tool-chip-label">Reloj 24/14</span>
             <span className="tool-chip-state">{shotClockEnabled ? 'ON' : 'OFF'}</span>
           </button>
         )}
@@ -119,7 +121,7 @@ export const LiveToolsBar: React.FC<Props> = ({
 
       <button type="button" onClick={onEndMatch} className="tool-chip is-danger" title="Finalizar y cerrar partido">
         <Flag size={16} />
-        <span>{endLabel}</span>
+        <span className="tool-chip-label">{endLabel}</span>
       </button>
     </div>
   );

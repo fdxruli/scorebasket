@@ -14,6 +14,9 @@ export interface TraditionalConfig {
   totalQuarters: number;        // Número de periodos (ej: 4)
   minutesPerQuarter: number;    // Duración en minutos (ej: 10)
   timeoutsPerTeam?: number;     // Tiempos fuera por equipo (ej: 2, 3, 5)
+  shotClockEnabled?: boolean;   // Reloj de posesión (24s / 14s)
+  possessionAssistantEnabled?: boolean; // Asistente automático de posesión y reloj
+  possessionAssistantHaptics?: boolean; // Avisos con vibración háptica
 }
 
 /**

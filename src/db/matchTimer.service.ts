@@ -1,6 +1,7 @@
 // src/db/matchTimer.service.ts
 import { db } from './db';
 import type { Match } from './models/Match';
+import type { Score } from './models';
 import { timerAuthorityCoordinator, type TimerAuthorityCoordinator } from '../services/timerAuthority.coordinator';
 
 export type TimerOperationStatus =
@@ -42,6 +43,34 @@ export interface ShotClockOperationResult {
   isRunning: boolean;
   reason?: string;
   epoch?: number;
+}
+
+export interface AssistantFieldGoalResult {
+  status: TimerOperationStatus;
+  matchId: number;
+  newScore?: { local: number; visitor: number };
+  nextPossession?: 'local' | 'visitor';
+  shotClockSecondsRemaining: number;
+  epoch?: number;
+  reason?: string;
+}
+
+export interface AssistantTurnoverResult {
+  status: TimerOperationStatus;
+  matchId: number;
+  nextPossession?: 'local' | 'visitor';
+  shotClockSecondsRemaining: number;
+  isRunning: boolean;
+  epoch?: number;
+  reason?: string;
+}
+
+export interface AssistantConfigResult {
+  status: TimerOperationStatus;
+  matchId: number;
+  enabled: boolean;
+  hapticsEnabled?: boolean;
+  reason?: string;
 }
 
 export interface TimerSnapshot {
@@ -1937,6 +1966,12 @@ export const MatchTimerService = {
             secondsRemaining: seconds,
             lastStart: startDate
           },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
           timerEpoch: authCheck.callerEpoch,
           timerOwnerTabId: authCheck.callerTabId
         };
@@ -2045,6 +2080,483 @@ export const MatchTimerService = {
           shotClockSecondsRemaining: 0,
           isRunning: false,
           epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Registra una canasta de campo (2 o 3 puntos) con el asistente automático activo (ASIST-01).
+   * Ejecución atómica en una sola transacción Dexie sobre db.matches y db.scores:
+   * - Valida autoridad y fencing token (timerEpoch, tabId).
+   * - Valida periodo esperado y que el partido esté activo.
+   * - Registra la anotación en db.scores.
+   * - Suma los puntos al marcador del equipo correspondiente.
+   * - Cambia la posesión al equipo rival.
+   * - Prepara/reinicia el reloj de posesión en 24 segundos.
+   * - Si falla la autoridad o cualquier validación, aborta la transacción sin escrituras parciales.
+   */
+  recordFieldGoalWithAssistant(
+    matchId: number,
+    params: {
+      scoringTeamId: number;
+      points: 2 | 3;
+      playerId?: number;
+    },
+    options?: TimerServiceOptions
+  ): Promise<AssistantFieldGoalResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return {
+          status: 'rejected',
+          matchId,
+          shotClockSecondsRemaining: 24,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          reason: 'El partido ya ha finalizado.'
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+
+      const opPromise = db.transaction('rw', db.matches, db.scores, async (): Promise<AssistantFieldGoalResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match?.shotClock?.secondsRemaining ?? 24),
+            reason: authCheck.reason,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        if (match!.status === 'finished') {
+          return {
+            status: 'finished',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            reason: 'El partido ya ha finalizado.',
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        const currentPeriod = match!.currentQuarter || 1;
+        if (options?.expectedQuarter !== undefined && options.expectedQuarter !== currentPeriod) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            reason: `El periodo ya cambió (esperado: #${options.expectedQuarter}, vigente: #${currentPeriod}).`,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        if (match!.gameHistory?.some(g => g.gameNumber === currentPeriod)) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            reason: `El periodo #${currentPeriod} ya fue cerrado en el historial.`,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        const { scoringTeamId, points, playerId } = params;
+        if (points !== 2 && points !== 3) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            reason: 'Solo se automatizan canastas de campo de 2 o 3 puntos.',
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        if (scoringTeamId !== match!.localTeamId && scoringTeamId !== match!.visitorTeamId) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            reason: 'El equipo no corresponde a este partido.',
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        const isLocal = scoringTeamId === match!.localTeamId;
+        const currentLocal = match!.localScore || 0;
+        const currentVisitor = match!.visitorScore || 0;
+        const newLocal = isLocal ? currentLocal + points : currentLocal;
+        const newVisitor = !isLocal ? currentVisitor + points : currentVisitor;
+
+        // Registrar anotación en scores
+        const newScore: Omit<Score, 'id'> = {
+          matchId,
+          teamId: scoringTeamId,
+          playerId,
+          points,
+          quarter: currentPeriod,
+          createdAt: new Date(nowMs)
+        };
+        const scoreId = await db.scores.add(newScore as Score);
+
+        // Posesión siguiente asignada al rival
+        const nextPossession: 'local' | 'visitor' = isLocal ? 'visitor' : 'local';
+
+        // Preparar reloj de ataque en 24s
+        const isMainRunning = Boolean(match!.timerLastStart);
+        const startDate = isMainRunning ? new Date(nowMs) : undefined;
+
+        if (isMainRunning) {
+          sessionShotClockMonotonicStarts.set(matchId, {
+            perfStart:
+              options?.simulatedPerfNowMs ??
+              (typeof performance !== 'undefined' ? performance.now() : 0),
+            wallStartMs: nowMs
+          });
+        } else {
+          sessionShotClockMonotonicStarts.delete(matchId);
+        }
+
+        const updateData: Partial<Match> = {
+          localScore: newLocal,
+          visitorScore: newVisitor,
+          possession: nextPossession,
+          shotClock: {
+            enabled: true,
+            secondsRemaining: 24,
+            lastStart: startDate
+          },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              enabled: true,
+              lastAssistedScoreId: Number(scoreId)
+            }
+          } : {}),
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        };
+
+        if (match!.status === 'created') {
+          updateData.status = 'playing';
+        }
+
+        if (this._testPreCommitHook) {
+          await this._testPreCommitHook(matchId);
+        }
+
+        await db.matches.update(matchId, updateData);
+
+        return {
+          status: 'applied',
+          matchId,
+          newScore: { local: newLocal, visitor: newVisitor },
+          nextPossession,
+          shotClockSecondsRemaining: 24,
+          epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Registra un cambio de posesión o robo ('Cambio / Robo') (ASIST-01).
+   * - Cambia la posesión al equipo contrario.
+   * - Reinicia el reloj de posesión a 24 segundos.
+   * - Mantiene el cronómetro principal sin alteraciones.
+   * - Si la posesión es desconocida, solicita indicar directamente el equipo.
+   */
+  applyPossessionTurnover(
+    matchId: number,
+    options?: TimerServiceOptions
+  ): Promise<AssistantTurnoverResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return {
+          status: 'rejected',
+          matchId,
+          shotClockSecondsRemaining: 24,
+          isRunning: false,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          isRunning: false,
+          reason: 'El partido ya ha finalizado.'
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          shotClockSecondsRemaining: Math.max(0, matchBefore.shotClock?.secondsRemaining ?? 24),
+          isRunning: Boolean(matchBefore.timerLastStart && matchBefore.shotClock?.lastStart),
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+
+      const opPromise = db.transaction('rw', db.matches, async (): Promise<AssistantTurnoverResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match?.shotClock?.secondsRemaining ?? 24),
+            isRunning: Boolean(match?.timerLastStart && match?.shotClock?.lastStart),
+            reason: authCheck.reason,
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        if (!match!.possession) {
+          return {
+            status: 'rejected',
+            matchId,
+            shotClockSecondsRemaining: Math.max(0, match!.shotClock?.secondsRemaining ?? 24),
+            isRunning: Boolean(match!.timerLastStart && match!.shotClock?.lastStart),
+            reason: 'La posesión actual es desconocida. Selecciona qué equipo tiene el balón.',
+            epoch: authCheck.callerEpoch
+          };
+        }
+
+        const nextPossession: 'local' | 'visitor' = match!.possession === 'local' ? 'visitor' : 'local';
+        const isMainRunning = Boolean(match!.timerLastStart);
+        const startDate = isMainRunning ? new Date(nowMs) : undefined;
+
+        if (isMainRunning) {
+          sessionShotClockMonotonicStarts.set(matchId, {
+            perfStart:
+              options?.simulatedPerfNowMs ??
+              (typeof performance !== 'undefined' ? performance.now() : 0),
+            wallStartMs: nowMs
+          });
+        } else {
+          sessionShotClockMonotonicStarts.delete(matchId);
+        }
+
+        const updateData: Partial<Match> = {
+          possession: nextPossession,
+          shotClock: {
+            enabled: true,
+            secondsRemaining: 24,
+            lastStart: startDate
+          },
+          ...(match!.possessionAssistant ? {
+            possessionAssistant: {
+              ...match!.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        };
+
+        if (this._testPreCommitHook) {
+          await this._testPreCommitHook(matchId);
+        }
+
+        await db.matches.update(matchId, updateData);
+
+        return {
+          status: 'applied',
+          matchId,
+          nextPossession,
+          shotClockSecondsRemaining: 24,
+          isRunning: isMainRunning,
+          epoch: authCheck.callerEpoch
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Establece o corrige directamente el equipo con posesión de balón (ASIST-01).
+   */
+  setPossession(
+    matchId: number,
+    possession: 'local' | 'visitor' | null,
+    options?: TimerServiceOptions
+  ): Promise<{ status: TimerOperationStatus; matchId: number; possession: 'local' | 'visitor' | null; reason?: string }> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return { status: 'rejected', matchId, possession, reason: 'El partido no existe.' };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return { status: 'finished', matchId, possession: matchBefore.possession ?? null, reason: 'El partido ya finalizó.' };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          possession: matchBefore.possession ?? null,
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+      const opPromise = db.transaction('rw', db.matches, async () => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            possession: match?.possession ?? null,
+            reason: authCheck.reason
+          };
+        }
+
+        await db.matches.update(matchId, {
+          possession,
+          ...(match?.possessionAssistant ? {
+            possessionAssistant: {
+              ...match.possessionAssistant,
+              lastAssistedScoreId: undefined
+            }
+          } : {}),
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        });
+
+        return {
+          status: 'applied' as TimerOperationStatus,
+          matchId,
+          possession
+        };
+      });
+
+      return await opPromise;
+    });
+  },
+
+  /**
+   * Activa o desactiva el asistente automático de posesión de forma transaccional (ASIST-01).
+   * Solo permitido con el cronómetro principal detenido.
+   * Requiere que el reloj de posesión esté activado para habilitarse.
+   */
+  setPossessionAssistantEnabled(
+    matchId: number,
+    enabled: boolean,
+    hapticsEnabled: boolean = true,
+    options?: TimerServiceOptions
+  ): Promise<AssistantConfigResult> {
+    return this._trackOp(matchId, options, async () => {
+      const matchBefore = await db.matches.get(matchId);
+      if (!matchBefore) {
+        return {
+          status: 'rejected',
+          matchId,
+          enabled: false,
+          reason: 'El partido no existe.'
+        };
+      }
+
+      if (matchBefore.status === 'finished') {
+        return {
+          status: 'finished',
+          matchId,
+          enabled: Boolean(matchBefore.possessionAssistant?.enabled),
+          reason: 'El partido ya finalizó. No se puede modificar la configuración.'
+        };
+      }
+
+      if (matchBefore.timerLastStart) {
+        return {
+          status: 'rejected',
+          matchId,
+          enabled: Boolean(matchBefore.possessionAssistant?.enabled),
+          reason: 'El asistente solo puede activarse o desactivarse con el cronómetro principal detenido.'
+        };
+      }
+
+      if (enabled && !matchBefore.shotClock?.enabled) {
+        return {
+          status: 'rejected',
+          matchId,
+          enabled: false,
+          reason: 'El reloj de posesión (24s / 14s) debe estar activado para habilitar el asistente.'
+        };
+      }
+
+      const authorityCheck = this._validateAuthority(matchId, options);
+      if (!authorityCheck.valid) {
+        return {
+          status: authorityCheck.status ?? 'not_owner',
+          matchId,
+          enabled: Boolean(matchBefore.possessionAssistant?.enabled),
+          reason: authorityCheck.reason
+        };
+      }
+
+      const nowMs = options?.nowMs ?? Date.now();
+      const opPromise = db.transaction('rw', db.matches, async (): Promise<AssistantConfigResult> => {
+        const match = await db.matches.get(matchId);
+        const authCheck = this._verifyTransactionalAuthority(match, matchId, options, nowMs);
+        if (!authCheck.authorized) {
+          return {
+            status: authCheck.status,
+            matchId,
+            enabled: Boolean(match?.possessionAssistant?.enabled),
+            reason: authCheck.reason
+          };
+        }
+
+        await db.matches.update(matchId, {
+          possessionAssistant: {
+            enabled,
+            hapticsEnabled,
+            lastAssistedScoreId: undefined
+          },
+          timerEpoch: authCheck.callerEpoch,
+          timerOwnerTabId: authCheck.callerTabId
+        });
+
+        return {
+          status: 'applied',
+          matchId,
+          enabled,
+          hapticsEnabled
         };
       });
 

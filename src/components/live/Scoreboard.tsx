@@ -96,7 +96,15 @@ export function Scoreboard({
         if (!match?.id) return;
         const current = match.possession ?? null;
         const nextPossession: 'local' | 'visitor' = current === 'local' ? 'visitor' : 'local';
-        await db.matches.update(match.id, { possession: nextPossession });
+        await db.matches.update(match.id, {
+            possession: nextPossession,
+            ...(match?.possessionAssistant ? {
+                possessionAssistant: {
+                    ...match.possessionAssistant,
+                    lastAssistedScoreId: undefined
+                }
+            } : {})
+        });
     };
 
     const maxTimeouts = match?.config?.traditional?.timeoutsPerTeam ?? 3;

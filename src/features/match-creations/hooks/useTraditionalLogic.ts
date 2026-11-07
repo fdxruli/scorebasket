@@ -83,7 +83,12 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     isShotClockExpired,
     isShotClockEnabled,
     resetShotClock,
-    setShotClockEnabled
+    setShotClockEnabled,
+    isPossessionAssistantEnabled,
+    possessionAssistantHaptics,
+    setPossessionAssistantEnabled,
+    applyPossessionTurnover,
+    setPossession
   } = useMatchTimer(match ?? undefined);
 
   // Si el reloj vuelve a tener tiempo (> 0), se resetea cualquier descarte previo para permitir
@@ -223,6 +228,11 @@ export const useTraditionalLogic = ({ match, isActionModalOpen = false }: UseTra
     isShotClockExpired,
     isShotClockEnabled,
     resetShotClock,
-    setShotClockEnabled
+    setShotClockEnabled,
+    isPossessionAssistantEnabled,
+    possessionAssistantHaptics,
+    setPossessionAssistantEnabled,
+    applyPossessionTurnover,
+    setPossession
   };
 };

@@ -1,6 +1,6 @@
 // src/features/match-creations/components/shared/LiveToolsBar.tsx
 import React, { useState } from 'react';
-import { Users, Shirt, Bell, Volume2, VolumeX, Flag, Timer } from 'lucide-react';
+import { Users, Shirt, Bell, Volume2, VolumeX, Flag, Timer, Zap } from 'lucide-react';
 import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 
 interface Props {
@@ -17,6 +17,9 @@ interface Props {
   onToggleShotClock?: () => void;
   shotClockEnabled?: boolean;
   isTimerRunning?: boolean;
+  /** Asistente automático de posesión y reloj (solo partidos Traditional, ASIST-01) */
+  onToggleAssistant?: () => void;
+  assistantEnabled?: boolean;
 }
 
 /**
@@ -33,7 +36,9 @@ export const LiveToolsBar: React.FC<Props> = ({
   lineupsEnabled = false,
   onToggleShotClock,
   shotClockEnabled = false,
-  isTimerRunning = false
+  isTimerRunning = false,
+  onToggleAssistant,
+  assistantEnabled = false
 }) => {
   const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
 
@@ -93,6 +98,29 @@ export const LiveToolsBar: React.FC<Props> = ({
             <Timer size={16} />
             <span className="tool-chip-label">Reloj 24/14</span>
             <span className="tool-chip-state">{shotClockEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+        )}
+
+        {onToggleAssistant && (
+          <button
+            type="button"
+            onClick={onToggleAssistant}
+            disabled={isTimerRunning}
+            className={`tool-chip ${assistantEnabled ? 'is-on' : ''}`}
+            aria-pressed={assistantEnabled}
+            title={
+              isTimerRunning
+                ? 'Pausa el cronómetro para configurar el asistente'
+                : !shotClockEnabled
+                  ? 'Requiere activar primero el Reloj 24/14'
+                  : 'Asistente automático de posesión y reloj'
+            }
+            aria-label="Asistente de posesión"
+            data-testid="btn-toggle-assistant"
+          >
+            <Zap size={16} />
+            <span className="tool-chip-label">Asistente</span>
+            <span className="tool-chip-state">{assistantEnabled ? 'AUTO' : 'MANUAL'}</span>
           </button>
         )}
 

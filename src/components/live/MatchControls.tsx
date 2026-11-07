@@ -16,6 +16,7 @@ interface MatchControlsProps {
   onTimerClick?: () => void;
   possession?: 'local' | 'visitor' | null;
   onTogglePossession?: () => void;
+  onSelectPossession?: (team: 'local' | 'visitor') => void;
   showTimer?: boolean;
   showPossession?: boolean;
   actionDisabled?: boolean;
@@ -29,6 +30,9 @@ interface MatchControlsProps {
   isShotClockRunning?: boolean;
   isShotClockExpired?: boolean;
   onResetShotClock?: (seconds: 24 | 14) => void;
+  assistantEnabled?: boolean;
+  onTurnover?: () => void;
+  showInitialPrompt?: boolean;
 }
 
 const formatTime = (seconds: number) => {
@@ -49,6 +53,7 @@ export function MatchControls({
   onTimerClick,
   possession,
   onTogglePossession,
+  onSelectPossession,
   showTimer = true,
   showPossession = true,
   actionDisabled = false,
@@ -61,7 +66,10 @@ export function MatchControls({
   shotClockTimeLeft,
   isShotClockRunning = false,
   isShotClockExpired = false,
-  onResetShotClock
+  onResetShotClock,
+  assistantEnabled = false,
+  onTurnover,
+  showInitialPrompt = false
 }: MatchControlsProps) {
   return (
     <section className="controls-panel">
@@ -149,29 +157,70 @@ export function MatchControls({
       )}
 
       {/* 2. BOTÓN DE POSESIÓN FLUIDO Y VISIBLE (entre transporte y puntos) */}
-      {showPossession && onTogglePossession && (
+      {showPossession && (onTogglePossession || onSelectPossession) && (
         <div className="possession-hub-container">
-          <button
-            type="button"
-            onClick={onTogglePossession}
-            className={`btn-possession-fluid ${possession ? `is-${possession}` : 'is-neutral'}`}
-            title="Alternar posesión de balón (toca para cambiar)"
-            aria-label="Alternar posesión de balón"
+          <div
+            className={`btn-possession-fluid ${possession ? `is-${possession}` : 'is-neutral'} ${showInitialPrompt ? 'has-pending-prompt' : ''}`}
+            data-testid="possession-hub"
           >
-            <div className={`possession-side local ${possession === 'local' ? 'active' : ''}`}>
+            <button
+              type="button"
+              onClick={() => onSelectPossession ? onSelectPossession('local') : onTogglePossession?.()}
+              className={`possession-side local ${possession === 'local' ? 'active' : ''}`}
+              title={`Asignar posesión a ${localTeam.name}`}
+              aria-label={`Posesión ${localTeam.name}`}
+              data-testid="btn-possession-local"
+            >
               <span className="possession-chevron">◀</span>
               <span className="possession-team-name">{localTeam.name}</span>
-            </div>
+            </button>
 
-            <div className="possession-center-divider">
-              <span className="possession-pill-label">POSESIÓN</span>
-            </div>
+            {assistantEnabled && possession ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTurnover?.();
+                }}
+                disabled={actionDisabled}
+                className="btn-possession-turnover"
+                data-testid="btn-turnover"
+                title="Cambio de posesión o robo (reinicia a 24s)"
+                aria-label="Cambio de posesión o robo"
+              >
+                <span className="turnover-icon">⇄</span>
+                <span className="turnover-text">Cambio / Robo</span>
+              </button>
+            ) : showInitialPrompt ? (
+              <div className="possession-initial-prompt" data-testid="possession-prompt">
+                <span className="prompt-pulse-dot" />
+                <span className="prompt-text">¿Quién tiene el balón?</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onTogglePossession}
+                className="possession-center-divider"
+                title="Alternar posesión"
+                aria-label="Alternar posesión"
+                data-testid="btn-possession-toggle"
+              >
+                <span className="possession-pill-label">POSESIÓN</span>
+              </button>
+            )}
 
-            <div className={`possession-side visitor ${possession === 'visitor' ? 'active' : ''}`}>
+            <button
+              type="button"
+              onClick={() => onSelectPossession ? onSelectPossession('visitor') : onTogglePossession?.()}
+              className={`possession-side visitor ${possession === 'visitor' ? 'active' : ''}`}
+              title={`Asignar posesión a ${visitorTeam.name}`}
+              aria-label={`Posesión ${visitorTeam.name}`}
+              data-testid="btn-possession-visitor"
+            >
               <span className="possession-team-name">{visitorTeam.name}</span>
               <span className="possession-chevron">▶</span>
-            </div>
-          </button>
+            </button>
+          </div>
         </div>
       )}
 

@@ -57,7 +57,12 @@ export function buildInitialMatchData(params: CreateMatchParams): Omit<Match, 'i
       ? {
           traditional: {
             ...config.traditional,
-            timeoutsPerTeam: config.traditional.timeoutsPerTeam ?? 3
+            timeoutsPerTeam: config.traditional.timeoutsPerTeam ?? 3,
+            shotClockEnabled: Boolean(config.traditional.shotClockEnabled),
+            possessionAssistantEnabled: Boolean(
+              config.traditional.shotClockEnabled && config.traditional.possessionAssistantEnabled
+            ),
+            possessionAssistantHaptics: config.traditional.possessionAssistantHaptics ?? true
           }
         }
       : {})
@@ -79,6 +84,9 @@ export function buildInitialMatchData(params: CreateMatchParams): Omit<Match, 'i
   switch (normalizedConfig.mode) {
     case 'traditional': {
       const trad = normalizedConfig.traditional!;
+      const shotClockEnabled = Boolean(trad.shotClockEnabled);
+      const assistantEnabled = shotClockEnabled && Boolean(trad.possessionAssistantEnabled);
+
       return {
         ...base,
         currentQuarter: 1,
@@ -87,7 +95,24 @@ export function buildInitialMatchData(params: CreateMatchParams): Omit<Match, 'i
         totalQuarters: trad.totalQuarters,
         quarterDuration: trad.minutesPerQuarter,
         localTimeouts: 0,
-        visitorTimeouts: 0
+        visitorTimeouts: 0,
+        ...(shotClockEnabled
+          ? {
+              shotClock: {
+                enabled: true,
+                secondsRemaining: 24,
+                lastStart: undefined
+              }
+            }
+          : {}),
+        ...(assistantEnabled
+          ? {
+              possessionAssistant: {
+                enabled: true,
+                hapticsEnabled: trad.possessionAssistantHaptics ?? true
+              }
+            }
+          : {})
       };
     }
     case 'race': {

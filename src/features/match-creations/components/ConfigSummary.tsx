@@ -37,6 +37,18 @@ export function ConfigSummary({ config }: ConfigSummaryProps) {
                 {config.traditional.minutesPerQuarter} min/periodo
               </span>
             </div>
+            {config.traditional.shotClockEnabled && (
+              <div className="summary-row">
+                <span className="summary-label">Reloj 24/14:</span>
+                <span className="summary-badge success">Activo</span>
+              </div>
+            )}
+            {config.traditional.shotClockEnabled && config.traditional.possessionAssistantEnabled && (
+              <div className="summary-row">
+                <span className="summary-label">Asistente Auto:</span>
+                <span className="summary-badge success">Activo</span>
+              </div>
+            )}
             <div className="summary-total">
               Tiempo total: <strong>{config.traditional.totalQuarters * config.traditional.minutesPerQuarter} minutos</strong>
             </div>

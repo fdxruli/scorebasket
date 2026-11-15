@@ -36,7 +36,7 @@
   text-align: left;
   gap: 1rem;
   padding: 1rem 1.15rem;
-  background: linear-gradient(160deg, rgba(22, 26, 39, 0.85) 0%, rgba(13, 15, 23, 0.95) 100%);
+  background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -73,19 +73,19 @@
 
 /* Estado Activo */
 .mode-card.active.blue {
-  border-color: rgba(14, 165, 233, 0.55);
-  background: radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.16), rgba(15, 18, 27, 0.95) 75%);
-  box-shadow: 0 8px 25px -6px rgba(14, 165, 233, 0.25);
+  border-color: var(--secondary);
+  background: var(--secondary-bg);
+  box-shadow: var(--shadow-sm);
 }
 .mode-card.active.orange {
-  border-color: rgba(255, 95, 31, 0.55);
-  background: radial-gradient(circle at 50% 0%, rgba(255, 95, 31, 0.16), rgba(15, 18, 27, 0.95) 75%);
-  box-shadow: 0 8px 25px -6px rgba(255, 95, 31, 0.25);
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  box-shadow: var(--shadow-sm);
 }
 .mode-card.active.green {
-  border-color: rgba(16, 185, 129, 0.55);
-  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.16), rgba(15, 18, 27, 0.95) 75%);
-  box-shadow: 0 8px 25px -6px rgba(16, 185, 129, 0.25);
+  border-color: var(--success);
+  background: var(--success-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .mode-card.active.blue::before { background: var(--secondary); }
@@ -100,7 +100,7 @@
   width: 50px;
   height: 50px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   flex-shrink: 0;
   transition: all 0.25s;
@@ -111,7 +111,7 @@
 .mode-card.green .mode-icon { color: var(--success); }
 
 .mode-card.active .mode-icon {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--bg-surface);
   transform: scale(1.06);
 }
 

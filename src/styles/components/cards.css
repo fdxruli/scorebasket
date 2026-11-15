@@ -1,14 +1,14 @@
 /* src/styles/components/cards.css */
 
 .card {
-  background: linear-gradient(160deg, rgba(24, 28, 41, 0.88) 0%, rgba(15, 18, 27, 0.96) 100%);
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 1.25rem;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
 }
 
 @media (min-width: 768px) {

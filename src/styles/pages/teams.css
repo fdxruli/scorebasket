@@ -77,8 +77,8 @@
   width: 48px;
   flex-shrink: 0;
   padding: 0;
-  background: rgba(14, 165, 233, 0.14);
-  border: 1px solid rgba(14, 165, 233, 0.35);
+  background: var(--secondary-bg);
+  border: 1px solid var(--secondary);
   color: var(--secondary-light);
   display: flex;
   align-items: center;
@@ -92,7 +92,7 @@
   background-color: var(--secondary);
   color: white;
   border-color: var(--secondary);
-  box-shadow: 0 4px 14px var(--secondary-glow);
+  box-shadow: none;
 }
 
 .temp-players-list {
@@ -101,7 +101,7 @@
   gap: 0.45rem;
   margin-bottom: 1.25rem;
   padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-surface-2);
   border: 1px dashed var(--border-light);
   border-radius: var(--radius-sm);
 }
@@ -162,7 +162,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
   cursor: pointer;
@@ -178,7 +178,7 @@
 .btn-archive-toggle.active {
   color: var(--primary-light);
   background-color: var(--primary-subtle);
-  border-color: rgba(255, 95, 31, 0.35);
+  border-color: var(--primary);
 }
 
 /* --- 3. GRID DE FRANQUICIAS / EQUIPOS (Mobile 1-col -> Tablet/Desktop Multi-Col) --- */
@@ -230,7 +230,7 @@
   width: 2.65rem;
   height: 2.65rem;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.18), rgba(255, 95, 31, 0.14));
+  background: var(--secondary-bg);
   border: 1px solid var(--border-light);
   display: flex;
   align-items: center;
@@ -280,7 +280,7 @@
   font-weight: 600;
   padding: 0.18rem 0.5rem;
   border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
 }
@@ -302,7 +302,7 @@
 .team-card.is-archived {
   opacity: 0.68;
   border: 1px dashed var(--border-light);
-  background: rgba(12, 14, 21, 0.5);
+  background: var(--bg-surface-2);
 }
 
 .team-card.is-archived:hover {
@@ -313,7 +313,7 @@
   font-size: 0.62rem;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-surface-2);
   color: var(--text-muted);
   font-weight: 800;
   text-transform: uppercase;
@@ -324,8 +324,8 @@
 /* --- 4. INFO BOX --- */
 .teams-info-box {
   padding: 1rem 1.15rem;
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(18, 21, 31, 0.8));
-  border: 1px solid rgba(14, 165, 233, 0.25);
+  background: var(--secondary-bg);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   font-size: 0.82rem;
   color: var(--text-secondary);

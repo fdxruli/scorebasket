@@ -9,6 +9,7 @@ import { LiveMatchHistoryModal } from '../../../../components/live/LiveMatchHist
 import { LivePlayersModal } from '../../../../components/live/LivePlayersModal';
 import { formatPeriodLabel } from '../../../../utils/matchHelpers';
 import { db } from '../../../../db/db';
+import { ThemeSelector } from '../../../../components/common/ThemeSelector';
 
 export const LiveHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -117,6 +118,7 @@ export const LiveHeader: React.FC = () => {
 
         {/* Acciones Rápidas: Chicharra, Sonido, Jugadores, Historial, Deshacer */}
         <div className="live-header-actions">
+          <ThemeSelector compact />
           <button
             type="button"
             onClick={() => setShowPlayers(true)}

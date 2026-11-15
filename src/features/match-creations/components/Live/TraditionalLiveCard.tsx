@@ -43,7 +43,7 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
         <div
           className="live-badge-status"
           style={isRunning
-            ? { color: 'var(--primary)', borderColor: 'rgba(249, 115, 22, 0.3)' }
+            ? { color: 'var(--primary)', borderColor: 'var(--primary)' }
             : { color: 'var(--text-muted)' }
           }
         >
@@ -52,7 +52,7 @@ export const TraditionalLiveCard = ({ match, localName, visitorName }: Props) =>
               width: '0.5rem',
               height: '0.5rem',
               borderRadius: '9999px',
-              backgroundColor: isRunning ? 'var(--primary)' : '#52525b'
+              backgroundColor: isRunning ? 'var(--primary)' : 'var(--text-dim)'
             }}
           />
           {isRunning ? 'EN JUEGO' : 'PAUSADO'}

@@ -213,11 +213,11 @@ export function Matches() {
           <div
             style={{
               padding: '1.15rem',
-              background: 'rgba(255, 95, 31, 0.14)',
+              background: 'var(--primary-subtle)',
               borderRadius: '9999px',
-              border: '1px solid rgba(255, 95, 31, 0.35)',
+              border: '1px solid var(--primary)',
               display: 'inline-flex',
-              boxShadow: '0 0 30px rgba(255, 95, 31, 0.25)'
+              boxShadow: 'none'
             }}
           >
             <Trophy size={42} color="var(--primary)" />

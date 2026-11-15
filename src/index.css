@@ -37,8 +37,8 @@
   border-radius: var(--radius-full);
   font-size: 0.82rem;
   font-weight: 600;
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.16), rgba(14, 165, 233, 0.06));
+  background: var(--secondary-bg);
   color: var(--secondary-light);
-  border: 1px solid rgba(14, 165, 233, 0.28);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
 }

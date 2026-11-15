@@ -276,7 +276,7 @@ export const RaceEngine: React.FC = () => {
                             <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Tenemos un Ganador!</h3>
-                        <p style={{ fontSize: '1.45rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
+                        <p style={{ fontSize: '1.45rem', fontFamily: 'var(--font-display)', color: 'var(--text-main)', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
                             {winnerTeamId === localTeam.id ? localTeam.name : visitorTeam.name}
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>
@@ -306,7 +306,7 @@ export const RaceEngine: React.FC = () => {
                                 disabled={isSharingCard}
                                 className="btn-modal-primary"
                                 style={{
-                                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                                    background: 'var(--team-local)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',

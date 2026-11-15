@@ -73,7 +73,7 @@ export const HistoryMatchTicket = ({ match, localName, visitorName, onClick }: P
                 <div
                     className="text-center"
                     style={{
-                        backgroundColor: 'rgba(24, 24, 27, 0.5)',
+                        backgroundColor: 'var(--bg-surface-2)',
                         padding: '0.25rem 0.75rem',
                         borderTop: '1px solid var(--border-color)'
                     }}

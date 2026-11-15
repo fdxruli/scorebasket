@@ -1,59 +1,67 @@
-/* src/styles/variables.css */
+/* Semantic design tokens. Team colors remain stable across both themes. */
 :root {
-  /* --- 1. PALETA COURTSIDE PRO (Hardwood Obsidian, Hoops Orange & Electric Blue) --- */
-  --bg-app: #07080c;
-  --bg-elevated: #0c0e14;
-  --bg-surface: #12151f;
-  --bg-surface-2: #181c29;
-  --bg-surface-hover: #1f2436;
-  --bg-glass: rgba(18, 21, 31, 0.82);
-  --bg-overlay: rgba(4, 5, 10, 0.82);
+  color-scheme: dark;
 
-  /* Brand & Visitor Accent (Hoops Orange) */
-  --primary: #ff5f1f;
-  --primary-hover: #e04809;
-  --primary-light: #ff8c5a;
-  --primary-rgb: 255, 95, 31;
-  --primary-glow: rgba(255, 95, 31, 0.32);
-  --primary-subtle: rgba(255, 95, 31, 0.12);
+  /* Courtside Solid — night surfaces */
+  --bg-app: #0F172A;
+  --bg-elevated: #1E293B;
+  --bg-surface: #1E293B;
+  --bg-surface-2: #273449;
+  --bg-surface-hover: #334155;
+  --bg-inset: #162033;
+  --bg-glass: rgba(30, 41, 59, 0.96);
+  --bg-overlay: rgba(15, 23, 42, 0.76);
+  --surface-wash: rgba(248, 250, 252, 0.07);
+  --surface-wash-strong: rgba(248, 250, 252, 0.12);
 
-  /* Local Team & Tactical Accent (Courtside Cyan/Blue) */
-  --secondary: #0ea5e9;
-  --secondary-hover: #0284c7;
-  --secondary-light: #38bdf8;
-  --secondary-rgb: 14, 165, 233;
-  --secondary-bg: rgba(14, 165, 233, 0.12);
-  --secondary-glow: rgba(14, 165, 233, 0.3);
+  /* Accents use softer values for readable text on dark surfaces. */
+  --primary: #FB923C;
+  --primary-hover: #F97316;
+  --primary-light: #FDBA74;
+  --primary-solid: #C2410C;
+  --primary-rgb: 251, 146, 60;
+  --primary-glow: rgba(251, 146, 60, 0.14);
+  --primary-subtle: rgba(251, 146, 60, 0.14);
 
-  /* Estados de Juego */
-  --danger: #f43f5e;
+  --secondary: #60A5FA;
+  --secondary-hover: #3B82F6;
+  --secondary-light: #93C5FD;
+  --secondary-solid: #1D4ED8;
+  --secondary-rgb: 96, 165, 250;
+  --secondary-bg: rgba(96, 165, 250, 0.16);
+  --secondary-glow: rgba(96, 165, 250, 0.14);
+
+  --team-local: #1D4ED8;
+  --team-visitor: #C2410C;
+  --team-local-text: #93C5FD;
+  --team-visitor-text: #FDBA74;
+
+  --danger: #FDA4AF;
+  --danger-strong: #B91C1C;
   --danger-rgb: 244, 63, 94;
-  --danger-bg: rgba(244, 63, 94, 0.14);
-
-  --success: #10b981;
+  --danger-bg: rgba(244, 63, 94, 0.16);
+  --success: #34D399;
+  --success-strong: #047857;
   --success-rgb: 16, 185, 129;
-  --success-bg: rgba(16, 185, 129, 0.14);
-
-  --warning: #f59e0b;
+  --success-bg: rgba(52, 211, 153, 0.15);
+  --warning: #FBBF24;
+  --warning-strong: #B45309;
   --warning-rgb: 245, 158, 11;
-  --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-bg: rgba(251, 191, 36, 0.15);
 
-  /* Textos */
-  --text-main: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #8b95a9;
-  --text-dim: #556075;
-  --text-inverse: #ffffff;
-  --foreground: #f8fafc;
-  --muted-foreground: #8b95a9;
+  --text-main: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #A8B4C7;
+  --text-dim: #94A3B8;
+  --text-inverse: #FFFFFF;
+  --foreground: #F8FAFC;
+  --muted-foreground: #A8B4C7;
 
-  /* Bordes e Iluminación Especular */
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-light: rgba(255, 255, 255, 0.15);
-  --border-strong: rgba(255, 255, 255, 0.24);
-  --border-focus: var(--primary);
+  --border-color: rgba(203, 213, 225, 0.14);
+  --border-light: rgba(203, 213, 225, 0.22);
+  --border-strong: rgba(203, 213, 225, 0.34);
+  --border-focus: #60A5FA;
 
-  /* --- 2. ESPACIADO Y FORMAS --- */
   --radius-xs: 6px;
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -61,27 +69,86 @@
   --radius-xl: 28px;
   --radius-full: 9999px;
 
-  /* --- 3. SOMBRAS Y EFECTOS --- */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --shadow-lg: 0 18px 40px -8px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --shadow-glow: 0 8px 28px -4px var(--primary-glow);
-  --shadow-glow-blue: 0 8px 28px -4px var(--secondary-glow);
-  --backdrop-blur: blur(16px);
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.16);
+  --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.2);
+  --shadow-lg: 0 12px 28px rgba(15, 23, 42, 0.28);
+  --shadow-glow: 0 4px 12px var(--primary-glow);
+  --shadow-glow-blue: 0 4px 12px var(--secondary-glow);
+  --backdrop-blur: blur(12px);
 
-  /* --- 4. CAPAS (Z-Index Unificado: Modales de Acción siempre sobre Modales de Evento) --- */
   --z-navbar: 60;
   --z-overlay: 1000;
   --z-game-modal: 2000;
   --z-modal: 2100;
   --z-toast: 9999;
 
-  /* --- 5. TIPOGRAFÍA --- */
   --font-display: 'Barlow Condensed', system-ui, -apple-system, sans-serif;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* --- 6. DIMENSIONES DE LAYOUT --- */
   --sidebar-width: 270px;
   --mobile-nav-height: 4.5rem;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: #F3F6FA;
+  --bg-elevated: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --bg-surface-2: #F1F5F9;
+  --bg-surface-hover: #E2E8F0;
+  --bg-inset: #E2E8F0;
+  --bg-glass: rgba(255, 255, 255, 0.98);
+  --bg-overlay: rgba(15, 23, 42, 0.5);
+  --surface-wash: rgba(15, 23, 42, 0.035);
+  --surface-wash-strong: rgba(15, 23, 42, 0.07);
+
+  --primary: #C2410C;
+  --primary-hover: #9A3412;
+  --primary-light: #C2410C;
+  --primary-solid: #C2410C;
+  --primary-rgb: 194, 65, 12;
+  --primary-glow: rgba(194, 65, 12, 0.12);
+  --primary-subtle: rgba(194, 65, 12, 0.1);
+
+  --secondary: #1D4ED8;
+  --secondary-hover: #1E40AF;
+  --secondary-light: #1D4ED8;
+  --secondary-solid: #1D4ED8;
+  --secondary-rgb: 29, 78, 216;
+  --secondary-bg: rgba(29, 78, 216, 0.1);
+  --secondary-glow: rgba(29, 78, 216, 0.12);
+
+  --team-local-text: #1D4ED8;
+  --team-visitor-text: #C2410C;
+
+  --danger: #B91C1C;
+  --danger-strong: #B91C1C;
+  --danger-bg: #FEF2F2;
+  --success: #047857;
+  --success-strong: #047857;
+  --success-bg: #ECFDF5;
+  --warning: #B45309;
+  --warning-strong: #B45309;
+  --warning-bg: #FFFBEB;
+
+  --text-main: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --text-dim: #64748B;
+  --text-inverse: #FFFFFF;
+  --foreground: #0F172A;
+  --muted-foreground: #475569;
+
+  --border-color: #CBD5E1;
+  --border-light: #CBD5E1;
+  --border-strong: #94A3B8;
+  --border-focus: #1D4ED8;
+
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 10px 24px rgba(15, 23, 42, 0.12);
+  --shadow-glow: 0 3px 8px var(--primary-glow);
+  --shadow-glow-blue: 0 3px 8px var(--secondary-glow);
 }

@@ -259,14 +259,14 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 padding: '0.75rem',
                                 marginBottom: '0.75rem',
                                 borderRadius: '0.5rem',
-                                backgroundColor: 'rgba(244, 63, 94, 0.12)',
-                                border: '1px solid rgba(244, 63, 94, 0.4)',
-                                color: '#fda4af',
+                                backgroundColor: 'var(--danger-bg)',
+                                border: '1px solid var(--danger)',
+                                color: 'var(--danger)',
                                 fontSize: '0.825rem'
                             }}
                         >
                             <div className="flex-gap" style={{ alignItems: 'center', gap: '0.5rem' }}>
-                                <AlertCircle size={16} color="#f43f5e" />
+                                <AlertCircle size={16} color="var(--danger)" />
                                 <span>{formError}</span>
                             </div>
                             {(isConcurrencyConflict || Boolean(loadError)) && (
@@ -341,7 +341,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                                     left: '0.5rem',
                                                     top: '50%',
                                                     transform: 'translateY(-50%)',
-                                                    color: '#52525b',
+                                                    color: 'var(--text-muted)',
                                                     fontSize: '0.625rem'
                                                 }}
                                             >
@@ -399,7 +399,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                         <span
                                             role="alert"
                                             style={{
-                                                color: '#f43f5e',
+                                                color: 'var(--danger)',
                                                 fontSize: '0.75rem',
                                                 paddingLeft: '1.75rem'
                                             }}
@@ -464,7 +464,7 @@ export function TeamEditorModal({ teamId, onClose }: TeamEditorModalProps) {
                                 <div
                                     role="alert"
                                     style={{
-                                        color: '#f43f5e',
+                                        color: 'var(--danger)',
                                         fontSize: '0.75rem',
                                         marginTop: '0.35rem'
                                     }}

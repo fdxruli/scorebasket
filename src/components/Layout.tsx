@@ -7,6 +7,7 @@ import { db } from "../db/db";
 import { startQuickPickupMatch } from "../utils/matchHelpers";
 import { StorageErrorBoundary } from "./common/StorageErrorBoundary";
 import { PwaNotice } from "./common/PwaNotice";
+import { ThemeSelector } from "./common/ThemeSelector";
 
 export function Layout() {
   const location = useLocation();
@@ -63,22 +64,25 @@ export function Layout() {
           </div>
         </Link>
 
-        {counts && counts.activeMatches > 0 ? (
-          <Link to="/matches" className="topbar-live-pill">
-            <span className="pulse-dot" />
-            {counts.activeMatches} En Vivo
-          </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={handleQuickPickup}
-            disabled={startingQuick}
-            className="btn btn-xs btn-primary"
-          >
-            <Zap size={13} fill="currentColor" />
-            Reta 21
-          </button>
-        )}
+        <div className="mobile-topbar-actions">
+          {counts && counts.activeMatches > 0 ? (
+            <Link to="/matches" className="topbar-live-pill">
+              <span className="pulse-dot" />
+              {counts.activeMatches} En Vivo
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handleQuickPickup}
+              disabled={startingQuick}
+              className="btn btn-xs btn-primary"
+            >
+              <Zap size={13} fill="currentColor" />
+              Reta 21
+            </button>
+          )}
+          <ThemeSelector compact />
+        </div>
       </header>
 
       {/* --- SIDEBAR DESKTOP (>= 768px) --- */}
@@ -179,6 +183,7 @@ export function Layout() {
               <span className="sidebar-stat-lbl">Equipos</span>
             </div>
           </div>
+          <ThemeSelector />
         </div>
       </aside>
 

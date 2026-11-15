@@ -184,8 +184,8 @@ export const SeriesEngine: React.FC = () => {
                                 fontSize: '1.15rem',
                                 fontWeight: 900,
                                 color: '#fff',
-                                background: 'rgba(14, 165, 233, 0.22)',
-                                border: '1px solid rgba(14, 165, 233, 0.45)',
+                                background: 'var(--team-local)',
+                                border: '1px solid var(--team-local)',
                                 borderRadius: '6px',
                                 padding: '0.1rem 0.5rem'
                             }}
@@ -200,8 +200,8 @@ export const SeriesEngine: React.FC = () => {
                                         width: '8px',
                                         height: '8px',
                                         borderRadius: '50%',
-                                        backgroundColor: i < localSetsWon ? 'var(--secondary-light)' : 'rgba(255,255,255,0.15)',
-                                        boxShadow: i < localSetsWon ? '0 0 8px var(--secondary)' : 'none'
+                                        backgroundColor: i < localSetsWon ? 'var(--team-local)' : 'var(--border-strong)',
+                                        boxShadow: 'none'
                                     }}
                                 />
                             ))}
@@ -229,8 +229,8 @@ export const SeriesEngine: React.FC = () => {
                                         width: '8px',
                                         height: '8px',
                                         borderRadius: '50%',
-                                        backgroundColor: i < visitorSetsWon ? 'var(--primary-light)' : 'rgba(255,255,255,0.15)',
-                                        boxShadow: i < visitorSetsWon ? '0 0 8px var(--primary)' : 'none'
+                                        backgroundColor: i < visitorSetsWon ? 'var(--team-visitor)' : 'var(--border-strong)',
+                                        boxShadow: 'none'
                                     }}
                                 />
                             ))}
@@ -241,8 +241,8 @@ export const SeriesEngine: React.FC = () => {
                                 fontSize: '1.15rem',
                                 fontWeight: 900,
                                 color: '#fff',
-                                background: 'rgba(255, 95, 31, 0.22)',
-                                border: '1px solid rgba(255, 95, 31, 0.45)',
+                                background: 'var(--team-visitor)',
+                                border: '1px solid var(--team-visitor)',
                                 borderRadius: '6px',
                                 padding: '0.1rem 0.5rem'
                             }}
@@ -369,11 +369,11 @@ export const SeriesEngine: React.FC = () => {
                         </div>
                         <h3>Fin del Set {currentSet}</h3>
                         {errorMessage && (
-                            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger, #ef4444)', color: '#fca5a5', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
+                            <div style={{ backgroundColor: 'var(--danger-bg)', border: '1px solid var(--danger)', color: 'var(--danger)', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>
                                 {errorMessage}
                             </div>
                         )}
-                        <p style={{ color: '#fff', marginBottom: '0.5rem' }}>
+                        <p style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>
                             Ganador del set: <strong>{setWinnerId === localTeam.id ? localTeam.name : visitorTeam.name}</strong> ({match.localScore} - {match.visitorScore})
                         </p>
                         <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -408,7 +408,7 @@ export const SeriesEngine: React.FC = () => {
                             <Trophy size={40} color="var(--warning)" />
                         </div>
                         <h3>¡Serie Finalizada!</h3>
-                        <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: '#fff', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
+                        <p style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: 'var(--text-main)', fontWeight: 900, margin: '0.5rem 0', textTransform: 'uppercase' }}>
                             {localSetsWon === visitorSetsWon
                                 ? 'Serie Empatada'
                                 : `Ganador: ${localSetsWon > visitorSetsWon ? localTeam.name : visitorTeam.name}`}
@@ -419,7 +419,8 @@ export const SeriesEngine: React.FC = () => {
                                 fontFamily: 'var(--font-mono)',
                                 fontWeight: 800,
                                 marginBottom: '1.5rem',
-                                backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                                backgroundColor: 'var(--bg-surface-2)',
+                                color: 'var(--text-main)',
                                 padding: '0.5rem 1.5rem',
                                 borderRadius: '0.5rem'
                             }}
@@ -436,7 +437,7 @@ export const SeriesEngine: React.FC = () => {
                                 disabled={isSharingCard}
                                 className="btn-modal-primary"
                                 style={{
-                                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                                    background: 'var(--team-local)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',

@@ -181,9 +181,9 @@ export function LocalBackupControls() {
                     alignItems: 'center',
                     gap: '0.25rem',
                     backgroundColor: storageStatus.persisted
-                      ? 'rgba(34, 197, 94, 0.15)'
-                      : 'rgba(245, 158, 11, 0.15)',
-                    color: storageStatus.persisted ? 'var(--success)' : 'var(--warning, #f59e0b)'
+                      ? 'var(--success-bg)'
+                      : 'var(--warning-bg)',
+                    color: storageStatus.persisted ? 'var(--success)' : 'var(--warning)'
                   }}
                 >
                   {storageStatus.persisted ? (
@@ -225,8 +225,8 @@ export function LocalBackupControls() {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.75rem',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
+                backgroundColor: 'var(--success-bg)',
+                border: '1px solid var(--success)',
                 borderRadius: '8px',
                 color: 'var(--success)',
                 marginBottom: '1rem',
@@ -252,10 +252,10 @@ export function LocalBackupControls() {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.75rem',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
+                backgroundColor: 'var(--warning-bg)',
+                border: '1px solid var(--warning)',
                 borderRadius: '8px',
-                color: 'var(--warning, #f59e0b)',
+                color: 'var(--warning)',
                 marginBottom: '1rem',
                 fontSize: '0.85rem'
               }}
@@ -279,10 +279,10 @@ export function LocalBackupControls() {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.75rem',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                backgroundColor: 'var(--danger-bg)',
+                border: '1px solid var(--danger)',
                 borderRadius: '8px',
-                color: 'var(--danger, #ef4444)',
+                color: 'var(--danger)',
                 marginBottom: '1rem',
                 fontSize: '0.85rem'
               }}
@@ -304,13 +304,13 @@ export function LocalBackupControls() {
             <div
               style={{
                 padding: '1rem',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
+                backgroundColor: 'var(--warning-bg)',
+                border: '1px solid var(--warning)',
                 borderRadius: '8px',
                 marginBottom: '1rem'
               }}
             >
-              <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--warning, #f59e0b)', fontSize: '0.95rem' }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--warning)', fontSize: '0.95rem' }}>
                 Confirmar Restauración
               </h4>
               <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>
@@ -395,7 +395,7 @@ export function LocalBackupControls() {
                   storageStatus.persisted ? (
                     <ShieldCheck size={16} color="var(--success)" style={{ flexShrink: 0 }} />
                   ) : (
-                    <Shield size={16} color="var(--warning, #f59e0b)" style={{ flexShrink: 0 }} />
+                  <Shield size={16} color="var(--warning)" style={{ flexShrink: 0 }} />
                   )
                 ) : (
                   <HardDrive size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
@@ -434,7 +434,7 @@ export function LocalBackupControls() {
               style={{
                 marginTop: '0.5rem',
                 paddingTop: '0.5rem',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                borderTop: '1px solid var(--border-color)',
                 fontSize: '0.75rem',
                 color: 'var(--text-muted)',
                 lineHeight: 1.4

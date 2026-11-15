@@ -13,7 +13,7 @@ const fullScreenCenter: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: '#000',
+  background: 'var(--bg-app)',
   textAlign: 'center'
 };
 
@@ -48,8 +48,8 @@ class LiveMatchErrorBoundary extends Component<LiveMatchErrorBoundaryProps, Live
 
     return (
       <div style={{ ...fullScreenCenter, flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', color: '#ef4444', fontWeight: 700 }}>No se pudo abrir el partido</h2>
-        <p style={{ color: '#9ca3af', maxWidth: '24rem' }}>{this.state.message}</p>
+        <h2 style={{ fontSize: '1.5rem', color: 'var(--danger)', fontWeight: 700 }}>No se pudo abrir el partido</h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '24rem' }}>{this.state.message}</p>
         <button
           className="btn btn-primary"
           onClick={() => window.location.reload()}
@@ -76,7 +76,7 @@ const EngineDispatcher = () => {
   if (isLoading) {
     return (
       <div style={{ ...fullScreenCenter, padding: '1.5rem' }}>
-        <div style={{ fontSize: '1.25rem', color: '#9ca3af' }}>Cargando configuración del partido...</div>
+        <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)' }}>Cargando configuración del partido...</div>
       </div>
     );
   }
@@ -85,8 +85,8 @@ const EngineDispatcher = () => {
   if (error || !match || !localTeam || !visitorTeam) {
     return (
       <div style={{ ...fullScreenCenter, flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', color: '#ef4444', fontWeight: 700 }}>Partido no encontrado</h2>
-        <p style={{ color: '#9ca3af', maxWidth: '24rem' }}>
+        <h2 style={{ fontSize: '1.5rem', color: 'var(--danger)', fontWeight: 700 }}>Partido no encontrado</h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '24rem' }}>
           {error || 'No se pudieron cargar todos los datos del partido.'}
         </p>
         <button
@@ -127,7 +127,7 @@ export const LiveMatch = () => {
 
   if (isNaN(matchId)) {
     return (
-      <div style={{ ...fullScreenCenter, color: '#f87171', padding: '2rem' }}>
+      <div style={{ ...fullScreenCenter, color: 'var(--danger)', padding: '2rem' }}>
         ID de partido inválido
       </div>
     );
@@ -136,7 +136,7 @@ export const LiveMatch = () => {
   return (
     <LiveMatchProvider matchId={matchId}>
       <LiveMatchErrorBoundary>
-        <div style={{ minHeight: '100vh', width: '100%', background: '#000' }}>
+        <div style={{ minHeight: '100vh', width: '100%', background: 'var(--bg-app)' }}>
           <EngineDispatcher />
         </div>
       </LiveMatchErrorBoundary>

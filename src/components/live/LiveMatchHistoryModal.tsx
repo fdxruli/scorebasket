@@ -342,7 +342,7 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                               fontWeight: 700,
                               padding: '0.25rem 0.55rem',
                               borderRadius: '999px',
-                              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                              backgroundColor: 'var(--surface-wash)',
                               border: '1px solid var(--border-color)',
                               gap: '0.25rem'
                             }}
@@ -443,8 +443,8 @@ export function LiveMatchHistoryModal({ matchId, onClose }: LiveMatchHistoryModa
                 className="btn btn-secondary"
                 style={{
                   color: 'var(--danger)',
-                  borderColor: 'rgba(244, 63, 94, 0.35)',
-                  backgroundColor: 'rgba(244, 63, 94, 0.08)'
+                  borderColor: 'var(--danger)',
+                  backgroundColor: 'var(--danger-bg)'
                 }}
               >
                 <Trash2 size={16} />

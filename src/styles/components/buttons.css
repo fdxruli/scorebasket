@@ -61,23 +61,23 @@
 
 /* --- VARIANTES --- */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  background: var(--primary-solid);
   color: var(--text-inverse);
-  box-shadow: 0 4px 18px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+  border: 1px solid var(--primary-solid);
 }
 
 .btn-primary:hover {
   filter: brightness(1.08);
-  box-shadow: 0 8px 24px rgba(255, 95, 31, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface-2);
   border-color: var(--border-light);
   color: var(--text-secondary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: none;
 }
 
 .btn-secondary:hover {
@@ -96,12 +96,12 @@
 
 .btn-ghost:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-surface-2);
 }
 
 .btn-danger {
   background: var(--danger-bg);
-  color: #fda4af;
+  color: var(--danger);
   border-color: rgba(244, 63, 94, 0.32);
 }
 
@@ -113,10 +113,10 @@
 
 /* --- BOTONES DE ICONO --- */
 .btn-icon {
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.75rem;
+  height: 2.75rem;
   padding: 0;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   color: var(--text-muted);
   border-radius: var(--radius-xs);

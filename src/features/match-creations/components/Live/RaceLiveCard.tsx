@@ -31,9 +31,9 @@ export const RaceLiveCard = ({ match, localName, visitorName }: Props) => {
   const visitorGames = gameHistory.filter(g => g.winner === 'visitor').length;
 
   return (
-    <Link to={`/live/${match.id}`} className="match-card is-live" style={{ borderColor: 'rgba(234, 179, 8, 0.3)' }}>
+    <Link to={`/live/${match.id}`} className="match-card is-live" style={{ borderColor: 'var(--warning)' }}>
       <div className="live-card-header">
-        <div className="live-badge-status" style={{ color: 'var(--warning, #eab308)', borderColor: 'rgba(234, 179, 8, 0.3)' }}>
+        <div className="live-badge-status" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
           <Target size={12} />
           <span>RACE TO {target}</span>
         </div>
@@ -45,8 +45,8 @@ export const RaceLiveCard = ({ match, localName, visitorName }: Props) => {
 
       <div className="live-card-body" style={{ position: 'relative' }}>
         {/* Barras de progreso de fondo sutiles */}
-        <div style={progressTrack('left', '#3b82f6')}><div style={progressFill(localPct, '#3b82f6')} /></div>
-        <div style={progressTrack('right', '#f97316')}><div style={progressFill(visitorPct, '#f97316')} /></div>
+        <div style={progressTrack('left', 'var(--team-local)')}><div style={progressFill(localPct, 'var(--team-local)')} /></div>
+        <div style={progressTrack('right', 'var(--team-visitor)')}><div style={progressFill(visitorPct, 'var(--team-visitor)')} /></div>
 
         <TeamRow name={localName} score={match.localScore} target={target} isWinning={match.localScore > match.visitorScore} />
         <TeamRow name={visitorName} score={match.visitorScore} target={target} isWinning={match.visitorScore > match.localScore} />

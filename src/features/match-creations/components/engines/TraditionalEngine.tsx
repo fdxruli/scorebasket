@@ -350,11 +350,11 @@ export const TraditionalEngine: React.FC = () => {
             justifyContent: 'space-between',
             padding: '0.5rem 1rem',
             margin: '0.25rem 0',
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
+            backgroundColor: 'var(--danger-bg)',
+            border: '1px solid var(--danger)',
             borderRadius: '8px',
             fontSize: '0.85rem',
-            color: '#fca5a5'
+            color: 'var(--danger)'
           }}
         >
           <span>Desfase o salto anómalo detectado en el reloj del dispositivo. Requiere revisión.</span>
@@ -365,7 +365,7 @@ export const TraditionalEngine: React.FC = () => {
               style={{
                 marginLeft: '1rem',
                 padding: '0.25rem 0.75rem',
-                backgroundColor: '#dc2626',
+                backgroundColor: 'var(--danger-strong)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
@@ -552,7 +552,7 @@ export const TraditionalEngine: React.FC = () => {
                 fontFamily: 'var(--font-mono)',
                 fontSize: '2.5rem',
                 fontWeight: 800,
-                color: '#fff',
+                color: 'var(--text-main)',
                 margin: '0.25rem 0 1rem'
               }}
             >
@@ -688,7 +688,7 @@ export const TraditionalEngine: React.FC = () => {
                 fontWeight: 800,
                 margin: '0.5rem 0 1.25rem',
                 padding: '0.75rem 1.25rem',
-                background: 'rgba(0,0,0,0.35)',
+                background: 'var(--bg-surface-2)',
                 borderRadius: 'var(--radius-sm)',
                 width: '100%'
               }}
@@ -754,7 +754,7 @@ export const TraditionalEngine: React.FC = () => {
                   disabled={isSharingCard}
                   className="btn-modal-primary"
                   style={{
-                    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                    background: 'var(--team-local)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',

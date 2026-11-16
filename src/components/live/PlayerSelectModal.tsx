@@ -338,9 +338,9 @@ export function PlayerSelectModal({
                                 marginTop: '0.6rem',
                                 padding: '0.55rem 0.75rem',
                                 borderRadius: 'var(--radius-sm)',
-                                backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                                backgroundColor: 'var(--danger-bg)',
                                 border: '1px solid var(--danger)',
-                                color: '#fecaca',
+                                color: 'var(--danger)',
                                 fontSize: '0.82rem',
                                 fontWeight: 700,
                                 textAlign: 'left'

@@ -4,9 +4,35 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#090a0f" />
+    <meta name="theme-color" content="#F3F6FA" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <title>ScoreBasket — Courtside Pro Control</title>
+    <script>
+      (() => {
+        let preference = 'auto';
+        try {
+          const stored = localStorage.getItem('scorebasket-theme-preference');
+          if (stored === 'light' || stored === 'dark' || stored === 'auto') preference = stored;
+        } catch {
+          // El tema automático sigue funcionando aunque el almacenamiento esté bloqueado.
+        }
+
+        let theme = 'light';
+        try {
+          theme = preference === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : preference;
+        } catch {
+          theme = preference === 'dark' ? 'dark' : 'light';
+        }
+
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.content = theme === 'dark' ? '#0F172A' : '#F3F6FA';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

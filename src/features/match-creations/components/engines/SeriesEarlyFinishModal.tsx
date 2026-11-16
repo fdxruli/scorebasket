@@ -87,9 +87,9 @@ export const SeriesEarlyFinishModal: React.FC<SeriesEarlyFinishModalProps> = ({
           <div
             data-testid="early-finish-error"
             style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid var(--danger, #ef4444)',
-              color: '#fca5a5',
+              backgroundColor: 'var(--danger-bg)',
+              border: '1px solid var(--danger)',
+              color: 'var(--danger)',
               padding: '0.5rem 0.75rem',
               borderRadius: '0.375rem',
               fontSize: '0.85rem',
@@ -114,7 +114,7 @@ export const SeriesEarlyFinishModal: React.FC<SeriesEarlyFinishModalProps> = ({
               }}
               disabled={isProcessing}
               className="btn-modal-primary"
-              style={{ background: 'var(--primary-accent, #3b82f6)' }}
+              style={{ background: 'var(--team-local)' }}
             >
               {isProcessing
                 ? 'Procesando...'

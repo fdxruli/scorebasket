@@ -1,14 +1,12 @@
 /* src/features/match-creations/components/ConfigSummary.css */
 
 .config-summary {
-  background:
-    radial-gradient(circle at 100% 0%, rgba(255, 95, 31, 0.14), transparent 60%),
-    linear-gradient(160deg, rgba(22, 26, 39, 0.92) 0%, rgba(12, 14, 21, 0.98) 100%);
-  border: 1px solid rgba(255, 95, 31, 0.28);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 1.35rem;
   margin-bottom: 0;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .summary-header {
@@ -74,11 +72,11 @@
 .summary-badge.success {
   background-color: var(--success-bg);
   color: var(--success);
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  border: 1px solid var(--success);
 }
 
 .summary-badge.muted {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-surface-2);
   color: var(--text-muted);
   border: 1px solid var(--border-color);
 }

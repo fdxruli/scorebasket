@@ -38,10 +38,7 @@
 /* --- FACEOFF CARD (LOCAL VS VISITANTE) --- */
 .match-faceoff {
   position: relative;
-  background:
-    radial-gradient(circle at 15% 20%, rgba(14, 165, 233, 0.14), transparent 55%),
-    radial-gradient(circle at 85% 80%, rgba(255, 95, 31, 0.14), transparent 55%),
-    linear-gradient(160deg, rgba(22, 26, 39, 0.92) 0%, rgba(12, 14, 21, 0.98) 100%);
+  background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   padding: 1.35rem;
@@ -64,7 +61,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  background: rgba(7, 8, 12, 0.45);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1rem;
@@ -98,12 +95,12 @@
 }
 
 .is-local .team-select-badge {
-  background: rgba(14, 165, 233, 0.15);
+  background: var(--secondary-bg);
   color: var(--secondary-light);
 }
 
 .is-visitor .team-select-badge {
-  background: rgba(255, 95, 31, 0.15);
+  background: var(--primary-subtle);
   color: var(--primary-light);
 }
 
@@ -112,7 +109,7 @@
   justify-self: center;
   width: 2.75rem;
   height: 2.75rem;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  background: var(--primary-solid);
   color: white;
   font-family: var(--font-display);
   font-weight: 900;
@@ -129,7 +126,7 @@
 
 /* --- PREVIEW DE ENFRENTAMIENTO EN COLUMNA LATERAL --- */
 .matchup-preview-banner {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(18, 21, 31, 0.9) 50%, rgba(255, 95, 31, 0.1) 100%);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: 1rem 1.15rem;
@@ -174,7 +171,7 @@
 .warning-banner {
   text-align: center;
   font-size: 0.85rem;
-  color: #fde68a;
+  color: var(--warning);
   background-color: var(--warning-bg);
   padding: 1rem 1.25rem;
   border-radius: var(--radius-md);

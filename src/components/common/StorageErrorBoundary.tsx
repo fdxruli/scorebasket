@@ -98,8 +98,8 @@ export class StorageErrorBoundary extends Component<Props, State> {
           maxWidth: '560px',
           padding: '2rem 1.5rem',
           textAlign: 'center',
-          borderColor: 'rgba(239, 68, 68, 0.4)',
-          backgroundColor: 'var(--bg-surface, #1e293b)'
+          borderColor: 'var(--danger)',
+          backgroundColor: 'var(--bg-surface)'
         }}
         role="alert"
         aria-live="assertive"
@@ -109,8 +109,8 @@ export class StorageErrorBoundary extends Component<Props, State> {
             display: 'inline-flex',
             padding: '1rem',
             borderRadius: '9999px',
-            backgroundColor: 'rgba(239, 68, 68, 0.12)',
-            color: 'var(--danger, #ef4444)',
+            backgroundColor: 'var(--danger-bg)',
+            color: 'var(--danger)',
             marginBottom: '1rem'
           }}
         >
@@ -130,7 +130,7 @@ export class StorageErrorBoundary extends Component<Props, State> {
         <div
           style={{
             padding: '0.75rem 1rem',
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backgroundColor: 'var(--bg-surface-2)',
             borderRadius: '6px',
             marginBottom: '1.25rem',
             textAlign: 'left',
@@ -161,11 +161,11 @@ export class StorageErrorBoundary extends Component<Props, State> {
           <div
             style={{
               padding: '0.5rem 0.75rem',
-              backgroundColor: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
+              backgroundColor: 'var(--danger-bg)',
+              border: '1px solid var(--danger)',
               borderRadius: '4px',
               fontSize: '0.75rem',
-              color: 'var(--danger, #ef4444)',
+              color: 'var(--danger)',
               marginBottom: '1.25rem',
               fontFamily: 'monospace',
               wordBreak: 'break-word'

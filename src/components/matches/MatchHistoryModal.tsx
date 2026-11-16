@@ -284,8 +284,8 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                             className="btn btn-sm btn-secondary"
                             style={{
                                 color: 'var(--danger)',
-                                borderColor: 'rgba(244, 63, 94, 0.35)',
-                                backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                                borderColor: 'var(--danger)',
+                                backgroundColor: 'var(--danger-bg)',
                                 padding: '0.4rem 0.65rem',
                                 fontSize: '0.75rem'
                             }}
@@ -630,9 +630,9 @@ export function MatchHistoryModal({ matchId, onClose }: MatchHistoryModalProps) 
                         className="btn btn-primary"
                         style={{
                             flex: '2 1 220px',
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                            boxShadow: '0 6px 20px -4px rgba(16, 185, 129, 0.45)',
-                            border: '1px solid rgba(52, 211, 153, 0.4)'
+                            background: 'var(--success-strong)',
+                            boxShadow: 'none',
+                            border: '1px solid var(--success-strong)'
                         }}
                     >
                         <Share2 size={18} />

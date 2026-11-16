@@ -182,7 +182,9 @@ export function Scoreboard({
 
             {/* Card Local */}
             <div className={`score-card local ${localScore > visitorScore ? 'is-leading' : ''}`}>
-                <span className="score-card-role">LOCAL</span>
+                <span className="score-card-role">
+                    {localScore === visitorScore ? 'LOCAL · EMPATE' : localScore > visitorScore ? 'LOCAL · LÍDER' : 'LOCAL'}
+                </span>
 
                 {editingSide === 'local' ? (
                     <div className="team-rename-inline">
@@ -220,7 +222,7 @@ export function Scoreboard({
                         }}
                         title="Toca para editar el nombre del equipo"
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span className="team-name-label">
                             {localName}
                         </span>
                         {resolvedLocalId && (
@@ -290,7 +292,9 @@ export function Scoreboard({
 
             {/* Card Visitante */}
             <div className={`score-card visitor ${visitorScore > localScore ? 'is-leading' : ''}`}>
-                <span className="score-card-role">VISITA</span>
+                <span className="score-card-role">
+                    {localScore === visitorScore ? 'VISITA · EMPATE' : visitorScore > localScore ? 'VISITA · LÍDER' : 'VISITA'}
+                </span>
 
                 {editingSide === 'visitor' ? (
                     <div className="team-rename-inline">
@@ -328,7 +332,7 @@ export function Scoreboard({
                         }}
                         title="Toca para editar el nombre del equipo"
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span className="team-name-label">
                             {visitorName}
                         </span>
                         {resolvedVisitorId && (

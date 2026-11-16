@@ -8,18 +8,12 @@
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
   background-color: var(--bg-app);
-  background-image:
-    radial-gradient(circle at 15% 0%, rgba(14, 165, 233, 0.09) 0%, transparent 42%),
-    radial-gradient(circle at 85% 0%, rgba(255, 95, 31, 0.1) 0%, transparent 45%),
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
-  background-attachment: fixed;
+  background-image: none;
   color: var(--text-main);
   font-family: var(--font-sans);
   line-height: 1.5;
@@ -44,6 +38,15 @@ button, input, select, textarea {
   color: inherit;
 }
 
+button, a, input, select, textarea, summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 /* Scrollbar estilizado para Desktop */
 ::-webkit-scrollbar {
   width: 8px;
@@ -51,14 +54,23 @@ button, input, select, textarea {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(7, 8, 12, 0.6);
+  background: var(--bg-surface-2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--border-strong);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 95, 31, 0.5);
+  background: var(--primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

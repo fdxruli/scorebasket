@@ -24,7 +24,7 @@
 }
 
 .modal-content {
-  background: linear-gradient(165deg, #151926 0%, #0b0d14 100%);
+  background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   width: 100%;
@@ -57,7 +57,7 @@
   align-items: center;
   padding: 1.15rem 1.35rem;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface-2);
 }
 
 .modal-title {
@@ -88,7 +88,7 @@
 .modal-footer {
   padding: 1rem 1.35rem calc(1rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-color);
-  background: rgba(11, 13, 20, 0.94);
+  background: var(--bg-surface-2);
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
@@ -126,14 +126,14 @@
   gap: 0.5rem;
   padding: 0.55rem 0.7rem;
   border-radius: var(--radius-sm);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   transition: all 0.2s ease;
 }
 
 .player-edit-row:hover,
 .player-edit-row:focus-within {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--bg-surface-hover);
   border-color: var(--border-strong);
 }
 
@@ -150,7 +150,7 @@
 
 .player-edit-input:focus {
   outline: none;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: var(--bg-inset);
   box-shadow: 0 0 0 1px var(--primary);
 }
 
@@ -164,7 +164,7 @@
 .add-player-box {
   margin-top: 1rem;
   padding: 1rem;
-  background: linear-gradient(135deg, rgba(255, 95, 31, 0.08), rgba(255, 95, 31, 0.02));
+  background: var(--primary-subtle);
   border: 1px dashed rgba(255, 95, 31, 0.35);
   border-radius: var(--radius-md);
   display: flex;
@@ -209,11 +209,11 @@
 }
 
 .modal-content.is-score .pm-header {
-  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.2), transparent 72%);
+  background: var(--success-bg);
 }
 
 .modal-content.is-foul .pm-header {
-  background: radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.2), transparent 72%);
+  background: var(--danger-bg);
 }
 
 .pm-header-top {
@@ -229,7 +229,7 @@
   gap: 0.45rem;
   padding: 0.3rem 0.75rem;
   border-radius: var(--radius-full);
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-light);
   font-family: var(--font-display);
   font-size: 0.92rem;
@@ -294,7 +294,7 @@
   max-width: 120px;
   height: 2.25rem;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   color: var(--text-muted);
   font-family: var(--font-display);
@@ -310,22 +310,22 @@
 }
 
 .pm-switch-pill:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
 }
 
 .pm-switch-pill.active-score {
-  background: rgba(16, 185, 129, 0.22);
+  background: var(--success-bg);
   border-color: var(--success);
-  color: #34d399;
-  box-shadow: 0 0 14px rgba(16, 185, 129, 0.25);
+  color: var(--success);
+  box-shadow: none;
 }
 
 .pm-switch-pill.active-foul {
-  background: rgba(244, 63, 94, 0.22);
+  background: var(--danger-bg);
   border-color: var(--danger);
-  color: #fda4af;
-  box-shadow: 0 0 14px rgba(244, 63, 94, 0.25);
+  color: var(--danger);
+  box-shadow: none;
 }
 
 /* GRID DE JUGADORES GRANDES Y VISIBLES */
@@ -358,8 +358,8 @@
 
 .pm-player-btn {
   position: relative;
-  background: linear-gradient(160deg, rgba(28, 34, 52, 0.95) 0%, rgba(15, 18, 28, 0.98) 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  background: var(--bg-surface-2);
+  border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 0.85rem 0.65rem;
   display: flex;
@@ -370,7 +370,7 @@
   cursor: pointer;
   transition: all 0.15s ease-out;
   min-height: 124px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -396,7 +396,7 @@
 
 .pm-player-btn:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: linear-gradient(160deg, rgba(38, 46, 68, 0.98) 0%, rgba(20, 24, 38, 1) 100%);
+  background: var(--bg-surface-hover);
   transform: translateY(-2px);
 }
 
@@ -406,7 +406,7 @@
 
 .pm-player-btn.is-expelled {
   border-color: var(--danger);
-  background: rgba(239, 68, 68, 0.12);
+  background: var(--danger-bg);
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -417,7 +417,7 @@
   align-items: baseline;
   justify-content: center;
   gap: 2px;
-  background: rgba(0, 0, 0, 0.38);
+  background: var(--bg-surface);
   padding: 0.15rem 0.65rem;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -443,7 +443,7 @@
   font-size: 2.55rem;
   font-weight: 900;
   line-height: 0.95;
-  color: #ffffff;
+  color: var(--text-main);
   opacity: 1;
   transition: color 0.18s, transform 0.18s;
 }
@@ -457,7 +457,7 @@
 .player-name-label {
   font-size: 1.04rem;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-main);
   text-align: center;
   line-height: 1.15;
   display: -webkit-box;
@@ -489,36 +489,36 @@
   font-weight: 800;
   padding: 0.14rem 0.45rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-surface);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .pm-stat-chip.pts.has-pts {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
 }
 
 .pm-stat-chip.fouls.has-fouls {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-surface);
   color: var(--text-main);
 }
 
 .pm-stat-chip.fouls.warning {
-  background: rgba(245, 158, 11, 0.25);
-  color: #fde68a;
-  border: 1px solid rgba(245, 158, 11, 0.5);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning);
 }
 
 .pm-stat-chip.fouls.expelled {
-  background: var(--danger);
+  background: var(--danger-strong);
   color: #ffffff;
 }
 
 .modal-content.is-score .pm-player-btn:hover:not(:disabled) {
   border-color: rgba(16, 185, 129, 0.65);
-  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.2);
+  box-shadow: var(--shadow-sm);
 }
 
 .modal-content.is-score .pm-player-btn:hover:not(:disabled) .player-jersey-num {
@@ -528,7 +528,7 @@
 
 .modal-content.is-foul .pm-player-btn:hover:not(:disabled) {
   border-color: rgba(244, 63, 94, 0.65);
-  box-shadow: 0 8px 22px rgba(244, 63, 94, 0.2);
+  box-shadow: var(--shadow-sm);
 }
 
 .modal-content.is-foul .pm-player-btn:hover:not(:disabled) .player-jersey-num {
@@ -539,20 +539,20 @@
 /* Tarjeta para agregar jugador rápido */
 .pm-add-player-card {
   border: 1.5px dashed rgba(255, 255, 255, 0.22) !important;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-wash);
   justify-content: center;
 }
 
 .pm-add-player-card:hover {
   border-color: var(--primary) !important;
-  background: rgba(255, 95, 31, 0.08);
+  background: var(--primary-subtle);
 }
 
 .pm-add-icon-circle {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-wash);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -562,7 +562,7 @@
 /* Barra de agregar jugador al vuelo */
 .pm-quick-add-bar {
   padding: 0.85rem 1.15rem;
-  background: rgba(18, 22, 34, 0.98);
+  background: var(--bg-surface-2);
   border-top: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
@@ -603,7 +603,7 @@
   flex-shrink: 0;
   padding: 0.85rem 1.15rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-light);
-  background: #0b0d14;
+  background: var(--bg-surface-2);
   display: flex;
   align-items: center;
   gap: 0.65rem;
@@ -612,7 +612,7 @@
 .pm-unassigned-btn {
   flex: 1.5;
   height: 3.1rem;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
   border: 1px dashed var(--border-strong);
   color: var(--text-main);
   font-size: 0.86rem;
@@ -620,7 +620,7 @@
 }
 
 .pm-unassigned-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--surface-wash);
   border-style: solid;
 }
 
@@ -644,7 +644,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
   padding: 0.75rem 1.15rem;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -658,7 +658,7 @@
 .roster-tab-btn {
   padding: 0.6rem 0.75rem;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
   color: var(--text-muted);
   font-family: var(--font-display);
@@ -673,21 +673,21 @@
 }
 
 .roster-tab-btn.local.active {
-  background: rgba(14, 165, 233, 0.18);
+  background: var(--secondary-bg);
   border-color: var(--secondary);
-  color: #e0f2fe;
+  color: var(--secondary);
 }
 
 .roster-tab-btn.visitor.active {
-  background: rgba(255, 95, 31, 0.18);
+  background: var(--primary-subtle);
   border-color: var(--primary);
-  color: #ffedd5;
+  color: var(--primary);
 }
 
 .roster-tab-count {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-surface-2);
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
 }
@@ -696,9 +696,9 @@
   margin: 0.6rem 1.15rem 0;
   padding: 0.5rem 0.9rem;
   border-radius: var(--radius-sm);
-  background: rgba(16, 185, 129, 0.18);
-  border: 1px solid rgba(16, 185, 129, 0.45);
-  color: #34d399;
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  color: var(--success);
   font-size: 0.84rem;
   font-weight: 700;
   display: flex;
@@ -762,12 +762,12 @@
 }
 
 .live-roster-side-tag.local {
-  background: rgba(14, 165, 233, 0.18);
+  background: var(--secondary-bg);
   color: var(--secondary-light);
 }
 
 .live-roster-side-tag.visitor {
-  background: rgba(255, 95, 31, 0.18);
+  background: var(--primary-subtle);
   color: var(--primary-light);
 }
 
@@ -806,7 +806,7 @@
 }
 
 .live-roster-player-card {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: 0.7rem 0.85rem;
@@ -854,13 +854,13 @@
 }
 
 .live-roster-jersey.local {
-  background: rgba(14, 165, 233, 0.2);
-  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: var(--team-local);
+  border: 1px solid var(--team-local);
 }
 
 .live-roster-jersey.visitor {
-  background: rgba(255, 95, 31, 0.2);
-  border: 1px solid rgba(255, 140, 90, 0.45);
+  background: var(--team-visitor);
+  border: 1px solid var(--team-visitor);
 }
 
 .live-roster-player-info {
@@ -873,7 +873,7 @@
 .live-roster-player-name {
   font-size: 1rem;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -913,36 +913,36 @@
 }
 
 .roster-quick-btn.score-local {
-  background: rgba(14, 165, 233, 0.22);
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  color: #e0f2fe;
+  background: var(--team-local);
+  border: 1px solid var(--team-local);
+  color: #fff;
 }
 
 .roster-quick-btn.score-local:hover:not(:disabled) {
-  background: var(--secondary);
+  background: var(--team-local);
   color: #fff;
 }
 
 .roster-quick-btn.score-visitor {
-  background: rgba(255, 95, 31, 0.22);
-  border: 1px solid rgba(255, 140, 90, 0.45);
-  color: #ffedd5;
+  background: var(--team-visitor);
+  border: 1px solid var(--team-visitor);
+  color: #fff;
 }
 
 .roster-quick-btn.score-visitor:hover:not(:disabled) {
-  background: var(--primary);
+  background: var(--team-visitor);
   color: #fff;
 }
 
 .roster-quick-btn.foul {
-  background: rgba(244, 63, 94, 0.16);
-  border: 1px solid rgba(244, 63, 94, 0.4);
-  color: #fda4af;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  color: var(--danger);
   font-size: 0.8rem;
 }
 
 .roster-quick-btn.foul:hover:not(:disabled) {
-  background: var(--danger);
+  background: var(--danger-strong);
   color: #fff;
 }
 
@@ -958,10 +958,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background:
-    radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.14), transparent 55%),
-    radial-gradient(circle at 80% 50%, rgba(255, 95, 31, 0.14), transparent 55%),
-    rgba(9, 11, 17, 0.8);
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-color);
   padding: 1.5rem 1rem;
 }
@@ -1017,7 +1014,7 @@
 
 .report-team.is-winner .report-score-big {
   color: var(--success);
-  text-shadow: 0 0 28px rgba(16, 185, 129, 0.35);
+  text-shadow: none;
 }
 
 .report-vs {
@@ -1026,7 +1023,7 @@
   font-weight: 900;
   letter-spacing: 0.1em;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-wash);
   padding: 0.45rem 0.9rem;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-light);
@@ -1040,7 +1037,7 @@
   justify-content: center;
   gap: 0.45rem;
   padding: 0.65rem 1rem;
-  background: rgba(6, 8, 14, 0.85);
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1050,7 +1047,7 @@
   gap: 0.35rem;
   padding: 0.24rem 0.65rem;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-wash);
   border: 1px solid var(--border-color);
   font-size: 0.74rem;
   font-weight: 700;
@@ -1064,19 +1061,19 @@
 }
 
 .report-summary-pill.outcome.has-winner {
-  background: rgba(16, 185, 129, 0.14);
-  border-color: rgba(16, 185, 129, 0.38);
-  color: #34d399;
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .report-summary-pill.outcome.has-winner svg {
-  color: #34d399;
+  color: var(--success);
 }
 
 .report-summary-pill.outcome.is-tie {
-  background: rgba(245, 158, 11, 0.14);
-  border-color: rgba(245, 158, 11, 0.38);
-  color: #fbbf24;
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .report-summary-sep {
@@ -1095,16 +1092,16 @@
   padding: 0.6rem 0.85rem;
   margin-bottom: 1rem;
   border-radius: var(--radius-sm);
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.32);
-  color: #fde68a;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  color: var(--warning);
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.35;
 }
 
 .report-integrity-banner svg {
-  color: #fbbf24;
+  color: var(--warning);
   flex-shrink: 0;
 }
 
@@ -1132,15 +1129,15 @@
   font-weight: 700;
   padding: 0.15rem 0.55rem;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
   border: 1px solid var(--border-color);
   color: var(--text-muted);
 }
 
 .report-availability-tag.is-partial {
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.35);
-  color: #fbbf24;
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .report-subtitle {
@@ -1164,12 +1161,12 @@
 }
 
 .q-cell.head.is-ot {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning);
+  background: var(--warning-bg);
 }
 
 .q-cell.score-val.is-ot {
-  background: rgba(245, 158, 11, 0.05);
+  background: var(--warning-bg);
 }
 
 .q-cell.score-val.is-leader-local {
@@ -1184,7 +1181,7 @@
 
 /* Tabla comparativa de Estadísticas por Equipo */
 .report-team-stats-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -1205,7 +1202,7 @@
 }
 
 .report-team-stats-row.is-header {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-color);
   font-size: 0.68rem;
   font-weight: 800;
@@ -1238,7 +1235,7 @@
 
 .rts-val.is-strong {
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-main);
 }
 
 .rts-val.local {
@@ -1270,7 +1267,7 @@
 }
 
 .stats-group {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 0.85rem;
@@ -1322,7 +1319,7 @@
 }
 
 .stat-player-row.is-unassigned {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-wash);
   border-top: 1px dashed rgba(255, 255, 255, 0.12);
 }
 
@@ -1342,14 +1339,14 @@
   width: 24px;
   flex-shrink: 0;
   text-align: center;
-  background: rgba(14, 165, 233, 0.1);
+  background: var(--secondary-bg);
   border-radius: 4px;
   padding: 2px 0;
 }
 
 .player-num.is-unassigned {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
 }
 
 .player-name {
@@ -1415,7 +1412,7 @@
   align-items: center;
   gap: 0.45rem;
   padding: 0.65rem 1.25rem;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -1423,7 +1420,7 @@
 .history-scroll-area {
   flex: 1;
   overflow-y: auto;
-  background-color: rgba(7, 8, 12, 0.5);
+  background-color: var(--bg-surface-2);
 }
 
 .history-empty {
@@ -1454,7 +1451,7 @@
 }
 
 .history-item:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--bg-surface-2);
 }
 
 .action-info {
@@ -1486,13 +1483,13 @@
 }
 
 .history-action-pill.score {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .history-action-pill.foul {
-  background: rgba(244, 63, 94, 0.18);
-  color: #fb7185;
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .history-team-badge {
@@ -1519,7 +1516,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 0.28rem 0.65rem;
@@ -1528,7 +1525,7 @@
 }
 
 .history-player-trigger:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--bg-surface-hover);
   border-color: var(--border-strong);
 }
 
@@ -1536,8 +1533,8 @@
   font-family: var(--font-mono);
   font-size: 0.82rem;
   font-weight: 800;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  background: var(--bg-surface);
   padding: 0.05rem 0.4rem;
   border-radius: 5px;
 }
@@ -1560,7 +1557,7 @@
 
 .history-reassign-drawer {
   padding: 0.65rem 1.25rem 0.85rem;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-surface-2);
   border-top: 1px dashed var(--border-color);
   display: flex;
   flex-direction: column;
@@ -1584,7 +1581,7 @@
 .history-reassign-btn {
   padding: 0.35rem 0.65rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
   font-size: 0.82rem;
@@ -1593,19 +1590,19 @@
 }
 
 .history-reassign-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--surface-wash);
+  color: var(--text-main);
 }
 
 .history-reassign-btn.active {
-  background: rgba(14, 165, 233, 0.22);
-  border-color: var(--secondary);
+  background: var(--team-local);
+  border-color: var(--team-local);
   color: #fff;
 }
 
 .action-time {
   font-family: var(--font-mono);
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--surface-wash);
   padding: 2px 7px;
   border-radius: 4px;
   font-size: 0.72rem;
@@ -1613,7 +1610,7 @@
 }
 
 .btn-delete-action {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-wash);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   width: 2.5rem;
@@ -1679,7 +1676,7 @@
   width: 100%;
   padding: 0.42rem 0.75rem;
   border-radius: var(--radius-sm);
-  background: rgba(6, 7, 11, 0.78);
+  background: var(--bg-surface-2);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font-size: 0.76rem;
@@ -1701,20 +1698,20 @@
 }
 
 .mls-state-badge.is-running {
-  background: rgba(16, 185, 129, 0.16);
-  color: #34d399;
+  background: var(--success-bg);
+  color: var(--success);
   border: 1px solid rgba(16, 185, 129, 0.38);
 }
 
 .mls-state-badge.is-paused {
-  background: rgba(245, 158, 11, 0.14);
-  color: #fbbf24;
+  background: var(--warning-bg);
+  color: var(--warning);
   border: 1px solid rgba(245, 158, 11, 0.32);
 }
 
 .mls-state-badge.is-zero {
-  background: rgba(244, 63, 94, 0.18);
-  color: #fda4af;
+  background: var(--danger-bg);
+  color: var(--danger);
   border: 1px solid rgba(244, 63, 94, 0.4);
 }
 
@@ -1739,7 +1736,7 @@
   font-size: 0.85rem;
   font-weight: 900;
   letter-spacing: 0.05em;
-  color: #f8fafc;
+  color: var(--text-main);
   text-transform: uppercase;
 }
 
@@ -1758,21 +1755,21 @@
   font-size: 0.86rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  background: var(--surface-wash);
   padding: 0.1rem 0.48rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .mls-clock.running {
-  color: #ffffff;
+  color: var(--text-main);
   border-color: rgba(255, 95, 31, 0.55);
-  box-shadow: 0 0 10px rgba(255, 95, 31, 0.22);
+  box-shadow: none;
 }
 
 .mls-clock.zero {
-  color: #fda4af;
+  color: var(--danger);
   border-color: rgba(244, 63, 94, 0.5);
 }
 
@@ -1806,7 +1803,7 @@
 }
 
 .mls-pts {
-  color: #ffffff;
+  color: var(--text-main);
   font-weight: 800;
 }
 
@@ -1905,9 +1902,9 @@
   margin: 0.6rem 1.15rem 0;
   padding: 0.55rem 0.85rem;
   border-radius: var(--radius-sm);
-  background: rgba(245, 158, 11, 0.14);
+  background: var(--warning-bg);
   border: 1px solid rgba(245, 158, 11, 0.45);
-  color: #fde68a;
+  color: var(--warning);
   font-size: 0.82rem;
   font-weight: 700;
   display: flex;
@@ -1919,9 +1916,9 @@
 .lineup-missing-players-card {
   padding: 0.85rem 1rem;
   border-radius: var(--radius-md);
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--warning-bg);
   border: 1px dashed rgba(245, 158, 11, 0.45);
-  color: #fde68a;
+  color: var(--warning);
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
@@ -1930,7 +1927,7 @@
 
 .lineup-missing-players-card strong {
   display: block;
-  color: #fff;
+  color: var(--warning);
   margin-bottom: 0.2rem;
 }
 
@@ -1947,7 +1944,7 @@
   gap: 0.5rem;
   padding: 0.45rem 0.75rem;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-wash);
   border: 1px solid var(--border-color);
 }
 
@@ -1961,7 +1958,7 @@
 }
 
 .lineup-counter-pill.is-ready {
-  color: #34d399;
+  color: var(--success);
 }
 
 .lineup-counter-sub {
@@ -1978,12 +1975,12 @@
 }
 
 .lineup-selectable-card:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-wash);
   border-color: var(--border-strong);
 }
 
 .lineup-selectable-card.is-starter-selected {
-  background: rgba(16, 185, 129, 0.14);
+  background: var(--success-bg);
   border-color: rgba(16, 185, 129, 0.55);
 }
 
@@ -1999,13 +1996,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #34d399;
+  color: var(--success);
   flex-shrink: 0;
 }
 
 .lineup-selectable-card.is-starter-selected .lineup-check-indicator {
-  background: rgba(16, 185, 129, 0.25);
-  border-color: #34d399;
+  background: var(--success-bg);
+  border-color: var(--success);
 }
 
 .lineup-role-badge {
@@ -2020,26 +2017,26 @@
 }
 
 .lineup-role-badge.on-court {
-  background: rgba(16, 185, 129, 0.2);
+  background: var(--success-bg);
   border: 1px solid rgba(16, 185, 129, 0.45);
-  color: #34d399;
+  color: var(--success);
 }
 
 .lineup-role-badge.bench {
-  background: rgba(148, 163, 184, 0.16);
+  background: var(--bg-surface-2);
   border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 
 .lineup-role-badge.neutral {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
   color: var(--text-muted);
 }
 
 .lineup-preview-summary {
   padding: 0.65rem 0.8rem;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -2049,11 +2046,11 @@
 }
 
 .lineup-preview-row strong {
-  color: #34d399;
+  color: var(--success);
 }
 
 .lineup-preview-row.is-bench strong {
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 
 .lineup-group-section {
@@ -2076,15 +2073,15 @@
 }
 
 .lineup-group-header.on-court {
-  background: rgba(16, 185, 129, 0.14);
+  background: var(--success-bg);
   border-left: 3px solid var(--success);
-  color: #34d399;
+  color: var(--success);
 }
 
 .lineup-group-header.bench {
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--bg-surface-2);
   border-left: 3px solid #64748b;
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 
 .lineup-group-count {
@@ -2097,7 +2094,7 @@
 .lineup-sub-action-box {
   padding: 0.65rem 0.75rem;
   border-radius: var(--radius-md);
-  background: rgba(15, 20, 32, 0.92);
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
@@ -2116,7 +2113,7 @@
   min-width: 0;
   padding: 0.4rem 0.55rem;
   border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-wash);
   border: 1px dashed var(--border-color);
   display: flex;
   flex-direction: column;
@@ -2124,12 +2121,12 @@
 }
 
 .lineup-sub-slot.out.is-filled {
-  background: rgba(245, 158, 11, 0.14);
+  background: var(--warning-bg);
   border: 1px solid rgba(245, 158, 11, 0.5);
 }
 
 .lineup-sub-slot.in.is-filled {
-  background: rgba(16, 185, 129, 0.14);
+  background: var(--success-bg);
   border: 1px solid rgba(16, 185, 129, 0.5);
 }
 
@@ -2144,10 +2141,18 @@
 .lineup-sub-slot .slot-value {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.lineup-sub-slot.out.is-filled .slot-value {
+  color: var(--warning);
+}
+
+.lineup-sub-slot.in.is-filled .slot-value {
+  color: var(--success);
 }
 
 .lineup-sub-arrow {
@@ -2167,12 +2172,12 @@
 }
 
 .lineup-player-row.is-sub-out-selected {
-  background: rgba(245, 158, 11, 0.15);
+  background: var(--warning-bg);
   border-color: rgba(245, 158, 11, 0.65);
 }
 
 .lineup-player-row.is-sub-in-selected {
-  background: rgba(16, 185, 129, 0.15);
+  background: var(--success-bg);
   border-color: rgba(16, 185, 129, 0.65);
 }
 
@@ -2186,21 +2191,21 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   border: 1px solid var(--border-light);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-wash);
   color: var(--text-main);
   flex-shrink: 0;
 }
 
 .btn-lineup-sub.out.active {
-  background: rgba(245, 158, 11, 0.25);
-  border-color: #fbbf24;
-  color: #fef08a;
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .btn-lineup-sub.in.active {
-  background: rgba(16, 185, 129, 0.25);
-  border-color: #34d399;
-  color: #a7f3d0;
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .lineup-bench-empty {
@@ -2241,7 +2246,7 @@
 }
 
 .pm-player-btn.is-bench-player {
-  background: linear-gradient(160deg, rgba(18, 22, 34, 0.82) 0%, rgba(11, 13, 20, 0.88) 100%);
+  background: var(--bg-surface-2);
   border-style: dashed;
   opacity: 0.86;
 }

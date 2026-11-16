@@ -11,11 +11,11 @@ export const SeriesLiveCard = ({ match, localName, visitorName }: Props) => {
   const winsNeeded = Math.ceil(totalGames / 2);
 
   return (
-    <Link to={`/live/${match.id}`} className="match-card is-live" style={{ borderColor: 'rgba(34, 197, 94, 0.3)' }}>
+    <Link to={`/live/${match.id}`} className="match-card is-live" style={{ borderColor: 'var(--success)' }}>
       <div className="live-card-header">
         <div
           className="live-badge-status text-success"
-          style={{ borderColor: 'rgba(34, 197, 94, 0.3)' }}
+          style={{ borderColor: 'var(--success)' }}
         >
           <Trophy size={12} />
           <span>SERIE (MEJOR DE {totalGames})</span>
@@ -52,7 +52,7 @@ const TeamRow = ({ name, sets, points, winsNeeded }: SeriesTeamRowProps) => (
               width: '5px',
               height: '5px',
               borderRadius: '9999px',
-              backgroundColor: i < sets ? 'var(--success)' : '#3f3f46'
+              backgroundColor: i < sets ? 'var(--success)' : 'var(--bg-surface-2)'
             }}
           />
         ))}
@@ -63,7 +63,7 @@ const TeamRow = ({ name, sets, points, winsNeeded }: SeriesTeamRowProps) => (
     <div className="flex-gap" style={{ gap: '1rem' }}>
       <div className="flex-col" style={{ alignItems: 'flex-end' }}>
         <span className="text-muted uppercase font-bold" style={{ fontSize: '0.65rem' }}>Puntos</span>
-        <span className="font-mono font-bold" style={{ color: '#a1a1aa' }}>{points}</span>
+        <span className="font-mono font-bold" style={{ color: 'var(--text-muted)' }}>{points}</span>
       </div>
       <div className="flex-col" style={{ alignItems: 'center', minWidth: '30px' }}>
         <span className="text-success uppercase font-bold" style={{ fontSize: '0.65rem' }}>Sets</span>

@@ -2635,8 +2635,9 @@ button.possession-center-divider {
   }
 
   .tools-bar-group > .tool-chip.is-danger { margin-left: 0; }
-  .tool-chip-label { max-width: 100%; font-size: 0.56rem; line-height: 1; text-align: center; }
-  .tool-chip-state { max-width: 100%; padding: 0 0.18rem; font-size: 0.48rem; line-height: 1.15; }
+  .tool-chip-label { max-width: 100%; font-size: 0.68rem; line-height: 1.05; text-align: center; color: var(--text-main); }
+  .tools-bar-group > .tool-chip.is-danger .tool-chip-label { color: var(--danger); }
+  .tool-chip-state { max-width: 100%; padding: 0 0.12rem; font-size: 0.6rem; line-height: 1.15; color: var(--text-main); }
   .tools-bar-group > .tool-chip.icon-only svg { flex: 0 0 auto; }
 }
 

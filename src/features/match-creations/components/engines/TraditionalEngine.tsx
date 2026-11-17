@@ -291,7 +291,7 @@ export const TraditionalEngine: React.FC = () => {
     <div className="live-layout live-layout--traditional">
       <LiveHeader />
 
-      {/* Herramientas secundarias (en vertical: arriba de los marcadores; en horizontal: columna central superior) */}
+      {/* Herramientas auxiliares; el resumen compacto se expande bajo demanda en móvil. */}
       <LiveToolsBar
         trackPlayers={trackPlayers}
         onToggleTrackPlayers={() => setTrackPlayers(prev => !prev)}
@@ -385,63 +385,65 @@ export const TraditionalEngine: React.FC = () => {
       )}
       </div>
 
-      <Scoreboard
-        localName={localTeam.name}
-        visitorName={visitorTeam.name}
-        localScore={match.localScore}
-        visitorScore={match.visitorScore}
-        localFouls={currentQuarterFouls?.local ?? 0}
-        visitorFouls={currentQuarterFouls?.visitor ?? 0}
-        timeLeft={timeLeft}
-        isTimerRunning={isTimerRunning}
-        onTimerClick={hasAuthority ? openTimerEditor : undefined}
-        onToggleTimer={handleToggleTimer}
-      />
+      <section className="live-console" aria-label="Marcador y controles del partido">
+        <Scoreboard
+          localName={localTeam.name}
+          visitorName={visitorTeam.name}
+          localScore={match.localScore}
+          visitorScore={match.visitorScore}
+          localFouls={currentQuarterFouls?.local ?? 0}
+          visitorFouls={currentQuarterFouls?.visitor ?? 0}
+          timeLeft={timeLeft}
+          isTimerRunning={isTimerRunning}
+          onTimerClick={hasAuthority ? openTimerEditor : undefined}
+          onToggleTimer={handleToggleTimer}
+        />
 
-      <MatchControls
-        localTeam={localTeam}
-        visitorTeam={visitorTeam}
-        localPlayers={localTeam.players}
-        visitorPlayers={visitorTeam.players}
-        isTimerRunning={isTimerRunning}
-        timeLeft={timeLeft}
-        canEditTimer={!isTimerRunning && hasAuthority}
-        onTimerClick={hasAuthority ? openTimerEditor : undefined}
-        possession={match.possession ?? null}
-        onTogglePossession={handleTogglePossession}
-        actionDisabled={isActionPending}
-        onToggleTimer={handleToggleTimer}
-        onNextQuarter={handleNextQuarterClick}
-        nextPeriodLabel={nextPeriodBtnLabel}
-        onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}
-        showShotClock={true}
-        shotClockEnabled={isShotClockEnabled}
-        shotClockTimeLeft={shotClockTimeLeft}
-        isShotClockRunning={isShotClockRunning}
-        isShotClockExpired={isShotClockExpired}
-        onResetShotClock={async (seconds) => {
-          if (match.status === 'finished') return;
-          await resetShotClock(seconds);
-        }}
-        assistantEnabled={isPossessionAssistantEnabled}
-        onTurnover={async () => {
-          if (match.status === 'finished') return;
-          if (hasAuthority) {
-            await applyPossessionTurnover();
-          } else {
-            await requestAuthorityTransfer();
-          }
-        }}
-        onSelectPossession={async (team) => {
-          if (match.status === 'finished') return;
-          if (hasAuthority) {
-            await setPossession(team);
-          } else {
-            await requestAuthorityTransfer();
-          }
-        }}
-        showInitialPrompt={showInitialPossessionPrompt}
-      />
+        <MatchControls
+          localTeam={localTeam}
+          visitorTeam={visitorTeam}
+          localPlayers={localTeam.players}
+          visitorPlayers={visitorTeam.players}
+          isTimerRunning={isTimerRunning}
+          timeLeft={timeLeft}
+          canEditTimer={!isTimerRunning && hasAuthority}
+          onTimerClick={hasAuthority ? openTimerEditor : undefined}
+          possession={match.possession ?? null}
+          onTogglePossession={handleTogglePossession}
+          actionDisabled={isActionPending}
+          onToggleTimer={handleToggleTimer}
+          onNextQuarter={handleNextQuarterClick}
+          nextPeriodLabel={nextPeriodBtnLabel}
+          onActionRequest={(teamId, _, __, action) => handleActionRequest(teamId, action)}
+          showShotClock={true}
+          shotClockEnabled={isShotClockEnabled}
+          shotClockTimeLeft={shotClockTimeLeft}
+          isShotClockRunning={isShotClockRunning}
+          isShotClockExpired={isShotClockExpired}
+          onResetShotClock={async (seconds) => {
+            if (match.status === 'finished') return;
+            await resetShotClock(seconds);
+          }}
+          assistantEnabled={isPossessionAssistantEnabled}
+          onTurnover={async () => {
+            if (match.status === 'finished') return;
+            if (hasAuthority) {
+              await applyPossessionTurnover();
+            } else {
+              await requestAuthorityTransfer();
+            }
+          }}
+          onSelectPossession={async (team) => {
+            if (match.status === 'finished') return;
+            if (hasAuthority) {
+              await setPossession(team);
+            } else {
+              await requestAuthorityTransfer();
+            }
+          }}
+          showInitialPrompt={showInitialPossessionPrompt}
+        />
+      </section>
 
       {playerModal.isOpen && (
         <PlayerSelectModal

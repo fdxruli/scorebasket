@@ -288,7 +288,7 @@ export const TraditionalEngine: React.FC = () => {
   const lineupsActive = isLineupActive(match);
 
   return (
-    <div className="live-layout">
+    <div className="live-layout live-layout--traditional">
       <LiveHeader />
 
       {/* Herramientas secundarias (en vertical: arriba de los marcadores; en horizontal: columna central superior) */}

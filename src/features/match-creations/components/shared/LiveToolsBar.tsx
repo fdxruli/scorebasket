@@ -145,12 +145,12 @@ export const LiveToolsBar: React.FC<Props> = ({
             <Bell size={17} />
           </button>
         )}
-      </div>
 
-      <button type="button" onClick={onEndMatch} className="tool-chip is-danger" title="Finalizar y cerrar partido">
-        <Flag size={16} />
-        <span className="tool-chip-label">{endLabel}</span>
-      </button>
+        <button type="button" onClick={onEndMatch} className="tool-chip is-danger" title="Finalizar y cerrar partido">
+          <Flag size={16} />
+          <span className="tool-chip-label">{endLabel}</span>
+        </button>
+      </div>
     </div>
   );
 };

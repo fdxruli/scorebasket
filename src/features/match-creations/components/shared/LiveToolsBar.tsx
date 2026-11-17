@@ -1,6 +1,6 @@
 // src/features/match-creations/components/shared/LiveToolsBar.tsx
 import React, { useState } from 'react';
-import { Users, Shirt, Bell, Volume2, VolumeX, Flag, Timer, Zap } from 'lucide-react';
+import { Users, Shirt, Bell, Volume2, VolumeX, Flag, Timer, Zap, ChevronDown, Settings2 } from 'lucide-react';
 import { isSoundMuted, toggleSoundMute, unlockAudioContext, playBuzzer } from '../../../../utils/soundEffects';
 
 interface Props {
@@ -41,6 +41,7 @@ export const LiveToolsBar: React.FC<Props> = ({
   assistantEnabled = false
 }) => {
   const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleToggleMute = () => setMuted(toggleSoundMute());
 
@@ -51,7 +52,26 @@ export const LiveToolsBar: React.FC<Props> = ({
 
   return (
     <div className="tools-bar" role="toolbar" aria-label="Herramientas del partido">
-      <div className="tools-bar-group">
+      <button
+        type="button"
+        className={`tools-bar-toggle ${isExpanded ? 'is-expanded' : ''}`}
+        onClick={() => setIsExpanded(prev => !prev)}
+        aria-expanded={isExpanded}
+        aria-controls="live-tools-options"
+        aria-label={isExpanded ? 'Ocultar herramientas del partido' : 'Mostrar herramientas del partido'}
+      >
+        <Settings2 size={17} aria-hidden="true" />
+        <span className="tools-bar-toggle-title">Herramientas</span>
+        <span className="tools-bar-toggle-hint">Jugadores, reloj y más</span>
+        <ChevronDown size={17} aria-hidden="true" />
+      </button>
+
+      <div
+        id="live-tools-options"
+        className={`tools-bar-group ${isExpanded ? 'is-expanded' : ''}`}
+        role="group"
+        aria-label="Controles secundarios"
+      >
         <button
           type="button"
           onClick={onToggleTrackPlayers}
@@ -132,6 +152,7 @@ export const LiveToolsBar: React.FC<Props> = ({
           title={muted ? 'Sonido silenciado' : 'Sonido activo'}
         >
           {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+          <span className="tool-chip-label">Sonido</span>
         </button>
 
         {showBuzzer && (
@@ -143,6 +164,7 @@ export const LiveToolsBar: React.FC<Props> = ({
             title="Sonar chicharra manual"
           >
             <Bell size={17} />
+            <span className="tool-chip-label">Chicharra</span>
           </button>
         )}
 
